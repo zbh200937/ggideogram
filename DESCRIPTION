@@ -1,0 +1,43 @@
+Package: ggideogram
+Type: Package
+Title: Chromosome Ideograms Drawn with 'ggplot2'
+Version: 0.2.0
+Authors@R: c(
+    person("zbh200937", role = c("aut", "cre"),
+           email = "83059609+zbh200937@users.noreply.github.com"),
+    person("Zhaodong", "Hao", role = c("ctb", "cph"),
+           comment = "RIdeogram author; original geometry and data"),
+    person("Dekang", "Lv", role = c("ctb", "cph"),
+           comment = "RIdeogram author"),
+    person("Ying", "Ge", role = c("ctb", "cph"),
+           comment = "RIdeogram author"),
+    person("Jisen", "Shi", role = c("ctb", "cph"),
+           comment = "RIdeogram author"),
+    person("Dolf", "Weijers", role = c("ctb", "cph"),
+           comment = "RIdeogram author"),
+    person("Guangchuang", "Yu", role = c("ctb", "cph"),
+           comment = "RIdeogram author"),
+    person("Jinhui", "Chen", role = c("ctb", "cph"),
+           comment = "RIdeogram author"))
+Description: Extends the grammar of graphics to chromosome coordinates.
+    A dimensionless karyotype layout supplies standard 'ggplot2' point,
+    segment, text and track layers for markers, intervals, lines, columns,
+    areas, ribbons, tiles, boxplots and violins. Complete 'ggplot' or grid
+    objects can be anchored to genomic loci without entering the host scales.
+    Native discrete position guides can draw chromosomes directly as the x or
+    y axis of an otherwise ordinary 'ggplot2' chart.
+    Results are ordinary 'ggplot' objects that can be themed, saved, combined
+    with 'patchwork' or 'cowplot', or reused as components by other extensions.
+    This independent refactor derives chromosome geometry and bundled example
+    data from the 'RIdeogram' package by Hao et al. (2020)
+    <doi:10.7717/peerj-cs.251>.
+License: Artistic-2.0
+URL: https://github.com/zbh200937/ggideogram
+BugReports: https://github.com/zbh200937/ggideogram/issues
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.1.0)
+Imports: ggplot2 (>= 3.5.0), grDevices, grid, rlang, scales, stats, utils
+Suggests: cowplot, patchwork, svglite, testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

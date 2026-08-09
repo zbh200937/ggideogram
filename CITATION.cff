@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+message: >-
+  Please cite ggideogram and the original RIdeogram paper when using this
+  software or its inherited example datasets.
+title: ggideogram
+type: software
+authors:
+  - name: zbh200937
+version: 0.2.0
+date-released: 2026-08-09
+license: Artistic-2.0
+repository-code: https://github.com/zbh200937/ggideogram
+url: https://github.com/zbh200937/ggideogram
+preferred-citation:
+  type: software
+  title: "ggideogram: composable chromosome ideograms for ggplot2"
+  authors:
+    - name: zbh200937
+  version: 0.2.0
+  year: 2026
+  repository-code: https://github.com/zbh200937/ggideogram
+references:
+  - type: article
+    title: >-
+      RIdeogram: drawing SVG graphics to visualize and map genome-wide data on
+      the idiograms
+    authors:
+      - family-names: Hao
+        given-names: Zhaodong
+      - family-names: Lv
+        given-names: Dekang
+      - family-names: Ge
+        given-names: Ying
+      - family-names: Shi
+        given-names: Jisen
+      - family-names: Weijers
+        given-names: Dolf
+      - family-names: Yu
+        given-names: Guangchuang
+      - family-names: Chen
+        given-names: Jinhui
+    journal: PeerJ Computer Science
+    volume: 6
+    year: 2020
+    doi: 10.7717/peerj-cs.251
+    url: https://doi.org/10.7717/peerj-cs.251

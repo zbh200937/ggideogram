@@ -1,0 +1,38 @@
+citHeader(
+  "To cite ggideogram, please cite this software and the RIdeogram paper:"
+)
+
+bibentry(
+  bibtype = "Manual",
+  title = "ggideogram: Composable Chromosome Ideograms for ggplot2",
+  author = person("zbh200937"),
+  year = "2026",
+  note = sprintf("R package version %s", meta$Version),
+  url = "https://github.com/zbh200937/ggideogram"
+)
+
+bibentry(
+  bibtype = "Article",
+  title = paste(
+    "RIdeogram: drawing SVG graphics to visualize and map genome-wide data",
+    "on the idiograms"
+  ),
+  author = c(
+    person("Zhaodong", "Hao"),
+    person("Dekang", "Lv"),
+    person("Ying", "Ge"),
+    person("Jisen", "Shi"),
+    person("Dolf", "Weijers"),
+    person("Guangchuang", "Yu"),
+    person("Jinhui", "Chen")
+  ),
+  journal = "PeerJ Computer Science",
+  year = "2020",
+  volume = "6",
+  pages = "e251",
+  doi = "10.7717/peerj-cs.251"
+)
+
+citFooter(
+  "RIdeogram source: https://github.com/TickingClock1992/RIdeogram"
+)

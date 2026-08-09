@@ -1,0 +1,23 @@
+# R session and IDE state
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+*.Rproj
+
+# Package build and check artefacts
+*.Rcheck/
+..Rcheck/
+*.tar.gz
+*.Rout
+Rplots.pdf
+tests/testthat/Rplots.pdf
+
+# Local development state
+.claude/
+AGENTS.md
+work/
+
+# Operating-system files
+.DS_Store
+**/.DS_Store
