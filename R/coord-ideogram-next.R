@@ -18,6 +18,13 @@ coord_ideogram_next <- function(layout, padding = 0.5, clip = "off") {
     reverse = "none",
     layout = layout,
     padding = padding,
+    setup_panel_params = function(self, scale_x, scale_y, params = list()) {
+      panel <- ggplot2::ggproto_parent(ggplot2::CoordCartesian, self)$setup_panel_params(
+        scale_x, scale_y, params)
+      # Each build and panel owns a fresh registry shared by its inset layers.
+      panel$ideogram_insets <- new.env(parent = emptyenv())
+      panel
+    },
     transform = function(self, data, panel_params) {
       semantic <- "ideogram_track" %in% names(data) ||
         all(c("ideogram_chr", "ideogram_position") %in% names(data))
@@ -33,6 +40,10 @@ coord_ideogram_next <- function(layout, padding = 0.5, clip = "off") {
 transform_ideogram_semantics <- function(layout, data) {
   if ("ideogram_track" %in% names(data)) {
     return(transform_ideogram_track(layout, data))
+  }
+  if (all(c("ideogram_inset_start", "ideogram_inset_end") %in% names(data))) {
+    project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_start)
+    project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_end)
   }
   data <- apply_chr_repel_request(layout, data)
   marker <- all(c("ideogram_side", "ideogram_gap") %in% names(data))

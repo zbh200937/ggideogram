@@ -13,6 +13,11 @@ StatChrInset <- ggplot2::ggproto(
     }
     data$ideogram_chr <- as.character(data$chr)
     data$ideogram_position <- position
+    data$ideogram_inset_layer <- rep(list(new.env(parent = emptyenv())), nrow(data))
+    if (all(c("start", "end") %in% names(data))) {
+      data$ideogram_inset_start <- data$start
+      data$ideogram_inset_end <- data$end
+    }
     if (placement == "beside") {
       data$ideogram_side <- side
       data$ideogram_gap <- gap
@@ -238,6 +243,14 @@ check_inset_overlap <- function(
     top = data$y + (1 - vjust) * height
   )
   collision <- character()
+  registry <- panel_params$ideogram_insets
+  entries <- if (is.environment(registry)) registry$entries else NULL
+  layer_id <- data$ideogram_inset_layer[[1]]
+  # Replace this layer's record when an already-built plot is rendered again.
+  entries <- Filter(function(entry) !identical(entry$id, layer_id), entries)
+  previous <- do.call(rbind, lapply(entries, `[[`, "rectangle"))
+  current <- rectangle
+  rectangle <- rbind(previous, current)
   if (nrow(rectangle) > 1L) {
     pairs <- utils::combn(seq_len(nrow(rectangle)), 2)
     overlap <- apply(pairs, 2, function(pair) {
@@ -254,6 +267,10 @@ check_inset_overlap <- function(
     }
   }
 
+  if (is.environment(registry)) {
+    registry$entries <- c(entries, list(list(id = layer_id, rectangle = current)))
+  }
+  rectangle <- current
   if (placement == "beside") {
     body_min <- coord$transform(
       data.frame(x = coord$layout$chrom$.x_min,
@@ -306,7 +323,7 @@ validate_inset_mapping <- function(data, mapping) {
     interval <- mapped_fields(data, mapping, c("start", "end"),
                               what = "mapping")
     if (!is.numeric(interval$start) || !is.numeric(interval$end) ||
-        anyNA(interval$start) || anyNA(interval$end) ||
+        any(!is.finite(interval$start)) || any(!is.finite(interval$end)) ||
         any(interval$start > interval$end)) {
       stopf("Inset intervals require finite numeric `start <= end`.")
     }

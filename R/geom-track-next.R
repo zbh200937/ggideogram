@@ -403,7 +403,19 @@ track_group_values <- function(data, mapping, chr, position = NULL) {
   } else {
     rep(1L, nrow(data))
   }
-  interaction(as.character(chr), group, drop = TRUE, lex.order = TRUE)
+  groups <- list(as.character(chr), group)
+  if (!"group" %in% names(mapping)) {
+    aesthetics <- setdiff(names(mapping),
+      c("chr", "position", "value", "x", "y", "ymin", "ymax"))
+    for (aesthetic in aesthetics) {
+      value <- rlang::eval_tidy(mapping[[aesthetic]], data = data)
+      if (is.factor(value) || is.character(value) || is.logical(value)) {
+        groups[[length(groups) + 1L]] <- recycle_semantic(
+          value, nrow(data), paste0("mapping$", aesthetic))
+      }
+    }
+  }
+  do.call(interaction, c(groups, list(drop = TRUE, lex.order = TRUE)))
 }
 
 build_projected_distribution_layer <- function(object, layout, fields) {
@@ -722,6 +734,25 @@ ggplot_add.ggideogram_track_axis_component <- function(
   plot
 }
 
+# Resolve axes against the final coordinate layout, after all track layers have
+# registered their values. Keep the ordinary segment/tick/text Geoms intact.
+StatTrackAxis <- ggplot2::ggproto(
+  "StatTrackAxis", ggplot2::StatIdentity,
+  extra_params = c("na.rm", "axis_spec", "chromosomes", "axis_part"),
+  compute_layer = function(self, data, params, layout) {
+    layers <- build_track_axis_layers(
+      layout$coord$layout, params$axis_spec, params$chromosomes)
+    if (!length(layers)) return(data[FALSE, , drop = FALSE])
+    result <- layers[[params$axis_part]]$data
+    panels <- unique(data$PANEL)
+    do.call(rbind, lapply(panels, function(panel) {
+      result$PANEL <- panel
+      result$group <- -1L
+      result
+    }))
+  }
+)
+
 build_track_axis_layers <- function(layout, object, chromosomes) {
   spine <- list()
   ticks <- list()
@@ -788,7 +819,7 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
   ticks <- do.call(rbind, ticks)
   text <- do.call(rbind, text)
   if (is.null(spine) || !nrow(spine)) return(list())
-  list(
+  layers <- list(
     ggplot2::geom_segment(
       data = spine,
       ggplot2::aes(x = .data$x, y = .data$y,
@@ -821,4 +852,11 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
         family = object$family, na.rm = FALSE)
     )
   )
+  for (part in seq_along(layers)) {
+    layers[[part]]$stat <- StatTrackAxis
+    layers[[part]]$stat_params <- list(
+      na.rm = FALSE, axis_spec = object,
+      chromosomes = chromosomes, axis_part = part)
+  }
+  layers
 }
