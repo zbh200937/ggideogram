@@ -105,10 +105,13 @@ test_that("marker side and gap are projected by the shared coordinate", {
   expect_gt(right_xy$x, 0.5)
   expect_lt(left_xy$x, 0.5)
   expect_equal(right_xy$y, left_xy$y)
+  # Each side now reserves its own marker extent in the panel bounds.
+  right_range <- right_built$layout$panel_params[[1]]$x.range
+  left_range <- left_built$layout$panel_params[[1]]$x.range
   expect_equal(
-    right_xy$x - left_xy$x,
-    2 * (right$coordinates$layout$chromosome_width / 2 + 0.2) /
-      diff(right_built$layout$panel_params[[1]]$x.range),
+    right_xy$x * diff(right_range) + right_range[1] -
+      (left_xy$x * diff(left_range) + left_range[1]),
+    2 * (right$coordinates$layout$chromosome_width / 2 + 0.2),
     tolerance = 1e-8
   )
   expect_equal(centre$.position, 300)

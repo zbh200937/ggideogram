@@ -293,7 +293,9 @@ chromosome_axis_layers <- function(
       local_breaks >= g$.start & local_breaks <= g$.end]
     if (!length(local_breaks)) next
     projected <- project_positions_raw(layout$chrom, g$.chr, local_breaks)
-    offset <- layout$chromosome_width / 2 + gap
+    marker_extent <- (layout$marker_extent %||% c(left = 0, right = 0))[[side]]
+    offset <- layout$chromosome_width / 2 +
+      max(layout$track_extent[[side]], marker_extent) + gap
     nx <- normal$nx * side_sign
     ny <- normal$ny * side_sign
     tick_parts[[index]] <- data.frame(
@@ -356,5 +358,62 @@ chromosome_axis_layers <- function(
         size = size, family = family, colour = colour, na.rm = FALSE)
     )))
   }
+  spec <- list(chr = chr, side = side, breaks = breaks, n = n, units = units,
+    labels = labels, gap = gap, tick_length = tick_length, label_gap = label_gap,
+    size = size, family = family, colour = colour, linewidth = linewidth)
+  for (part in seq_along(layers)) {
+    layers[[part]]$ideogram_axis_spec <- spec
+    layers[[part]]$ideogram_axis_part <- part
+  }
   layers
+}
+
+# Include the axis spine in data bounds and reserve physical label overhang in
+# the standard plot margin. No device dimensions enter the genomic layout.
+reserve_chromosome_axis_space <- function(plot, layers) {
+  if (!length(layers)) return(plot)
+  layout <- ideogram_plot_layout(plot)
+  for (layer in layers) {
+    data <- layer$data
+    layout$bounds$x <- range(layout$bounds$x, data$x, data$xend, na.rm = TRUE)
+    layout$bounds$y <- range(layout$bounds$y, data$y, data$yend, na.rm = TRUE)
+  }
+  plot <- update_plot_ideogram_layout(plot, layout)
+  needed <- grid::unit(rep(0, 4), "mm") # top, right, bottom, left
+  reserve <- function(current, extent, at) {
+    if (any(at)) max(current, extent[at]) else current
+  }
+  for (layer in layers) {
+    data <- layer$data
+    if (!all(c("nx", "ny") %in% names(data))) next
+    tick <- layer$geom_params$tick_length %||% 0
+    width <- height <- grid::unit(rep(0, nrow(data)), "mm")
+    clearance <- grid::unit(tick, "mm")
+    if ("label" %in% names(data)) {
+      size <- layer$aes_params$size
+      family <- layer$aes_params$family %||% ""
+      grobs <- lapply(as.character(data$label), function(label) {
+        grid::textGrob(label, gp = grid::gpar(
+          fontsize = size * ggplot2::.pt, fontfamily = family))
+      })
+      width <- do.call(grid::unit.c, lapply(grobs, grid::grobWidth))
+      height <- do.call(grid::unit.c, lapply(grobs, grid::grobHeight))
+      clearance <- grid::unit(tick + layer$geom_params$label_gap * size, "mm")
+    }
+    left <- data$x <= layout$bounds$x[1]
+    right <- data$x >= layout$bounds$x[2]
+    bottom <- data$y <= layout$bounds$y[1]
+    top <- data$y >= layout$bounds$y[2]
+    needed[4] <- reserve(needed[4], width + clearance, left & data$nx < 0)
+    needed[4] <- reserve(needed[4], width / 2, left & data$nx == 0)
+    needed[2] <- reserve(needed[2], width + clearance, right & data$nx > 0)
+    needed[2] <- reserve(needed[2], width / 2, right & data$nx == 0)
+    needed[3] <- reserve(needed[3], height + clearance, bottom & data$ny < 0)
+    needed[3] <- reserve(needed[3], height / 2, bottom & data$ny == 0)
+    needed[1] <- reserve(needed[1], height + clearance, top & data$ny > 0)
+    needed[1] <- reserve(needed[1], height / 2, top & data$ny == 0)
+  }
+  margin <- plot$theme$plot.margin %||% theme_ideogram()$plot.margin
+  # Keep text measurements lazy so the eventual device supplies font metrics.
+  plot + ggplot2::theme(plot.margin = grid::unit.pmax(margin, needed))
 }

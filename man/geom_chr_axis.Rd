@@ -33,7 +33,8 @@ geom_chr_axis(
 
 \item{labels}{Draw labels as well as ticks.}
 
-\item{gap}{Clear chromosome-to-axis distance in body-width units.}
+\item{gap}{Clear track/marker-lane-to-axis distance in body-width units;
+measured from the chromosome body when that side has no track or marker.}
 
 \item{tick_length}{Tick length in millimetres.}
 
@@ -46,6 +47,9 @@ An additive ggplot component.
 }
 \description{
 The axis uses the chromosome's own bp projection. Tick length and text size
-are physical ggplot2 units; `gap` is a clear distance from the chromosome in
-body-width units, and ticks extend only outwards.
+are physical ggplot2 units; `gap` is a clear distance beyond the outermost
+same-side track or marker lane (or the chromosome body) in body-width units.
+Ticks extend
+only outwards. The axis spine extends the data bounds, and edge labels
+reserve physical space in the standard plot margin.
 }

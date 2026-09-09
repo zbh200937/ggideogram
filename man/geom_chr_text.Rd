@@ -37,7 +37,7 @@ point aesthetics set to constants.}
 horizontal ideogram these names follow the chromosome's local transverse
 axis rather than page left/right.}
 
-\item{gap}{Distance from the chromosome edge to the point centre, in
+\item{gap}{Distance from the chromosome edge to the text anchor, in
 chromosome-body-width units.}
 
 \item{track}{Optional identifier declared by [track_layout()]. When supplied,

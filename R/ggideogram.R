@@ -28,7 +28,8 @@
 #'   `NULL` for round automatic breaks.
 #' @param axis_n Target automatic break intervals.
 #' @param axis_units Label unit.
-#' @param axis_gap Clear axis-to-body gap in body-width units. Tick marks start
+#' @param axis_gap Clear gap beyond the outermost same-side track or marker lane
+#'   (or the body when neither is present), in body-width units. Tick marks start
 #'   at the axis spine and extend away from the chromosome, so they do not eat
 #'   into this clearance.
 #' @param axis_tick_length Tick length in millimetres.
@@ -149,16 +150,17 @@ ggideogram <- function(
       layout, size = name_size, gap = name_gap,
       family = base_family, colour = name_colour)))
   }
-  layers <- c(layers, chromosome_axis_layers(
+  axis_layers <- chromosome_axis_layers(
     layout, chr = axis, side = axis_side,
     breaks = axis_breaks, n = axis_n, units = axis_units,
     labels = TRUE, gap = axis_gap, tick_length = axis_tick_length,
     label_gap = axis_label_gap, size = axis_size,
     family = base_family, colour = axis_colour,
     linewidth = axis_linewidth
-  ))
+  )
 
-  ggplot2::ggplot() + layers +
+  plot <- ggplot2::ggplot() + layers + axis_layers +
     coord_ideogram_next(layout, padding = padding, clip = "off") +
     theme_ideogram(base_family = base_family)
+  reserve_chromosome_axis_space(plot, axis_layers)
 }

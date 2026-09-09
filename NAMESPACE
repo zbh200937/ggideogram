@@ -2,6 +2,7 @@
 
 S3method(as_ideogram_data,data.frame)
 S3method(as_ideogram_data,ideogram_data)
+S3method(ggplot_add,LayerChrMarker)
 S3method(ggplot_add,ggideogram_chromosome_component)
 S3method(ggplot_add,ggideogram_data_component)
 S3method(ggplot_add,ggideogram_track_axis_component)

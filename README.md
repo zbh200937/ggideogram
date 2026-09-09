@@ -83,7 +83,8 @@ p +
 ```
 
 轴数字的位置由刻度物理长度、字号和 `axis_label_gap` 自动推导，不需要针对设备尺寸
-写死坐标偏移。
+写死坐标偏移。bp 轴位于同侧轨道和 marker 占位之外，`axis_gap` 表示其外侧净空；
+轴线纳入面板范围，边缘文字通过标准 `plot.margin` 预留物理空间。
 
 ### 染色体作为普通 ggplot 的原生轴
 
@@ -269,7 +270,10 @@ p +
 ```
 
 Axis labels are positioned from the physical tick length, font size, and
-`axis_label_gap`; no device-specific coordinate offsets are required.
+`axis_label_gap`; no device-specific coordinate offsets are required. BP axes sit
+outside same-side tracks and marker lanes, with `axis_gap` as the remaining
+clearance. Axis spines enter the panel bounds and perimeter labels reserve
+physical space through the standard `plot.margin`.
 
 ### Chromosomes as native ggplot axes
 

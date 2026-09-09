@@ -77,7 +77,8 @@ axes.}
 
 \item{axis_units}{Label unit.}
 
-\item{axis_gap}{Clear axis-to-body gap in body-width units. Tick marks start
+\item{axis_gap}{Clear gap beyond the outermost same-side track or marker lane
+(or the body when neither is present), in body-width units. Tick marks start
 at the axis spine and extend away from the chromosome, so they do not eat
 into this clearance.}
 

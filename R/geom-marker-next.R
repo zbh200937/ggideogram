@@ -47,7 +47,9 @@ StatChrMarker <- ggplot2::ggproto(
 #'   horizontal ideogram these names follow the chromosome's local transverse
 #'   axis rather than page left/right.
 #' @param gap Distance from the chromosome edge to the point centre, in
-#'   chromosome-body-width units.
+#'   chromosome-body-width units. Without a declared track, the marker reserves
+#'   a symmetric lane extending the same `gap` beyond its centre; bp axes are
+#'   placed outside this lane. Use a wider track or gap for large point sizes.
 #' @param track Optional identifier declared by [track_layout()]. When supplied,
 #'   the point is centred in that track and `side`/`gap` only remain fallback
 #'   values for plots without a marker track.
@@ -91,7 +93,7 @@ geom_chr_marker <- function(
   side <- match.arg(side)
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
-  ggplot2::layer(
+  layer <- ggplot2::layer(
     data = data,
     mapping = mapping,
     stat = stat,
@@ -104,6 +106,8 @@ geom_chr_marker <- function(
       component = "marker", na.rm = na.rm
     ), list(...))
   )
+  ggplot2::ggproto("LayerChrMarker", layer,
+    ideogram_marker_spec = list(side = side, gap = gap, track = track))
 }
 
 #' Draw native leader links from chromosomes to markers
@@ -221,4 +225,37 @@ position_chr_repel <- function(min_distance,
     min_distance = min_distance,
     units = units
   )
+}
+
+#' @method ggplot_add LayerChrMarker
+#' @importFrom ggplot2 ggplot_add
+#' @export
+ggplot_add.LayerChrMarker <- function(object, plot, ...) {
+  plot <- NextMethod()
+  layout <- plot$coordinates$layout
+  if (!inherits(layout, "ideogram_layout_v2")) return(plot)
+  spec <- object$ideogram_marker_spec
+  if (!is.null(spec$track)) return(plot)
+  layout$marker_extent <- layout$marker_extent %||% c(left = 0, right = 0)
+  # An untracked marker is centred in a symmetric lane: `gap` from the
+  # body edge to its centre and the same distance beyond the centre.
+  extent <- 2 * spec$gap
+  layout$marker_extent[[spec$side]] <- max(
+    layout$marker_extent[[spec$side]], extent)
+  point <- offset_chr_points(layout, layout$chrom$.chr,
+    list(x = layout$chrom$.axis_start_x, y = layout$chrom$.axis_start_y),
+    side = spec$side, distance = layout$chromosome_width / 2 + extent)
+  layout$bounds$x <- range(layout$bounds$x, point$x)
+  layout$bounds$y <- range(layout$bounds$y, point$y)
+  plot <- update_plot_ideogram_layout(plot, layout)
+  axis_layers <- list()
+  for (index in seq_along(plot$layers)) {
+    layer <- plot$layers[[index]]
+    if (is.null(layer$ideogram_axis_spec)) next
+    replacement <- do.call(chromosome_axis_layers,
+      c(list(layout = layout), layer$ideogram_axis_spec))
+    plot$layers[[index]] <- replacement[[layer$ideogram_axis_part]]
+    axis_layers <- c(axis_layers, list(plot$layers[[index]]))
+  }
+  reserve_chromosome_axis_space(plot, axis_layers)
 }

@@ -82,3 +82,58 @@ test_that("axis text clearance follows tick length, text size and direction", {
   expect_no_error(ggplot2::ggplotGrob(short))
   expect_no_error(ggplot2::ggplotGrob(long))
 })
+
+test_that("bp axes are outside same-side tracks and include their spine in bounds", {
+  for (orientation in c("vertical", "horizontal")) {
+    for (side in c("left", "right")) {
+      p <- ggideogram(axis_kar[1, ], orientation = orientation,
+        tracks = track_layout(signal = track(side, width = 1.1, gap = 0.2)),
+        axis = "A", axis_side = side, axis_gap = 0.3, show_names = FALSE)
+      layout <- p$coordinates$layout
+      tick <- p$layers[[length(p$layers) - 1L]]$data
+      g <- layout$chrom[1, ]
+      distance <- sqrt((tick$x[1] - g$.axis_start_x)^2 +
+        (tick$y[1] - g$.axis_start_y)^2)
+      expect_equal(distance, layout$chromosome_width / 2 + 1.1 + 0.2 + 0.3)
+      expect_true(all(tick$x >= layout$bounds$x[1] & tick$x <= layout$bounds$x[2]))
+      expect_true(all(tick$y >= layout$bounds$y[1] & tick$y <= layout$bounds$y[2]))
+      expect_no_error(ggplot2::ggplotGrob(p))
+    }
+  }
+})
+
+test_that("direct marker lanes displace bp axes independent of addition order", {
+  markers <- data.frame(Chr = "A", Pos = 300)
+  for (orientation in c("vertical", "horizontal")) {
+    for (side in c("left", "right")) {
+      base <- ggideogram(axis_kar[1, ], orientation = orientation, show_names = FALSE)
+      marker <- geom_chr_marker(data = markers,
+        ggplot2::aes(chr = Chr, position = Pos), side = side, gap = 0.5, size = 1.8)
+      axis <- geom_chr_axis(chr = "A", side = side, gap = 0.3)
+      before <- base + axis
+      first <- before + marker
+      last <- base + marker + axis
+      get_tick <- function(plot) Filter(function(layer)
+        inherits(layer$geom, "GeomIdeogramTick"), plot$layers)[[1]]$data
+      expect_equal(get_tick(first), get_tick(last))
+      expect_equal(first$coordinates$layout$bounds, last$coordinates$layout$bounds)
+      delta <- get_tick(first)[1, c("x", "y")] - get_tick(before)[1, c("x", "y")]
+      expect_equal(sqrt(sum(delta^2)), 1)
+      expect_no_error(ggplot2::ggplotGrob(first))
+      expect_no_error(ggplot2::ggplotGrob(last))
+      expect_null(before$coordinates$layout$marker_extent)
+      expect_s3_class(utils::tail(first$layers, 1)[[1]]$geom, "GeomPoint")
+    }
+  }
+})
+
+test_that("long perimeter labels reserve physical space and remain theme-overridable", {
+  p <- ggideogram(axis_kar[1, ], axis = TRUE, axis_side = "right",
+    axis_breaks = c(0, 1000), axis_units = "bp", axis_size = 4,
+    axis_tick_length = 3, axis_label_gap = 0.5)
+  margin <- grid::convertUnit(p$theme$plot.margin, "mm", valueOnly = TRUE)
+  text <- grid::textGrob("1000 bp", gp = grid::gpar(fontsize = 4 * ggplot2::.pt))
+  expect_gte(margin[2], grid::convertWidth(grid::grobWidth(text), "mm", valueOnly = TRUE) + 5)
+  overridden <- p + ggplot2::theme(plot.margin = ggplot2::margin(10, 10, 10, 10))
+  expect_equal(overridden$theme$plot.margin, ggplot2::margin(10, 10, 10, 10))
+})

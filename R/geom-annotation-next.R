@@ -97,6 +97,8 @@ geom_chr_region <- function(...) geom_chr_interval(...)
 #' displaced label should retain an explicit locus leader.
 #'
 #' @inheritParams geom_chr_marker
+#' @param gap Distance from the chromosome edge to the text anchor, in
+#'   chromosome-body-width units.
 #'
 #' @return A ggplot2 layer using `GeomText`.
 #' @export

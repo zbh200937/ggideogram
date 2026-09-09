@@ -38,7 +38,9 @@ horizontal ideogram these names follow the chromosome's local transverse
 axis rather than page left/right.}
 
 \item{gap}{Distance from the chromosome edge to the point centre, in
-chromosome-body-width units.}
+chromosome-body-width units. Without a declared track, the marker reserves
+a symmetric lane extending the same `gap` beyond its centre; bp axes are
+placed outside this lane. Use a wider track or gap for large point sizes.}
 
 \item{track}{Optional identifier declared by [track_layout()]. When supplied,
 the point is centred in that track and `side`/`gap` only remain fallback

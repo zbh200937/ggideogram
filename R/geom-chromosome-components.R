@@ -96,8 +96,11 @@ geom_chr_name <- function(
 #' Add local base-pair axes
 #'
 #' The axis uses the chromosome's own bp projection. Tick length and text size
-#' are physical ggplot2 units; `gap` is a clear distance from the chromosome in
-#' body-width units, and ticks extend only outwards.
+#' are physical ggplot2 units; `gap` is a clear distance beyond the outermost
+#' same-side track or marker lane (or the chromosome body) in body-width units.
+#' Ticks extend
+#' only outwards. The axis spine extends the data bounds, and edge labels
+#' reserve physical space in the standard plot margin.
 #'
 #' @param chr `TRUE` for every chromosome or a chromosome vector.
 #' @param side Axis side in the chromosome's local orientation.
@@ -105,7 +108,8 @@ geom_chr_name <- function(
 #' @param n Target number of automatic intervals.
 #' @param units Label unit.
 #' @param labels Draw labels as well as ticks.
-#' @param gap Clear chromosome-to-axis distance in body-width units.
+#' @param gap Clear track/marker-lane-to-axis distance in body-width units;
+#'   measured from the chromosome body when that side has no track or marker.
 #' @param tick_length Tick length in millimetres.
 #' @param label_gap Typographic label clearance beyond the tick tip, in em.
 #' @param size,family,colour,linewidth Standard ggplot2 appearance settings.
@@ -217,6 +221,9 @@ ggplot_add.ggideogram_chromosome_component <- function(
   for (index in seq_along(layers)) {
     plot <- ggplot2::ggplot_add(
       layers[[index]], plot, paste0(object_name, "[[", index, "]]"))
+  }
+  if (object$kind == "axis") {
+    plot <- reserve_chromosome_axis_space(plot, layers)
   }
   plot
 }
