@@ -29,6 +29,7 @@ ideogram_layout.data.frame <- function(karyotype, ...) {
 #' This `ideogram_layout()` method is the package's layout core. It uses
 #' chromosome-width units and native ggplot2 orientation; no field depends on
 #' page dimensions, DPI, millimetres or canvas pixels.
+#' Within each row, chromosomes align at their input start (normally 0 bp).
 #'
 #' @param karyotype An [as_ideogram_data()] result.
 #' @param ncol Number of chromosomes per row. `NULL` uses one row.
@@ -96,13 +97,12 @@ ideogram_layout.ideogram_data <- function(
   }, numeric(1))
   total_long <- sum(row_height) + row_gap * max(0L, row_count - 1L)
   row_top <- total_long - c(0, utils::head(cumsum(row_height + row_gap), -1L))
-  row_bottom <- row_top - row_height
 
   cell_width <- track_geometry$left + chromosome_width + track_geometry$right
   pitch <- cell_width + chromosome_gap
   cross_center <- column * pitch + track_geometry$left + chromosome_width / 2
-  body_bottom <- row_bottom[row + 1L]
-  body_top <- body_bottom + display_length
+  body_top <- row_top[row + 1L]
+  body_bottom <- body_top - display_length
   cross_extent <- per_row * cell_width +
     max(0L, per_row - 1L) * chromosome_gap
 

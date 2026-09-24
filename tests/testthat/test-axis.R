@@ -2,6 +2,32 @@ axis_kar <- data.frame(
   Chr = c("A", "B"), Start = 0, End = c(1000, 800)
 )
 
+test_that("multi-row bp ticks, markers and tracks share aligned genomic origins", {
+  k <- data.frame(Chr = letters[1:4], Start = 0, End = c(800, 1000, 400, 600))
+  marks <- data.frame(Chr = k$Chr, Pos = 200, Value = 0.5)
+  for (orientation in c("vertical", "horizontal")) {
+    p <- ggideogram(k, ncol = 2, orientation = orientation,
+      max_chr_length = 20, row_gap = 3, show_names = FALSE,
+      axis = c("a", "c"), axis_breaks = c(0, 200),
+      tracks = track_layout(signal = track("right", limits = c(0, 1)))) +
+      geom_chr_marker(data = marks, ggplot2::aes(chr = Chr, position = Pos)) +
+      geom_chr_track(data = marks, geom = ggplot2::geom_point, track = "signal",
+        mapping = ggplot2::aes(chr = Chr, position = Pos, value = Value))
+    built <- ggplot2::ggplot_build(p)
+    panel <- built$layout$panel_params[[1]]
+    long <- if (orientation == "vertical") "y" else "x"
+    expected <- if (orientation == "vertical") c(31, 31, 8, 8) else c(4, 4, 27, 27)
+    range <- panel[[paste0(long, ".range")]]
+    for (layer in utils::tail(built$data, 2)) {
+      xy <- built$plot$coordinates$transform(layer, panel)
+      expect_equal(xy[[long]], (expected - range[1]) / diff(range))
+    }
+    ticks <- Filter(function(layer) inherits(layer$geom, "GeomIdeogramTick"), p$layers)
+    expect_equal(ticks[[1]]$data[[long]][c(2, 4)], expected[c(1, 3)])
+    expect_no_error(ggplot2::ggplotGrob(p))
+  }
+})
+
 test_that("base-pair breaks and labels remain round and readable", {
   expect_equal(axis_breaks(1000), seq(0, 1000, 200))
   expect_equal(axis_breaks(2.48e8), seq(0, 2e8, 5e7))

@@ -68,4 +68,5 @@ chromosome, marker, track and component layer.
 This `ideogram_layout()` method is the package's layout core. It uses
 chromosome-width units and native ggplot2 orientation; no field depends on
 page dimensions, DPI, millimetres or canvas pixels.
+Within each row, chromosomes align at their input start (normally 0 bp).
 }

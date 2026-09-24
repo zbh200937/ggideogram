@@ -54,11 +54,30 @@ test_that("multi-row layout is aligned and has only declared gaps", {
   expect_equal(diff(layout$chrom$.axis_start_x[1:2]), 2.5)
   expect_equal(layout$chrom$.axis_start_x[1], layout$chrom$.axis_start_x[3])
 
-  first_bottom <- unique(layout$chrom$.axis_end_y[layout$chrom$.row == 0])
+  expect_equal(layout$chrom$.axis_start_y, c(39, 39, 16, 16))
+  first_bottom <- min(layout$chrom$.axis_end_y[layout$chrom$.row == 0])
   second_top <- max(layout$chrom$.axis_start_y[layout$chrom$.row == 1])
   expect_equal(first_bottom - second_top, 3)
   expect_equal(layout$bounds$x, c(0, 4.5))
   expect_equal(diff(layout$bounds$y), sum(layout$row_height) + 3)
+})
+
+test_that("each row aligns zero and equal bp positions in both orientations", {
+  k <- data.frame(Chr = letters[1:4], Start = 0, End = c(800, 1000, 400, 600))
+  for (orientation in c("vertical", "horizontal")) {
+    layout <- ideogram_layout(k, ncol = 2, orientation = orientation,
+                              max_chr_length = 20, row_gap = 3)
+    long <- if (orientation == "vertical") ".y" else ".x"
+    zero <- project_chr_point(layout, k, "Chr", "Start")
+    points <- project_chr_point(layout, transform(k, bp = 200), "Chr", "bp")
+    ends <- project_chr_point(layout, k, "Chr", "End")
+    expected_zero <- if (orientation == "vertical") c(35, 35, 12, 12) else c(0, 0, 23, 23)
+    direction <- if (orientation == "vertical") -1 else 1
+
+    expect_equal(zero[[long]], expected_zero)
+    expect_equal(points[[long]], expected_zero + direction * 4)
+    expect_equal(ends[[long]], expected_zero + direction * k$End * 0.02)
+  }
 })
 
 test_that("point projection is linear, bounded and reversible", {

@@ -1,5 +1,7 @@
 # ggideogram 0.2.0
 
+- Fixed chromosome rows to align genomic starts (normally 0 bp) in both
+  orientations, keeping markers, tracks and base-pair axes on the same origin.
 - Rebuilt chromosome ideograms as composable ggplot2 objects with one
   dimensionless layout and chromosome-aware coordinate system.
 - Added native chromosome x/y axis guides for ordinary ggplot2 geoms.
