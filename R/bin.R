@@ -31,18 +31,33 @@ window_edges <- function(end, window) {
 #' and its `Start` otherwise, so an interval is counted once however long it is.
 #'
 #' @param data Data frame with `Chr` and `Start`, and optionally `End`.
+#'   Coordinates are positive integers using 1-based closed intervals. Unknown
+#'   chromosomes, missing coordinates and intervals outside the karyotype are errors.
 #' @param karyotype Data frame with `Chr` and `End`, or a path to a
 #'   tab-separated karyotype file with a header. Chromosomes named here but
 #'   absent from `data` come back filled with `empty` rather than disappearing.
-#' @param window Window size in base pairs.
+#'   Optional `Start` gives the 0-based left boundary; it defaults to zero.
+#' @param window Positive integer window size in base pairs. Windows begin at
+#'   each chromosome's `Start + 1` and end at its `End`.
 #' @param value Column of `data` to summarise. `NULL` counts rows.
 #' @param FUN Summary function applied to each window's values. Defaults to
 #'   [length()] when `value` is `NULL` and [mean()] otherwise.
 #' @param empty Value for a window with no rows in it. Defaults to `0` for
 #'   counts and `NA` for a summary of nothing.
 #' @param ... Passed to `FUN`.
+#' @param method Explicit `"count"`, `"coverage"`, or `"weighted_mean"`.
+#'   Count assigns each feature once by its midpoint. Coverage is the union of
+#'   covered bases divided by actual window width. Weighted mean uses each
+#'   interval's overlap length; overlapping observations contribute separately.
+#'   `NULL` retains the original `FUN` behavior.
+#' @param group Optional column names for independent grouped summaries with an
+#'   explicit `method`. Every observed group receives every karyotype window.
+#'   For weighted means, `na.rm = TRUE` in `...` excludes missing values and
+#'   their weights; otherwise a missing overlapping value produces `NA`.
 #' @return A data frame with `Chr`, `Start`, `End`, `Value`, in karyotype order.
-#'   Windows are half-open on the left, matching [GFFex()].
+#'   Window coordinates are 1-based closed intervals.
+#'   Explicit methods additionally return `Width`, `N` and `N_valid`; counts
+#'   include `Rate` per Mb. Method and unit are stored in `window_summary`.
 #' @examples
 #' kar <- data.frame(Chr = "A", Start = 0, End = 2500)
 #' snps <- data.frame(Chr = "A", Start = c(10, 20, 1500), Qual = c(30, 50, 99))
@@ -50,7 +65,45 @@ window_edges <- function(end, window) {
 #' bin_genome(snps, kar, window = 1000, value = "Qual", FUN = max)
 #' @export
 bin_genome <- function(data, karyotype, window = 1e6, value = NULL, FUN = NULL,
-                       empty = NULL, ...) {
+                       empty = NULL, ..., method = NULL, group = NULL) {
+  if (!is.null(method)) {
+    return(bin_interval_windows(data, karyotype, window, value, FUN, empty,
+      match.arg(method, c('count', 'coverage', 'weighted_mean')), group, ...))
+  }
+  if (!is.null(group)) stopf('Grouped windows require an explicit `method`.')
+  input <- window_input(data, karyotype, window)
+  k <- input$karyotype
+  if (!is.null(value) && !value %in% names(data)) {
+    stopf("`value` names column `%s`, which is not in `data`.\n  Columns present: %s",
+          value, paste0("`", names(data), "`", collapse = ", "))
+  }
+  FUN <- FUN %||% if (is.null(value)) length else mean
+  empty <- empty %||% if (is.null(value)) 0 else NA
+  at <- (input$start + input$end) / 2
+  v <- if (is.null(value)) rep(1, nrow(data)) else data[[value]]
+
+  parts <- lapply(seq_len(nrow(k)), function(i) {
+    e <- window_edges(k$.end[i] - k$.start[i], window)
+    e$lower <- e$lower + k$.start[i]
+    e$upper <- e$upper + k$.start[i]
+    keep <- input$chr == k$.chr[i]
+    out <- rep(empty, length(e$upper))
+    if (any(keep)) {
+      bin <- findInterval(at[keep], e$upper, left.open = TRUE) + 1L
+      agg <- vapply(split(v[keep], factor(bin, levels = seq_along(e$upper))),
+                    function(x) if (length(x)) as.numeric(FUN(x, ...)) else NA_real_,
+                    numeric(1))
+      out[!is.na(agg)] <- agg[!is.na(agg)]
+    }
+    data.frame(Chr = k$.chr[i], Start = e$lower + 1, End = e$upper, Value = out,
+               stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, parts)
+  rownames(out) <- NULL
+  out
+}
+
+window_input <- function(data, karyotype, window) {
   if (!is.data.frame(data)) {
     stopf("`data` must be a data frame, not %s.", class(data)[1])
   }
@@ -59,58 +112,29 @@ bin_genome <- function(data, karyotype, window = 1e6, value = NULL, FUN = NULL,
     stopf("`data` is missing column%s %s.", if (length(miss) > 1) "s" else "",
           paste0("`", miss, "`", collapse = ", "))
   }
-  if (!is.null(value) && !value %in% names(data)) {
-    stopf("`value` names column `%s`, which is not in `data`.\n  Columns present: %s",
-          value, paste0("`", names(data), "`", collapse = ", "))
+  if (!is.numeric(window) || length(window) != 1L || !is.finite(window) ||
+      window <= 0 || window != floor(window)) {
+    stopf("`window` must be a positive integer.")
   }
-  if (!is.numeric(window) || length(window) != 1L || is.na(window) || window <= 0) {
-    stopf("`window` must be a single positive number.")
+  if (is.character(karyotype)) {
+    karyotype <- utils::read.table(karyotype, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
   }
-  kar <- if (is.data.frame(karyotype)) {
-    karyotype
-  } else {
-    utils::read.table(karyotype, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
-  }
-  if (!all(c("Chr", "End") %in% names(kar))) {
+  if (is.data.frame(karyotype) && !all(c("Chr", "End") %in% names(karyotype))) {
     stopf("`karyotype` needs columns Chr and End.")
   }
-  FUN <- FUN %||% if (is.null(value)) length else mean
-  empty <- empty %||% if (is.null(value)) 0 else NA
-
-  chrs <- as.character(kar$Chr)
-  ends <- as.numeric(kar$End)
-  if (anyNA(ends) || any(ends <= 0)) {
-    stopf("`karyotype$End` must be positive and non-missing; bad for %s.",
-          paste0("`", chrs[is.na(ends) | ends <= 0], "`", collapse = ", "))
+  if (is.data.frame(karyotype) && !"Start" %in% names(karyotype)) karyotype$Start <- 0
+  k <- as_ideogram_data(karyotype)$karyotype
+  if (any(k$.start != floor(k$.start) | k$.end != floor(k$.end))) {
+    stopf("Window karyotypes require integer boundaries.")
   }
-
-  seqname <- as.character(data$Chr)
-  # Midpoint of the interval, so a feature is binned once wherever it is longest.
-  at <- if ("End" %in% names(data)) {
-    (as.numeric(data$Start) + as.numeric(data$End)) / 2
-  } else {
-    as.numeric(data$Start)
+  chr <- validate_chr(data$Chr, "Chr")
+  start <- validate_coordinate(data$Start, "Start")
+  end <- if ("End" %in% names(data)) validate_coordinate(data$End, "End") else start
+  i <- match(chr, k$.chr)
+  if (anyNA(i)) stopf("Window data contain unknown chromosomes.")
+  if (any(start != floor(start) | end != floor(end) | start > end |
+          start <= k$.start[i] | end > k$.end[i])) {
+    stopf("Window intervals require closed integer coordinates inside the source chromosome bounds.")
   }
-  v <- if (is.null(value)) rep(1, nrow(data)) else data[[value]]
-
-  parts <- lapply(seq_along(chrs), function(i) {
-    e <- window_edges(ends[i], window)
-    keep <- seqname == chrs[i] & !is.na(at) & at > 0 & at <= ends[i]
-    out <- rep(empty, length(e$upper))
-    if (any(keep)) {
-      bin <- findInterval(at[keep], e$upper, left.open = TRUE) + 1L
-      agg <- vapply(split(v[keep], factor(bin, levels = seq_along(e$upper))),
-                    function(x) if (length(x)) as.numeric(FUN(x, ...)) else NA_real_,
-                    numeric(1))
-      # `empty` survives wherever the split produced nothing, so a count stays 0
-      # and a mean-of-nothing stays NA rather than becoming a spurious number.
-      out[!is.na(agg)] <- agg[!is.na(agg)]
-    }
-    data.frame(Chr = chrs[i], Start = e$lower + 1, End = e$upper, Value = out,
-               stringsAsFactors = FALSE)
-  })
-
-  out <- do.call(rbind, parts)
-  rownames(out) <- NULL
-  out
+  list(karyotype = k, chr = chr, start = start, end = end)
 }

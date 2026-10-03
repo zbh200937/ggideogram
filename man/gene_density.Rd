@@ -5,8 +5,8 @@
 \alias{gene_density}
 \title{Human gene density}
 \format{
-A data frame with 3102 rows and 4 columns: `Chr`, `Start`, `End`,
-  `Value`.
+A data frame with 3102 rows and 4 columns: \code{Chr}, \code{Start}, \code{End},
+\code{Value}.
 }
 \source{
 RIdeogram: \url{https://github.com/TickingClock1992/RIdeogram}
@@ -15,8 +15,8 @@ RIdeogram: \url{https://github.com/TickingClock1992/RIdeogram}
 gene_density
 }
 \description{
-Gene counts in 1 Mb windows across [human_karyotype]. Suitable for a
-[geom_track_line()] or [geom_track_col()] layer after mapping each window
-midpoint to `position`.
+Gene counts in 1 Mb windows across \link{human_karyotype}. Suitable for a
+\code{\link[=geom_track]{geom_track()}} with native ggplot2::geom_line() or ggplot2::geom_col() after
+mapping each window midpoint to x and its count to y.
 }
 \keyword{datasets}

@@ -6,10 +6,10 @@
 #' Compute an ideogram layout
 #'
 #' `ideogram_layout()` converts either a karyotype data frame or an
-#' [ideogram_data] object into the single dimensionless layout used by every
+#' `ideogram_data` object into the single dimensionless layout used by every
 #' chromosome, marker, track and component layer.
 #'
-#' @param karyotype A karyotype data frame or [ideogram_data] object.
+#' @param karyotype A karyotype data frame or `ideogram_data` object.
 #' @param ... Arguments dispatched to the class method.
 #'
 #' @return An `ideogram_layout_v2` object.
@@ -27,20 +27,31 @@ ideogram_layout.data.frame <- function(karyotype, ...) {
 #' Dimensionless ideogram layout
 #'
 #' This `ideogram_layout()` method is the package's layout core. It uses
-#' chromosome-width units and native ggplot2 orientation; no field depends on
-#' page dimensions, DPI, millimetres or canvas pixels.
+#' chromosome-width units and native ggplot2 orientation.
 #' Within each row, chromosomes align at their input start (normally 0 bp).
 #'
 #' @param karyotype An [as_ideogram_data()] result.
-#' @param ncol Number of chromosomes per row. `NULL` uses one row.
+#' @param ncol Number of chromosomes per linear row. `NULL` uses one row and
+#'   is required for a circular sector ring.
 #' @param chromosome_width Width of a chromosome body in layout units.  The
 #'   default `1` defines the package's normalized body-width unit.
 #' @param chromosome_gap Clear gap between adjacent body columns, in body-width
-#'   units.
-#' @param max_chr_length Display length of the longest chromosome, in
-#'   body-width units.
-#' @param row_gap Gap between chromosome rows, in body-width units.
-#' @param orientation Long-axis orientation, `"vertical"` or `"horizontal"`.
+#'   units. Circular gaps use `gap_angle`.
+#' @param max_chr_length Linear display length of the longest chromosome, in
+#'   body-width units. Circular geometry uses `radius`.
+#' @param row_gap Gap between linear chromosome rows, in body-width units.
+#' @param orientation `"vertical"`, `"horizontal"`, or `"circular"`.
+#' @param radius Circular chromosome-center radius in body-width units.
+#' @param start_angle Circular starting angle, clockwise from the top, in degrees.
+#'   `NULL` keeps the closing gap above and to the right: its left boundary is
+#'   the vertical radius at 12 o'clock, for either arrangement direction.
+#' @param gap_angle Angular gap after each circular chromosome: one angle or
+#'   a vector named by chromosome keys. `NULL` uses 2 degrees between chromosomes
+#'   and a 20-degree closing gap for track names and numerical scales.
+#' @param opening_angle One non-negative angle in degrees controlling the closing
+#'   opening independently of the other chromosome gaps. `NULL` uses the closing
+#'   value from `gap_angle`, or 20 degrees when both are `NULL`.
+#' @param clockwise Arrange circular sectors clockwise when TRUE.
 #' @param scale_length `"global"` preserves length comparisons between
 #'   chromosomes. `"per_chr"` gives every chromosome the same display length
 #'   and is therefore an explicit non-comparable mode.
@@ -48,6 +59,11 @@ ideogram_layout.data.frame <- function(karyotype, ...) {
 #'   components, including rounded-body clipping masks.
 #' @param tracks `NULL` or a declarative [track_layout()]. Declared tracks are
 #'   included in chromosome pitch and plot bounds before any layers are added.
+#' @param order_by `"input"`, `"genome"` or `"homolog"`. Grouped layouts use
+#'   explicitly mapped genome and homolog metadata. Missing homologs leave slots.
+#' @param genome_order,homolog_order Optional complete group orders.
+#' @param reverse_chr Chromosome identifiers whose display direction is reversed.
+#'   For multiple genomes, supply [chr_key()] values. Source bp remain unchanged.
 #' @param ... Reserved for future layout components; currently must be empty.
 #'
 #' @return An `ideogram_layout_v2` object.  Its `chrom` table contains only
@@ -58,17 +74,27 @@ ideogram_layout.ideogram_data <- function(
     karyotype,
     ncol = NULL,
     chromosome_width = 1,
-    chromosome_gap = 1,
+    chromosome_gap = 3,
     max_chr_length = 40,
     row_gap = 2,
-    orientation = c("vertical", "horizontal"),
+    orientation = c("vertical", "horizontal", "circular"),
     scale_length = c("global", "per_chr"),
     curve_points = 32,
     tracks = NULL,
+    order_by = c("input", "genome", "homolog"),
+    genome_order = NULL,
+    homolog_order = NULL,
+    reverse_chr = character(),
+    radius = 20,
+    start_angle = NULL,
+    gap_angle = NULL,
+    opening_angle = NULL,
+    clockwise = TRUE,
     ...) {
   check_unused_args(...)
   orientation <- match.arg(orientation)
   scale_length <- match.arg(scale_length)
+  order_by <- match.arg(order_by)
   check_positive_layout(chromosome_width, "chromosome_width")
   check_nonnegative_layout(chromosome_gap, "chromosome_gap")
   check_positive_layout(max_chr_length, "max_chr_length")
@@ -77,10 +103,27 @@ ideogram_layout.ideogram_data <- function(
   track_geometry <- resolve_track_geometry(tracks, chromosome_width)
 
   k <- karyotype$karyotype
+  if (!is.null(karyotype$chr_selection)) k <- k[match(karyotype$chr_selection, k$.chr), , drop = FALSE]
+  if (!is.null(karyotype$view)) {
+    window <- karyotype$view
+    k <- k[k$.chr == window$chr, , drop = FALSE]
+    k$.source_start <- k$.start
+    k$.source_end <- k$.end
+    k$.start <- window$start
+    k$.end <- window$end
+  }
+  if (orientation == "circular") {
+    if (!is.null(ncol)) stopf("Circular layouts use one sector ring; combine separate plots for multiple rings.")
+    return(circular_ideogram_layout(karyotype, k, tracks, track_geometry,
+      chromosome_width, radius, start_angle, gap_angle, opening_angle, clockwise,
+      scale_length, order_by, genome_order, homolog_order, reverse_chr, curve_points))
+  }
   chromosome_count <- nrow(k)
-  per_row <- validate_layout_ncol(ncol, chromosome_count)
-  row <- (seq_len(chromosome_count) - 1L) %/% per_row
-  column <- (seq_len(chromosome_count) - 1L) %% per_row
+  slots <- chromosome_layout_slots(k, ncol, order_by, genome_order, homolog_order)
+  k <- k[slots$index, , drop = FALSE]
+  per_row <- slots$ncol
+  row <- slots$row
+  column <- slots$col
   row_count <- max(row) + 1L
 
   biological_length <- k$.end - k$.start
@@ -93,7 +136,7 @@ ideogram_layout.ideogram_data <- function(
   }
 
   row_height <- vapply(seq_len(row_count) - 1L, function(row_id) {
-    max(display_length[row == row_id])
+    if (any(row == row_id)) max(display_length[row == row_id]) else max(display_length)
   }, numeric(1))
   total_long <- sum(row_height) + row_gap * max(0L, row_count - 1L)
   row_top <- total_long - c(0, utils::head(cumsum(row_height + row_gap), -1L))
@@ -149,6 +192,30 @@ ideogram_layout.ideogram_data <- function(
     .y_max = pmax(y_min, y_max),
     stringsAsFactors = FALSE
   )
+  if (!is.null(karyotype$view)) {
+    chrom$.source_start <- k$.source_start
+    chrom$.source_end <- k$.source_end
+    chrom$.cut_start <- chrom$.start > chrom$.source_start
+    chrom$.cut_end <- chrom$.end < chrom$.source_end
+  }
+
+  semantic_fields <- intersect(c(".chr_name", ".genome", ".assembly",
+                                 ".homolog_group", ".display_name"), names(k))
+  chrom[semantic_fields] <- k[semantic_fields]
+  chrom$.name_x <- chrom$.axis_start_x
+  chrom$.name_y <- chrom$.axis_start_y
+  reverse_chr <- validate_chr(reverse_chr, "reverse_chr")
+  unknown <- setdiff(reverse_chr, chrom$.chr)
+  if (length(unknown)) stopf("Unknown reverse chromosome: %s.", format_chr_rows(unknown))
+  reverse <- chrom$.chr %in% reverse_chr
+  chrom$.direction <- ifelse(reverse, -1, 1)
+  for (axis in c("x", "y")) {
+    start <- paste0(".axis_start_", axis)
+    end <- paste0(".axis_end_", axis)
+    original <- chrom[[start]][reverse]
+    chrom[[start]][reverse] <- chrom[[end]][reverse]
+    chrom[[end]][reverse] <- original
+  }
 
   centromere_start <- project_positions_raw(
     chrom, k$.chr, k$.centromere_start, allow_na = TRUE)
@@ -174,6 +241,7 @@ ideogram_layout.ideogram_data <- function(
       curve_points = curve_points,
       orientation = orientation,
       scale_length = scale_length,
+      order_by = order_by,
       length_comparable = identical(scale_length, "global"),
       track_layout = tracks %||% track_layout(),
       tracks = track_geometry$table,
@@ -194,14 +262,18 @@ ideogram_layout.ideogram_data <- function(
 #' These low-level functions are the stable bridge for ggplot2 and third-party
 #' extensions.  They append projected fields to the supplied data and never
 #' create a grob.
+#' In circular layouts, projected x is unfolded centerline arc length and y is
+#' radius. These are data coordinates consumed by the ideogram Coord, which
+#' places native layers in the Cartesian panel. Original bp fields are retained.
 #'
-#' @param layout An `ideogram_layout_v2` object.
+#' @param layout An `ideogram_layout_v2` object or a plot from [ggideogram()].
 #' @param data A data frame.
 #' @param chr,position,start,end Column names in `data`.
 #'
 #' @return `data` with stable prefixed projection columns.
 #' @export
 project_chr_point <- function(layout, data, chr, position) {
+  layout <- chr_projection_layout(layout)
   check_layout_v2(layout)
   check_projection_data(data)
   chr_value <- projection_column(data, chr, "chr")
@@ -220,6 +292,7 @@ project_chr_point <- function(layout, data, chr, position) {
 #' @rdname project_chr_point
 #' @export
 project_chr_interval <- function(layout, data, chr, start, end) {
+  layout <- chr_projection_layout(layout)
   check_layout_v2(layout)
   check_projection_data(data)
   chr_value <- projection_column(data, chr, "chr")
@@ -253,8 +326,10 @@ project_chr_interval <- function(layout, data, chr, start, end) {
 #' Projects an x/y position orthogonally onto the named chromosome's long axis
 #' and returns its genomic coordinate.  Transverse track offsets therefore do
 #' not alter the recovered genomic position.
+#' Circular input uses the same unfolded arc-length/radius coordinates returned
+#' by [project_chr_point()] and [project_chr_track()].
 #'
-#' @param layout An `ideogram_layout_v2` object.
+#' @param layout An `ideogram_layout_v2` object or a plot from [ggideogram()].
 #' @param data A data frame.
 #' @param chr,x,y Column names in `data`.
 #' @param tolerance Allowed numerical distance beyond a chromosome endpoint,
@@ -264,6 +339,7 @@ project_chr_interval <- function(layout, data, chr, start, end) {
 #' @export
 unproject_chr_point <- function(layout, data, chr, x, y,
                                 tolerance = sqrt(.Machine$double.eps)) {
+  layout <- chr_projection_layout(layout)
   check_layout_v2(layout)
   check_projection_data(data)
   check_nonnegative_layout(tolerance, "tolerance")
@@ -347,7 +423,8 @@ chromosome_right_normal <- function(layout, g) {
   dx <- g$.axis_end_x - g$.axis_start_x
   dy <- g$.axis_end_y - g$.axis_start_y
   length <- sqrt(dx^2 + dy^2)
-  handedness <- if (identical(layout$orientation, "horizontal")) -1 else 1
+  handedness <- (if (identical(layout$orientation, "horizontal")) -1 else 1) *
+    (g$.direction %||% 1)
   list(
     nx = handedness * (-dy / length),
     ny = handedness * (dx / length),

@@ -2,9 +2,7 @@
 
 #' Build a chromosome ideogram
 #'
-#' `ideogram()` is a thin alias of [ggideogram()]. It exists for users coming
-#' from RIdeogram, but it has no compatibility renderer, fixed page, output
-#' side effect, `label_type` switch, or private layer branch. Add markers,
+#' `ideogram()` is a thin alias of [ggideogram()]. Add markers,
 #' tracks and inset plots with the exported ggplot2-style components.
 #'
 #' @param ... Passed unchanged to [ggideogram()].

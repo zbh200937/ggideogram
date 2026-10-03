@@ -5,12 +5,12 @@
 \alias{ggideogram-package}
 \title{ggideogram: Chromosome Ideograms Drawn with 'ggplot2'}
 \description{
-Extends the grammar of graphics to chromosome coordinates. A dimensionless karyotype layout supplies standard 'ggplot2' point, segment, text and track layers for markers, intervals, lines, columns, areas, ribbons, tiles, boxplots and violins. Complete 'ggplot' or grid objects can be anchored to genomic loci without entering the host scales. Native discrete position guides can draw chromosomes directly as the x or y axis of an otherwise ordinary 'ggplot2' chart. Results are ordinary 'ggplot' objects that can be themed, saved, combined with 'patchwork' or 'cowplot', or reused as components by other extensions. This independent refactor derives chromosome geometry and bundled example data from the 'RIdeogram' package by Hao et al. (2020) \doi{10.7717/peerj-cs.251}.
+Extends the grammar of graphics to chromosome coordinates. A dimensionless karyotype layout supplies standard 'ggplot2' point, segment, text and track layers for markers, intervals, lines, columns, areas, ribbons, tiles, boxplots and violins. Complete 'ggplot' or grid objects can be anchored to genomic loci without entering the host scales. Native discrete position guides can draw chromosomes directly as the x or y axis of an otherwise ordinary 'ggplot2' chart. Standard annotation inputs support local genomic views, gene structures, interval summaries, paired loci and multi-genome comparisons. Compatible interactive layers can be viewed with the optional 'ggiraph' backend. Circular layouts retain base-pair sectors, radial tracks and curved connections through the same native layers and coordinate protocol. Results are ordinary 'ggplot' objects that can be themed, saved, combined with 'patchwork' or 'cowplot', or reused as components by other extensions. This independent refactor derives chromosome geometry and bundled example data from the 'RIdeogram' package by Hao et al. (2020) \doi{10.7717/peerj-cs.251}.
 }
 \references{
 Hao Z, Lv D, Ge Y, Shi J, Weijers D, Yu G, Chen J. (2020).
 RIdeogram: drawing SVG graphics to visualize and map genome-wide data on
-the idiograms. *PeerJ Computer Science*, 6:e251.
+the idiograms. \emph{PeerJ Computer Science}, 6:e251.
 \doi{10.7717/peerj-cs.251}
 
 RIdeogram source: \url{https://github.com/TickingClock1992/RIdeogram}

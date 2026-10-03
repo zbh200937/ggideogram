@@ -1,10 +1,10 @@
-# Standard save boundary; no page, pixel or DPI compatibility renderer.
+# Standard ggplot saving with explicit output dimensions.
 
 #' Save an ideogram with ggplot2
 #'
 #' This convenience wrapper validates the plot and delegates to
-#' [ggplot2::ggsave()]. Width and height are ordinary device choices and are
-#' never inferred from a historical canvas. Omitting both uses ggplot2's own
+#' [ggplot2::ggsave()]. Width and height are ordinary device choices.
+#' Omitting both uses ggplot2's own
 #' device defaults.
 #'
 #' @param filename Output filename.

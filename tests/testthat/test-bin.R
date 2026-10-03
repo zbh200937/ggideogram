@@ -50,15 +50,27 @@ test_that("an interval is binned once, by its midpoint", {
                           window = 1000)$Value, c(1, 0, 0, 0))
 })
 
-test_that("chromosomes absent from the data still appear, and strays are dropped", {
-  d <- data.frame(Chr = c("A", "Z"), Start = c(10, 10))
+test_that("empty chromosomes remain and invalid source intervals are rejected", {
+  d <- data.frame(Chr = "A", Start = 10)
   out <- bin_genome(d, kar, window = 1000)
   expect_true("B" %in% out$Chr)
-  expect_false("Z" %in% out$Chr)
   expect_equal(sum(out$Value), 1)
-  # Positions off the end of their own chromosome are dropped too.
-  expect_equal(sum(bin_genome(data.frame(Chr = "B", Start = 5000), kar,
-                              window = 1000)$Value), 0)
+  expect_error(bin_genome(data.frame(Chr = c("A", "Z"), Start = 10), kar), "unknown")
+  expect_error(bin_genome(data.frame(Chr = "B", Start = 700, End = 900), kar), "bounds")
+  expect_error(bin_genome(data.frame(Chr = "A", Start = NA_real_), kar), "finite")
+  expect_error(bin_genome(data.frame(Chr = "A", Start = 1.5), kar), "integer")
+})
+
+test_that("all window methods respect nonzero chromosome starts", {
+  k <- data.frame(Chr = "A", Start = 100, End = 225)
+  d <- data.frame(Chr = "A", Start = c(150, 151, 225), End = c(150, 175, 225), Score = 2)
+  for (method in list(NULL, "count", "coverage", "weighted_mean")) {
+    out <- bin_genome(d, k, window = 50, method = method,
+      value = if (identical(method, "weighted_mean")) "Score" else NULL)
+    expect_equal(out$Start, c(101, 151, 201))
+    expect_equal(out$End, c(150, 200, 225))
+    if (is.null(method) || identical(method, "count")) expect_equal(out$Value, c(1, 1, 1))
+  }
 })
 
 test_that("bad arguments are named", {
@@ -66,9 +78,10 @@ test_that("bad arguments are named", {
   expect_error(bin_genome(list(), kar), "must be a data frame")
   expect_error(bin_genome(data.frame(Chr = "A"), kar), "missing column `Start`")
   expect_error(bin_genome(d, kar, value = "Nope"), "not in `data`")
-  expect_error(bin_genome(d, kar, window = 0), "single positive number")
+  expect_error(bin_genome(d, kar, window = 0), "positive integer")
+  expect_error(bin_genome(d, kar, window = Inf), "positive integer")
   expect_error(bin_genome(d, data.frame(Chr = "A")), "needs columns Chr and End")
-  expect_error(bin_genome(d, data.frame(Chr = "A", End = -1)), "must be positive")
+  expect_error(bin_genome(d, data.frame(Chr = "A", End = -1)), "End|end")
 })
 
 test_that("bin_genome reproduces GFFex for the case GFFex covers", {

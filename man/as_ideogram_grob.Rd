@@ -7,12 +7,12 @@
 as_ideogram_grob(plot)
 }
 \arguments{
-\item{plot}{A [ggideogram()] plot.}
+\item{plot}{A \code{\link[=ggideogram]{ggideogram()}} plot.}
 }
 \value{
 A standard gtable/grob.
 }
 \description{
-This is a stable convenience wrapper around [ggplot2::ggplotGrob()] and does
+This is a stable convenience wrapper around \code{\link[ggplot2:ggplotGrob]{ggplot2::ggplotGrob()}} and does
 not create a second renderer or fixed page layout.
 }

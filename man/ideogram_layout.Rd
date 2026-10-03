@@ -14,59 +14,92 @@ ideogram_layout(karyotype, ...)
   karyotype,
   ncol = NULL,
   chromosome_width = 1,
-  chromosome_gap = 1,
+  chromosome_gap = 3,
   max_chr_length = 40,
   row_gap = 2,
-  orientation = c("vertical", "horizontal"),
+  orientation = c("vertical", "horizontal", "circular"),
   scale_length = c("global", "per_chr"),
   curve_points = 32,
   tracks = NULL,
+  order_by = c("input", "genome", "homolog"),
+  genome_order = NULL,
+  homolog_order = NULL,
+  reverse_chr = character(),
+  radius = 20,
+  start_angle = NULL,
+  gap_angle = NULL,
+  opening_angle = NULL,
+  clockwise = TRUE,
   ...
 )
 }
 \arguments{
-\item{karyotype}{An [as_ideogram_data()] result.}
+\item{karyotype}{An \code{\link[=as_ideogram_data]{as_ideogram_data()}} result.}
 
 \item{...}{Reserved for future layout components; currently must be empty.}
 
-\item{ncol}{Number of chromosomes per row. `NULL` uses one row.}
+\item{ncol}{Number of chromosomes per linear row. \code{NULL} uses one row and
+is required for a circular sector ring.}
 
 \item{chromosome_width}{Width of a chromosome body in layout units.  The
-default `1` defines the package's normalized body-width unit.}
+default \code{1} defines the package's normalized body-width unit.}
 
 \item{chromosome_gap}{Clear gap between adjacent body columns, in body-width
-units.}
+units. Circular gaps use \code{gap_angle}.}
 
-\item{max_chr_length}{Display length of the longest chromosome, in
-body-width units.}
+\item{max_chr_length}{Linear display length of the longest chromosome, in
+body-width units. Circular geometry uses \code{radius}.}
 
-\item{row_gap}{Gap between chromosome rows, in body-width units.}
+\item{row_gap}{Gap between linear chromosome rows, in body-width units.}
 
-\item{orientation}{Long-axis orientation, `"vertical"` or `"horizontal"`.}
+\item{orientation}{\code{"vertical"}, \code{"horizontal"}, or \code{"circular"}.}
 
-\item{scale_length}{`"global"` preserves length comparisons between
-chromosomes. `"per_chr"` gives every chromosome the same display length
+\item{scale_length}{\code{"global"} preserves length comparisons between
+chromosomes. \code{"per_chr"} gives every chromosome the same display length
 and is therefore an explicit non-comparable mode.}
 
 \item{curve_points}{Number of profile samples used by chromosome-shaped
 components, including rounded-body clipping masks.}
 
-\item{tracks}{`NULL` or a declarative [track_layout()]. Declared tracks are
+\item{tracks}{\code{NULL} or a declarative \code{\link[=track_layout]{track_layout()}}. Declared tracks are
 included in chromosome pitch and plot bounds before any layers are added.}
+
+\item{order_by}{\code{"input"}, \code{"genome"} or \code{"homolog"}. Grouped layouts use
+explicitly mapped genome and homolog metadata. Missing homologs leave slots.}
+
+\item{genome_order, homolog_order}{Optional complete group orders.}
+
+\item{reverse_chr}{Chromosome identifiers whose display direction is reversed.
+For multiple genomes, supply \code{\link[=chr_key]{chr_key()}} values. Source bp remain unchanged.}
+
+\item{radius}{Circular chromosome-center radius in body-width units.}
+
+\item{start_angle}{Circular starting angle, clockwise from the top, in degrees.
+\code{NULL} keeps the closing gap above and to the right: its left boundary is
+the vertical radius at 12 o'clock, for either arrangement direction.}
+
+\item{gap_angle}{Angular gap after each circular chromosome: one angle or
+a vector named by chromosome keys. \code{NULL} uses 2 degrees between chromosomes
+and a 20-degree closing gap for track names and numerical scales.}
+
+\item{opening_angle}{One non-negative angle in degrees controlling the closing
+opening independently of the other chromosome gaps. \code{NULL} uses the closing
+value from \code{gap_angle}, or 20 degrees when both are \code{NULL}.}
+
+\item{clockwise}{Arrange circular sectors clockwise when TRUE.}
 }
 \value{
-An `ideogram_layout_v2` object.
+An \code{ideogram_layout_v2} object.
 
-An `ideogram_layout_v2` object.  Its `chrom` table contains only
-  dimensionless body coordinates and biological metadata.
+An \code{ideogram_layout_v2} object.  Its \code{chrom} table contains only
+dimensionless body coordinates and biological metadata.
 }
 \description{
-`ideogram_layout()` converts either a karyotype data frame or an
-[ideogram_data] object into the single dimensionless layout used by every
+\code{ideogram_layout()} converts either a karyotype data frame or an
+\code{ideogram_data} object into the single dimensionless layout used by every
 chromosome, marker, track and component layer.
 
-This `ideogram_layout()` method is the package's layout core. It uses
-chromosome-width units and native ggplot2 orientation; no field depends on
-page dimensions, DPI, millimetres or canvas pixels.
+This \code{ideogram_layout()} method is the package's layout core. It uses
+chromosome-width units and native ggplot2 orientation.
 Within each row, chromosomes align at their input start (normally 0 bp).
 }

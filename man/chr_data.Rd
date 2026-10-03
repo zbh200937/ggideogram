@@ -14,25 +14,25 @@ chr_data(
 \arguments{
 \item{data}{A data frame to attach.}
 
-\item{by}{A named character vector mapping canonical `chr` to the source
-column, for example `c(chr = "Chr")`.}
+\item{by}{A named character vector mapping canonical \code{chr} to the source
+column, for example \code{c(chr = "Chr")}.}
 
-\item{relationship}{Expected key relationship. `"many-to-one"` permits a
-subset of unique chromosome keys; `"one-to-one"` additionally requires
-every chromosome exactly once; `"many-to-many"` must be explicit and is
+\item{relationship}{Expected key relationship. \code{"many-to-one"} permits a
+subset of unique chromosome keys; \code{"one-to-one"} additionally requires
+every chromosome exactly once; \code{"many-to-many"} must be explicit and is
 stored without flattening.}
 
-\item{name}{Optional stable attachment name. If `NULL`, the expression used
+\item{name}{Optional stable attachment name. If \code{NULL}, the expression used
 to add the component is used.}
 }
 \value{
 An additive ideogram data component.
 }
 \description{
-`chr_data()` declares an explicit chromosome-key connection. Unique
+\code{chr_data()} declares an explicit chromosome-key connection. Unique
 metadata columns are joined into the semantic karyotype and layout tables;
 the original attachment is also kept in a named registry for third-party
 extensions. Duplicate chromosome keys are rejected unless
-`relationship = "many-to-many"`, in which case the data is registered but
+\code{relationship = "many-to-many"}, in which case the data is registered but
 not flattened into one chromosome row.
 }

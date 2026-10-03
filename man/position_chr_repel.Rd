@@ -9,16 +9,16 @@ position_chr_repel(min_distance, units = c("bp", "body_width"))
 \arguments{
 \item{min_distance}{Positive minimum separation.}
 
-\item{units}{`"bp"` interprets `min_distance` as genomic base pairs;
-`"body_width"` interprets it in normalized chromosome-width units.}
+\item{units}{\code{"bp"} interprets \code{min_distance} as genomic base pairs;
+\code{"body_width"} interprets it in normalized chromosome-width units.}
 }
 \value{
 A chromosome-aware ggplot2 Position object.
 }
 \description{
-This position adjustment keeps `position` as the true genomic anchor and
+This position adjustment keeps \code{position} as the true genomic anchor and
 solves a bounded one-dimensional spacing problem independently for every
-chromosome and side. [geom_chr_link()] makes any displacement explicit.
+chromosome and side. geom_locus(geom = "link") makes displacement explicit.
 }
 \details{
 The requested separation is a data/layout distance, not a conversion from

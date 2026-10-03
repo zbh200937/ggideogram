@@ -9,6 +9,7 @@
 ^ggideogram_.*\.tar\.gz$
 ^AGENTS\.md$
 ^ARCHITECTURE\.md$
+^ROADMAP\.md$
 ^ACKNOWLEDGEMENTS\.md$
 ^CITATION\.cff$
 ^CONTRIBUTING\.md$

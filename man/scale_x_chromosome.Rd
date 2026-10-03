@@ -54,30 +54,30 @@ scale_y_chromosome(
 )
 }
 \arguments{
-\item{data}{A karyotype data frame or an [as_ideogram_data()] object.}
+\item{data}{A karyotype data frame or an \code{\link[=as_ideogram_data]{as_ideogram_data()}} object.}
 
-\item{mapping, centromere}{Passed to [as_ideogram_data()] for a data-frame
+\item{mapping, centromere}{Passed to \code{\link[=as_ideogram_data]{as_ideogram_data()}} for a data-frame
 input.}
 
 \item{name, breaks, labels, limits, expand, position, drop, na.translate}{Standard
-discrete position-scale arguments. The default `limits = waiver()` uses
-the karyotype order and retains every chromosome. Supply `limits = NULL`
-for data-trained limits and standard `drop` behaviour.}
+discrete position-scale arguments. The default \code{limits = waiver()} uses
+the karyotype order and retains every chromosome. Supply \code{limits = NULL}
+for data-trained limits and standard \code{drop} behaviour.}
 
-\item{guide}{`NULL` constructs [guide_chromosome_axis()]. Any explicitly
-supplied ggplot2 guide, including `"none"`, is passed through unchanged.}
+\item{guide}{\code{NULL} constructs \code{\link[=guide_chromosome_axis]{guide_chromosome_axis()}}. Any explicitly
+supplied ggplot2 guide, including \code{"none"}, is passed through unchanged.}
 
 \item{axis_length}{Maximum chromosome length in the guide. A one-dimensional
-absolute [grid::unit()] such as `unit(18, "mm")`; shorter chromosomes are
+absolute \code{\link[grid:unit]{grid::unit()}} such as \code{unit(18, "mm")}; shorter chromosomes are
 drawn in their true relative length.}
 
-\item{body_width}{Chromosome body width as an absolute [grid::unit()].}
+\item{body_width}{Chromosome body width as an absolute \code{\link[grid:unit]{grid::unit()}}.}
 
 \item{label_gap}{Clear physical gap between the chromosome and its displayed
 name.}
 
 \item{show_labels}{Draw the scale's formatted labels beyond the chromosome
-bodies. Their typography comes from the normal `axis.text.*` theme
+bodies. Their typography comes from the normal \verb{axis.text.*} theme
 element.}
 
 \item{fill, colour, linewidth}{Chromosome body fill, outline colour and
@@ -86,25 +86,25 @@ ggplot2-style line width.}
 \item{curve_points}{Number of profile samples used for rounded caps and the
 centromere waist.}
 
-\item{...}{Additional arguments passed to [ggplot2::scale_x_discrete()] or
-[ggplot2::scale_y_discrete()].}
+\item{...}{Additional arguments passed to \code{\link[ggplot2:scale_x_discrete]{ggplot2::scale_x_discrete()}} or
+\code{\link[ggplot2:scale_y_discrete]{ggplot2::scale_y_discrete()}}.}
 }
 \value{
 A discrete ggplot2 position scale.
 }
 \description{
-`scale_x_chromosome()` and `scale_y_chromosome()` are ordinary discrete
+\code{scale_x_chromosome()} and \code{scale_y_chromosome()} are ordinary discrete
 position scales whose guide draws one chromosome in the axis-label slot for
 each visible chromosome break. The host layers remain untouched: a native
-[ggplot2::geom_col()], [ggplot2::geom_line()] or
-[ggplot2::geom_boxplot()] continues to use the plot's ordinary x/y data
+\code{\link[ggplot2:geom_col]{ggplot2::geom_col()}}, \code{\link[ggplot2:geom_line]{ggplot2::geom_line()}} or
+\code{\link[ggplot2:geom_boxplot]{ggplot2::geom_boxplot()}} continues to use the plot's ordinary x/y data
 coordinates.
 }
 \details{
 Chromosomes are matched by the raw scale break, not by the formatted display
-label. This means `labels` may safely add prefixes or other presentation
+label. This means \code{labels} may safely add prefixes or other presentation
 text without changing biological alignment. The compact guide displays the
-chromosome outline and centromere; use [ggideogram()] when full cytoband
+chromosome outline and centromere; use \code{\link[=ggideogram]{ggideogram()}} when full cytoband
 detail or bp-position tracks are required.
 }
 \examples{

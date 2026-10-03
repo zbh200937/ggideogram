@@ -1,7 +1,7 @@
 # Six reproducible gallery figures built only from data bundled with
 # ggideogram.  Run from a source checkout after loading the package:
 #
-#   Rscript -e 'pkgload::load_all("."); source("inst/examples/original-data-gallery.R")'
+#   Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/original-data-gallery.R")'
 
 suppressPackageStartupMessages({
   library(ggideogram)
@@ -13,7 +13,7 @@ suppressPackageStartupMessages({
 # Chromosome columns, axis chromosomes, track limits, inset locus and reverse
 # inset corner are derived below from the bundled data and the declared slot.
 gallery <- list(
-  output_dir = file.path("inst", "examples"),
+  output_dir = file.path("work", "api-optimization", "examples", "original-data-gallery"),
   dpi = 200,
   base_size = 9,
   focus_chromosomes = 4L,
@@ -40,10 +40,10 @@ data("gene_density", package = "ggideogram")
 data("LTR_density", package = "ggideogram")
 data("Random_RNAs_500", package = "ggideogram")
 
-gene_density$Position <- (gene_density$Start + gene_density$End) / 2
-LTR_density$Position <- (LTR_density$Start + LTR_density$End) / 2
+gene_density$Position <- (gene_density$Start - 1 + gene_density$End) / 2
+LTR_density$Position <- (LTR_density$Start - 1 + LTR_density$End) / 2
 Random_RNAs_500$Position <-
-  (Random_RNAs_500$Start + Random_RNAs_500$End) / 2
+  (Random_RNAs_500$Start - 1 + Random_RNAs_500$End) / 2
 
 # A value of one half centres each heatmap tile in a unit-width overlay track;
 # the mapped `fill` remains the observed density value.
@@ -119,7 +119,7 @@ save_gallery_plot <- function(plot, stem, dimensions) {
   ggsave(
     pdf_file, plot,
     width = dimensions$width_mm, height = dimensions$height_mm,
-    units = "mm", bg = "white"
+    units = "mm", device = grDevices::cairo_pdf, bg = "white"
   )
   message("Wrote ", normalizePath(png_file))
   message("Wrote ", normalizePath(pdf_file))
@@ -137,10 +137,8 @@ add_rna_scales <- function(plot, legend = TRUE) {
 # -------------------------------------------------------------------------
 # 1. Classic RIdeogram semantics rebuilt with standard ggplot2 components.
 
-classic_tracks <- track_layout(
-  density = track("overlay", width = 0.90, limits = c(0, 1)),
-  markers = track("right", width = 0.55, gap = 0.18)
-)
+classic_tracks <- track_layout(density = geom_track(side = "overlay", width = 0.9, limits = c(0, 1)), markers = geom_track(side = "right",
+    width = 0.55, gap = 0.18))
 classic_grid <- choose_ideogram_grid(
   human_karyotype, classic_tracks,
   gallery$original$width_mm, gallery$original$height_mm,
@@ -161,37 +159,16 @@ classic_plot <- ggideogram(
   axis_side = "left",
   base_family = "sans"
 ) +
-  geom_track_tile(
-    data = gene_density,
-    mapping = aes(
-      chr = Chr, position = Position, value = Overlay,
-      width = End - Start, fill = Value
-    ),
-    track = "density",
-    height = 1,
-    colour = NA
-  ) +
+  geom_track(data = gene_density, mapping = aes(chr = Chr, x = Position, y = Overlay, width = End -
+      Start, fill = Value), track = "density", geom = ggplot2::geom_tile(height = 1, colour = NA)) +
   # The outline is redrawn as a public component after the overlay tiles.
-  geom_chromosome(fill = NA, cytoband = FALSE, linewidth = 0.36) +
-  geom_chr_link(
-    data = Random_RNAs_500,
-    mapping = aes(chr = Chr, position = Position),
-    position = classic_repel,
-    track = "markers",
-    colour = "#777777",
-    linewidth = 0.12,
-    alpha = 0.45
-  ) +
-  geom_chr_marker(
-    data = Random_RNAs_500,
-    mapping = aes(
-      chr = Chr, position = Position, shape = Type, colour = Type
-    ),
-    position = classic_repel,
-    track = "markers",
-    size = gallery$marker$size,
-    stroke = gallery$marker$stroke
-  ) +
+  geom_chr(component = "body", fill = NA, cytoband = FALSE, linewidth = 0.36) +
+  geom_locus(geom = "link", data = Random_RNAs_500, mapping = aes(chr = Chr, position = Position),
+      position = classic_repel, track = "markers", colour = "#777777", linewidth = 0.12,
+      alpha = 0.45) +
+  geom_locus(geom = "point", data = Random_RNAs_500, mapping = aes(chr = Chr, position = Position,
+      shape = Type, colour = Type), position = classic_repel, track = "markers", size = gallery$marker$size,
+      stroke = gallery$marker$stroke) +
   scale_fill_gradientn(
     colours = heatmap_colours,
     limits = range(gene_density$Value, na.rm = TRUE),
@@ -231,18 +208,10 @@ focus_gene <- gene_density[gene_density$Chr %in% focus_chr, ]
 focus_ltr <- LTR_density[LTR_density$Chr %in% focus_chr, ]
 focus_rna <- Random_RNAs_500[Random_RNAs_500$Chr %in% focus_chr, ]
 
-inward_tracks <- track_layout(
-  density = track("overlay", width = 0.78, limits = c(0, 1)),
-  markers = track("right", width = 0.55, gap = 0.18),
-  genes = track(
-    "right", width = 1.80, gap = 0.24,
-    limits = c(0, max(focus_gene$Value, na.rm = TRUE))
-  ),
-  ltr = track(
-    "right", width = 1.80, gap = 0.24,
-    limits = c(0, max(focus_ltr$Value, na.rm = TRUE))
-  )
-)
+inward_tracks <- track_layout(density = geom_track(side = "overlay", width = 0.78, limits = c(0, 1)), markers = geom_track(side = "right",
+    width = 0.55, gap = 0.18), genes = geom_track(side = "right", width = 1.8, gap = 0.24,
+    limits = c(0, max(focus_gene$Value, na.rm = TRUE))), ltr = geom_track(side = "right",
+    width = 1.8, gap = 0.24, limits = c(0, max(focus_ltr$Value, na.rm = TRUE))))
 inward_grid <- choose_ideogram_grid(
   focus_karyotype, inward_tracks,
   gallery$tracks$width_mm, gallery$tracks$height_mm,
@@ -264,66 +233,24 @@ inward_plot <- ggideogram(
   padding = 1,
   base_family = "sans"
 ) +
-  geom_track_tile(
-    data = focus_gene,
-    mapping = aes(
-      chr = Chr, position = Position, value = Overlay,
-      width = End - Start, fill = Value
-    ),
-    track = "density",
-    height = 1,
-    colour = NA
-  ) +
-  geom_chromosome(fill = NA, cytoband = FALSE, linewidth = 0.38) +
-  geom_track_line(
-    data = focus_gene,
-    mapping = aes(
-      chr = Chr, position = Position, value = Value, group = Chr
-    ),
-    track = "genes",
-    colour = gene_colour,
-    linewidth = 0.32
-  ) +
-  geom_track_col(
-    data = focus_ltr,
-    mapping = aes(
-      chr = Chr, position = Position, value = Value,
-      width = End - Start
-    ),
-    track = "ltr",
-    position = "identity",
-    fill = ltr_colour,
-    alpha = 0.72
-  ) +
-  geom_chr_link(
-    data = focus_rna,
-    mapping = aes(chr = Chr, position = Position),
-    position = inward_repel,
-    track = "markers",
-    colour = "#777777",
-    linewidth = 0.14,
-    alpha = 0.45
-  ) +
-  geom_chr_marker(
-    data = focus_rna,
-    mapping = aes(
-      chr = Chr, position = Position, shape = Type, colour = Type
-    ),
-    position = inward_repel,
-    track = "markers",
-    size = gallery$marker$size,
-    stroke = gallery$marker$stroke
-  ) +
-  geom_track_axis(
-    "genes", chr = focus_chr[1], position = "start",
-    breaks = c(0, max(focus_gene$Value, na.rm = TRUE)),
-    labels = scales::label_number(accuracy = 1)
-  ) +
-  geom_track_axis(
-    "ltr", chr = focus_chr[min(2L, length(focus_chr))], position = "start",
-    breaks = c(0, max(focus_ltr$Value, na.rm = TRUE)),
-    labels = scales::label_number(accuracy = 1)
-  ) +
+  geom_track(data = focus_gene, mapping = aes(chr = Chr, x = Position, y = Overlay, width = End -
+      Start, fill = Value), track = "density", geom = ggplot2::geom_tile(height = 1, colour = NA)) +
+  geom_chr(component = "body", fill = NA, cytoband = FALSE, linewidth = 0.38) +
+  geom_track(data = focus_gene, mapping = aes(chr = Chr, x = Position, y = Value, group = Chr),
+      track = "genes", geom = ggplot2::geom_line(colour = gene_colour, linewidth = 0.32)) +
+  geom_track(data = focus_ltr, mapping = aes(chr = Chr, x = Position, y = Value, width = End -
+      Start), track = "ltr", geom = ggplot2::geom_col(position = "identity", fill = ltr_colour,
+      alpha = 0.72)) +
+  geom_locus(geom = "link", data = focus_rna, mapping = aes(chr = Chr, position = Position),
+      position = inward_repel, track = "markers", colour = "#777777", linewidth = 0.14,
+      alpha = 0.45) +
+  geom_locus(geom = "point", data = focus_rna, mapping = aes(chr = Chr, position = Position,
+      shape = Type, colour = Type), position = inward_repel, track = "markers", size = gallery$marker$size,
+      stroke = gallery$marker$stroke) +
+  geom_track(track = "genes", axis = list(chr = focus_chr[1], position = "start", breaks = c(0,
+      max(focus_gene$Value, na.rm = TRUE)), labels = scales::label_number(accuracy = 1))) +
+  geom_track(track = "ltr", axis = list(chr = focus_chr[min(2L, length(focus_chr))], position = "start",
+      breaks = c(0, max(focus_ltr$Value, na.rm = TRUE)), labels = scales::label_number(accuracy = 1))) +
   scale_fill_gradientn(
     colours = heatmap_colours,
     limits = range(focus_gene$Value, na.rm = TRUE),
@@ -386,7 +313,7 @@ locus_child <- ggplot(locus_values, aes(Metric, Count, fill = Metric)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
   labs(
     title = "Selected 1 Mb locus",
-    subtitle = paste0("chr", selected_chr, ": ",
+    subtitle = paste0("chr", selected_chr, "\n",
                       format(selected_window$Start, big.mark = ","), "–",
                       format(selected_window$End, big.mark = ",")),
     x = NULL,
@@ -397,19 +324,16 @@ locus_child <- ggplot(locus_values, aes(Metric, Count, fill = Metric)) +
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),
     plot.title = element_text(face = "bold"),
+    plot.title.position = "plot",
     plot.margin = margin(4, 5, 4, 5)
   )
 
 locus_inset <- selected_window[c("Chr", "Start", "End")]
 locus_inset$Plot <- I(list(locus_child))
-locus_tracks <- track_layout(
-  genes = track(
-    "right", width = 1.60, gap = 0.24,
-    limits = c(0, max(selected_gene$Value, na.rm = TRUE))
-  ),
-  locus = track("right", width = 4.5, gap = 0.40)
-)
-locus_midpoint <- (selected_window$Start + selected_window$End) / 2
+locus_tracks <- track_layout(genes = geom_track(side = "right", width = 1.6, gap = 0.24, limits = c(0,
+    max(selected_gene$Value, na.rm = TRUE))), locus = geom_track(side = "right", width = 4.5,
+    gap = 0.4))
+locus_midpoint <- (selected_window$Start - 1 + selected_window$End) / 2
 chromosome_midpoint <-
   (selected_karyotype$Start + selected_karyotype$End) / 2
 locus_vjust <- if (locus_midpoint > chromosome_midpoint) 0 else 1
@@ -422,34 +346,15 @@ host_plot <- ggideogram(
   axis_side = "left",
   base_family = "sans"
 ) +
-  geom_track_line(
-    data = selected_gene,
-    mapping = aes(
-      chr = Chr, position = Position, value = Value, group = Chr
-    ),
-    track = "genes",
-    colour = gene_colour,
-    linewidth = 0.38
-  ) +
-  geom_chr_interval(
-    data = selected_window,
-    mapping = aes(chr = Chr, start = Start, end = End),
-    colour = highlight_colour,
-    linewidth = 1.2
-  ) +
-  geom_track_axis(
-    "genes", chr = selected_chr, position = "start",
-    breaks = c(0, max(selected_gene$Value, na.rm = TRUE)),
-    labels = scales::label_number(accuracy = 1)
-  ) +
-  geom_chr_inset(
-    data = locus_inset,
-    mapping = aes(chr = Chr, start = Start, end = End, plot = Plot),
-    track = "locus",
-    width = grid::unit(gallery$insets$child_width_mm, "mm"),
-    height = grid::unit(gallery$insets$child_height_mm, "mm"),
-    vjust = locus_vjust
-  ) +
+  geom_track(data = selected_gene, mapping = aes(chr = Chr, x = Position, y = Value, group = Chr),
+      track = "genes", geom = ggplot2::geom_line(colour = gene_colour, linewidth = 0.38)) +
+  geom_locus(geom = "interval", data = selected_window, mapping = aes(chr = Chr, start = Start,
+      end = End), colour = highlight_colour, linewidth = 1.2) +
+  geom_track(track = "genes", axis = list(chr = selected_chr, position = "start", breaks = c(0,
+      max(selected_gene$Value, na.rm = TRUE)), labels = scales::label_number(accuracy = 1))) +
+  geom_locus_inset(data = locus_inset, mapping = aes(chr = Chr, start = Start, end = End,
+      plot = Plot), track = "locus", width = grid::unit(gallery$insets$child_width_mm, "mm"),
+      height = grid::unit(gallery$insets$child_height_mm, "mm"), vjust = locus_vjust) +
   labs(
     tag = "A",
     title = "Complete ggplot anchored to a genomic interval",
@@ -461,9 +366,7 @@ host_plot <- ggideogram(
     plot.margin = margin(6, 6, 6, 6)
   )
 
-mini_tracks <- track_layout(
-  markers = track("right", width = 0.50, gap = 0.16)
-)
+mini_tracks <- track_layout(markers = geom_track(side = "right", width = 0.5, gap = 0.16))
 mini_plot <- ggideogram(
   selected_karyotype,
   ncol = 1,
@@ -475,15 +378,8 @@ mini_plot <- ggideogram(
   padding = 0.25,
   base_family = "sans"
 ) +
-  geom_chr_marker(
-    data = selected_rna,
-    mapping = aes(
-      chr = Chr, position = Position, shape = Type, colour = Type
-    ),
-    track = "markers",
-    size = 0.55,
-    stroke = 0.15
-  ) +
+  geom_locus(geom = "point", data = selected_rna, mapping = aes(chr = Chr, position = Position,
+      shape = Type, colour = Type), track = "markers", size = 0.55, stroke = 0.15) +
   theme(
     legend.position = "none",
     plot.background = element_rect(

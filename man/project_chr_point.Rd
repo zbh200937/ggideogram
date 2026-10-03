@@ -10,17 +10,20 @@ project_chr_point(layout, data, chr, position)
 project_chr_interval(layout, data, chr, start, end)
 }
 \arguments{
-\item{layout}{An `ideogram_layout_v2` object.}
+\item{layout}{An \code{ideogram_layout_v2} object or a plot from \code{\link[=ggideogram]{ggideogram()}}.}
 
 \item{data}{A data frame.}
 
-\item{chr, position, start, end}{Column names in `data`.}
+\item{chr, position, start, end}{Column names in \code{data}.}
 }
 \value{
-`data` with stable prefixed projection columns.
+\code{data} with stable prefixed projection columns.
 }
 \description{
 These low-level functions are the stable bridge for ggplot2 and third-party
 extensions.  They append projected fields to the supplied data and never
 create a grob.
+In circular layouts, projected x is unfolded centerline arc length and y is
+radius. These are data coordinates consumed by the ideogram Coord, which
+places native layers in the Cartesian panel. Original bp fields are retained.
 }

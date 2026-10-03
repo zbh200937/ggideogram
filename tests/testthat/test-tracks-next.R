@@ -46,7 +46,7 @@ test_that("track declarations reject ambiguous or impossible geometry", {
       as_ideogram_data(track_kar),
       tracks = track_layout(wide = track("overlay", width = 2))
     ),
-    "wider than"
+    "beyond the chromosome body"
   )
 })
 

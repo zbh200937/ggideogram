@@ -4,14 +4,17 @@ StatChrMarker <- ggplot2::ggproto(
   "StatChrMarker", ggplot2::Stat,
   required_aes = c("chr", "position"),
   compute_panel = function(data, scales, side = "right", gap = 0.25,
-                           track = NULL, component = "marker",
+                           track = NULL, component = "marker", track_position = 0.5,
                            na.rm = FALSE) {
     data$ideogram_chr <- as.character(data$chr)
     data$ideogram_anchor_position <- data$position
     data$ideogram_position <- data$position
     data$ideogram_side <- side
     data$ideogram_gap <- gap
-    if (!is.null(track)) data$ideogram_marker_track <- track
+    if (!is.null(track)) {
+      data$ideogram_marker_track <- track
+      data$ideogram_track_position <- track_position
+    }
     data$ideogram_link <- identical(component, "link")
     data$x <- 0
     data$y <- 0
@@ -23,76 +26,24 @@ StatChrMarker <- ggplot2::ggproto(
   }
 )
 
-#' Draw native ggplot2 markers beside chromosomes
-#'
-#' `geom_chr_marker()` is a thin chromosome-coordinate adapter around
-#' [ggplot2::GeomPoint]. Point glyphs, physical size, scales and guides are all
-#' supplied by ggplot2; the package does not construct marker polygons or
-#' convert canvas pixels.
-#'
-#' Map `chr` and `position` to the chromosome identifier and genomic point.
-#' All ordinary point aesthetics remain available, including `shape`, `size`,
-#' `colour`, `fill`, `alpha` and `stroke`.
-#'
-#' @param mapping Set of aesthetic mappings created by [ggplot2::aes()]. It
-#'   must contain `chr` and `position` unless inherited from the plot.
-#' @param data Marker data frame. When `NULL`, the plot data is used.
-#' @param stat Statistical transformation. The default creates the semantic
-#'   chromosome coordinates consumed by the ideogram coordinate system.
-#' @param position Position adjustment. Use [position_chr_repel()] for bounded
-#'   one-dimensional avoidance along each chromosome.
-#' @param ... Other arguments passed to [ggplot2::layer()], including standard
-#'   point aesthetics set to constants.
-#' @param side Side of the chromosome body, `"left"` or `"right"`. For a
-#'   horizontal ideogram these names follow the chromosome's local transverse
-#'   axis rather than page left/right.
-#' @param gap Distance from the chromosome edge to the point centre, in
-#'   chromosome-body-width units. Without a declared track, the marker reserves
-#'   a symmetric lane extending the same `gap` beyond its centre; bp axes are
-#'   placed outside this lane. Use a wider track or gap for large point sizes.
-#' @param track Optional identifier declared by [track_layout()]. When supplied,
-#'   the point is centred in that track and `side`/`gap` only remain fallback
-#'   values for plots without a marker track.
-#' @param na.rm If `FALSE`, missing required aesthetics are removed with a
-#'   warning.
-#' @param show.legend Should this layer be included in standard ggplot2 guides?
-#' @param inherit.aes If `FALSE`, the default, aesthetics are not inherited
-#'   from the base plot.
-#'
-#' @return A ggplot2 layer whose geom inherits directly from
-#'   [ggplot2::GeomPoint].
-#' @examples
-#' markers <- data.frame(
-#'   Chr = c("Chr1", "Chr1", "Chr2"),
-#'   Pos = c(20, 60, 40),
-#'   Type = c("circle", "box", "circle")
-#' )
-#' chromosomes <- data.frame(
-#'   Chr = c("Chr1", "Chr2"), Start = 0, End = 100
-#' )
-#' ggideogram(chromosomes) +
-#'   geom_chr_marker(
-#'     data = markers,
-#'     ggplot2::aes(chr = Chr, position = Pos, shape = Type, fill = Type),
-#'     size = 2
-#'   ) +
-#'   ggplot2::scale_shape_manual(values = c(circle = 21, box = 22))
-#' @export
+#' @noRd
 geom_chr_marker <- function(
     mapping = NULL,
     data = NULL,
     stat = StatChrMarker,
     position = "identity",
     ...,
-    side = c("right", "left"),
+    side = c("right", "left", "inner", "outer"),
     gap = 0.25,
     track = NULL,
+    track_position = 0.5,
     na.rm = FALSE,
     show.legend = NA,
     inherit.aes = FALSE) {
-  side <- match.arg(side)
+  side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
+  check_track_position(track_position)
   layer <- ggplot2::layer(
     data = data,
     mapping = mapping,
@@ -102,56 +53,34 @@ geom_chr_marker <- function(
     show.legend = show.legend,
     inherit.aes = inherit.aes,
     params = c(list(
-      side = side, gap = gap, track = track,
+      side = side, gap = gap, track = track, track_position = track_position,
       component = "marker", na.rm = na.rm
     ), list(...))
   )
+  layer$position <- locus_position(layer$position)
   ggplot2::ggproto("LayerChrMarker", layer,
     ideogram_marker_spec = list(side = side, gap = gap, track = track))
 }
 
-#' Draw native leader links from chromosomes to markers
-#'
-#' `geom_chr_link()` uses [ggplot2::GeomSegment]. Its start remains attached to
-#' the true genomic position at the chromosome edge; its end follows the marker
-#' display position, including an optional [position_chr_repel()] adjustment.
-#'
-#' @inheritParams geom_chr_marker
-#' @param show.legend Should this segment layer contribute to ggplot2 guides?
-#'   The default is `FALSE` so a matching point layer owns the marker key.
-#'
-#' @return A ggplot2 layer whose geom inherits directly from
-#'   [ggplot2::GeomSegment].
-#' @examples
-#' chromosomes <- data.frame(Chr = "Chr1", Start = 0, End = 100)
-#' markers <- data.frame(Chr = "Chr1", Pos = c(49, 50, 51))
-#' repel <- position_chr_repel(8, units = "bp")
-#' ggideogram(chromosomes) +
-#'   geom_chr_link(
-#'     data = markers, ggplot2::aes(chr = Chr, position = Pos),
-#'     position = repel
-#'   ) +
-#'   geom_chr_marker(
-#'     data = markers, ggplot2::aes(chr = Chr, position = Pos),
-#'     position = repel, size = 1.5
-#'   )
-#' @export
+#' @noRd
 geom_chr_link <- function(
     mapping = NULL,
     data = NULL,
     stat = StatChrMarker,
     position = "identity",
     ...,
-    side = c("right", "left"),
+    side = c("right", "left", "inner", "outer"),
     gap = 0.25,
     track = NULL,
+    track_position = 0.5,
     na.rm = FALSE,
     show.legend = FALSE,
     inherit.aes = FALSE) {
-  side <- match.arg(side)
+  side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
-  ggplot2::layer(
+  check_track_position(track_position)
+  layer <- ggplot2::layer(
     data = data,
     mapping = mapping,
     stat = stat,
@@ -160,10 +89,12 @@ geom_chr_link <- function(
     show.legend = show.legend,
     inherit.aes = inherit.aes,
     params = c(list(
-      side = side, gap = gap, track = track,
+      side = side, gap = gap, track = track, track_position = track_position,
       component = "link", na.rm = na.rm
     ), list(...))
   )
+  layer$position <- circular_segment_position(layer$position)
+  layer
 }
 
 validate_optional_marker_track <- function(track) {
@@ -173,6 +104,12 @@ validate_optional_marker_track <- function(track) {
     stopf("`track` must be NULL or one non-empty track identifier.")
   }
   invisible(track)
+}
+
+check_track_position <- function(x) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) || x < 0 || x > 1) {
+    stopf("`track_position` must be one number from 0 (near edge) to 1 (far edge).")
+  }
 }
 
 PositionChrRepel <- ggplot2::ggproto(
@@ -203,7 +140,7 @@ PositionChrRepel <- ggplot2::ggproto(
 #'
 #' This position adjustment keeps `position` as the true genomic anchor and
 #' solves a bounded one-dimensional spacing problem independently for every
-#' chromosome and side. [geom_chr_link()] makes any displacement explicit.
+#' chromosome and side. geom_locus(geom = "link") makes displacement explicit.
 #'
 #' The requested separation is a data/layout distance, not a conversion from
 #' point millimetres: the physical point size is only known when the plot is
@@ -245,8 +182,7 @@ ggplot_add.LayerChrMarker <- function(object, plot, ...) {
   point <- offset_chr_points(layout, layout$chrom$.chr,
     list(x = layout$chrom$.axis_start_x, y = layout$chrom$.axis_start_y),
     side = spec$side, distance = layout$chromosome_width / 2 + extent)
-  layout$bounds$x <- range(layout$bounds$x, point$x)
-  layout$bounds$y <- range(layout$bounds$y, point$y)
+  layout <- include_ideogram_coordinates(layout, point$x, point$y)
   plot <- update_plot_ideogram_layout(plot, layout)
   axis_layers <- list()
   for (index in seq_along(plot$layers)) {
@@ -255,6 +191,10 @@ ggplot_add.LayerChrMarker <- function(object, plot, ...) {
     replacement <- do.call(chromosome_axis_layers,
       c(list(layout = layout), layer$ideogram_axis_spec))
     plot$layers[[index]] <- replacement[[layer$ideogram_axis_part]]
+    for (field in c("ideogram_base", "ideogram_scope", "ideogram_scope_slot",
+                    "ideogram_aesthetic_names", "ideogram_recipe_id", "ideogram_recipe")) {
+      plot$layers[[index]][[field]] <- layer[[field]]
+    }
     axis_layers <- c(axis_layers, list(plot$layers[[index]]))
   }
   reserve_chromosome_axis_space(plot, axis_layers)

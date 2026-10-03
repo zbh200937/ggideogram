@@ -5,7 +5,7 @@
 \alias{liriodendron_karyotype}
 \title{Liriodendron karyotype}
 \format{
-A data frame with 19 rows and 3 columns: `Chr`, `Start`, `End`.
+A data frame with 19 rows and 3 columns: \code{Chr}, \code{Start}, \code{End}.
 }
 \source{
 RIdeogram: \url{https://github.com/TickingClock1992/RIdeogram}
@@ -14,7 +14,7 @@ RIdeogram: \url{https://github.com/TickingClock1992/RIdeogram}
 liriodendron_karyotype
 }
 \description{
-The 19 *Liriodendron chinense* chromosomes, in the three-column form. Without
-`CE_start`/`CE_end` the chromosomes are drawn as plain capsules.
+The 19 \emph{Liriodendron chinense} chromosomes, in the three-column form. Without
+\code{CE_start}/\code{CE_end} the chromosomes are drawn as plain capsules.
 }
 \keyword{datasets}

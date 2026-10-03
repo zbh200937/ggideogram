@@ -11,40 +11,59 @@ bin_genome(
   value = NULL,
   FUN = NULL,
   empty = NULL,
-  ...
+  ...,
+  method = NULL,
+  group = NULL
 )
 }
 \arguments{
-\item{data}{Data frame with `Chr` and `Start`, and optionally `End`.}
+\item{data}{Data frame with \code{Chr} and \code{Start}, and optionally \code{End}.
+Coordinates are positive integers using 1-based closed intervals. Unknown
+chromosomes, missing coordinates and intervals outside the karyotype are errors.}
 
-\item{karyotype}{Data frame with `Chr` and `End`, or a path to a
+\item{karyotype}{Data frame with \code{Chr} and \code{End}, or a path to a
 tab-separated karyotype file with a header. Chromosomes named here but
-absent from `data` come back filled with `empty` rather than disappearing.}
+absent from \code{data} come back filled with \code{empty} rather than disappearing.
+Optional \code{Start} gives the 0-based left boundary; it defaults to zero.}
 
-\item{window}{Window size in base pairs.}
+\item{window}{Positive integer window size in base pairs. Windows begin at
+each chromosome's \code{Start + 1} and end at its \code{End}.}
 
-\item{value}{Column of `data` to summarise. `NULL` counts rows.}
+\item{value}{Column of \code{data} to summarise. \code{NULL} counts rows.}
 
 \item{FUN}{Summary function applied to each window's values. Defaults to
-[length()] when `value` is `NULL` and [mean()] otherwise.}
+\code{\link[=length]{length()}} when \code{value} is \code{NULL} and \code{\link[=mean]{mean()}} otherwise.}
 
-\item{empty}{Value for a window with no rows in it. Defaults to `0` for
-counts and `NA` for a summary of nothing.}
+\item{empty}{Value for a window with no rows in it. Defaults to \code{0} for
+counts and \code{NA} for a summary of nothing.}
 
-\item{...}{Passed to `FUN`.}
+\item{...}{Passed to \code{FUN}.}
+
+\item{method}{Explicit \code{"count"}, \code{"coverage"}, or \code{"weighted_mean"}.
+Count assigns each feature once by its midpoint. Coverage is the union of
+covered bases divided by actual window width. Weighted mean uses each
+interval's overlap length; overlapping observations contribute separately.
+\code{NULL} retains the original \code{FUN} behavior.}
+
+\item{group}{Optional column names for independent grouped summaries with an
+explicit \code{method}. Every observed group receives every karyotype window.
+For weighted means, \code{na.rm = TRUE} in \code{...} excludes missing values and
+their weights; otherwise a missing overlapping value produces \code{NA}.}
 }
 \value{
-A data frame with `Chr`, `Start`, `End`, `Value`, in karyotype order.
-  Windows are half-open on the left, matching [GFFex()].
+A data frame with \code{Chr}, \code{Start}, \code{End}, \code{Value}, in karyotype order.
+Window coordinates are 1-based closed intervals.
+Explicit methods additionally return \code{Width}, \code{N} and \code{N_valid}; counts
+include \code{Rate} per Mb. Method and unit are stored in \code{window_summary}.
 }
 \description{
 Summarises a table of positions or intervals into equal-width windows along
-each chromosome, giving the `Chr` / `Start` / `End` / `Value` frame consumed
+each chromosome, giving the \code{Chr} / \code{Start} / \code{End} / \code{Value} frame consumed
 by chromosome track layers.
 }
 \details{
-A row is assigned to the window containing its midpoint when it has an `End`,
-and its `Start` otherwise, so an interval is counted once however long it is.
+A row is assigned to the window containing its midpoint when it has an \code{End},
+and its \code{Start} otherwise, so an interval is counted once however long it is.
 }
 \examples{
 kar <- data.frame(Chr = "A", Start = 0, End = 2500)

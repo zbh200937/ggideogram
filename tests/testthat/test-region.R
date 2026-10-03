@@ -22,7 +22,7 @@ test_that("chromosome intervals use standard GeomSegment semantics", {
     data, built$layout$panel_params[[1]]
   )
   projected <- project_chr_interval(
-    p$coordinates$layout, interval_data, "Chr", "Start", "End"
+    p$coordinates$layout, transform(interval_data, Start = Start - 1), "Chr", "Start", "End"
   )
   projected_start <- p$coordinates$transform(
     data.frame(x = projected$.x_start, y = projected$.y_start),

@@ -16,15 +16,15 @@ theme_ideogram(
 
 \item{base_family}{Base font family.}
 
-\item{plot_margin}{A [ggplot2::margin()] object.}
+\item{plot_margin}{A \code{\link[ggplot2:margin]{ggplot2::margin()}} object.}
 
-\item{...}{Additional theme settings passed to [ggplot2::theme()].}
+\item{...}{Additional theme settings passed to \code{\link[ggplot2:theme]{ggplot2::theme()}}.}
 }
 \value{
 A ggplot2 theme.
 }
 \description{
-`theme_ideogram()` is a small [ggplot2::theme_void()] preset. It does not
+\code{theme_ideogram()} is a small \code{\link[ggplot2:theme_void]{ggplot2::theme_void()}} preset. It does not
 remove guides, set a page size, or alter coordinate scaling. A later
-`theme()` call therefore overrides it exactly as for any other ggplot.
+\code{theme()} call therefore overrides it exactly as for any other ggplot.
 }

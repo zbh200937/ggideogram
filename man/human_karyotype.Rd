@@ -7,9 +7,9 @@
 \format{
 A data frame with 24 rows and 5 columns:
 \describe{
-  \item{Chr}{Chromosome name.}
-  \item{Start, End}{Chromosome extent, in base pairs.}
-  \item{CE_start, CE_end}{Centromere extent, in base pairs.}
+\item{Chr}{Chromosome name.}
+\item{Start, End}{Chromosome extent, in base pairs.}
+\item{CE_start, CE_end}{Centromere extent, in base pairs.}
 }
 }
 \source{
@@ -20,6 +20,6 @@ human_karyotype
 }
 \description{
 The 24 human chromosomes with centromere positions, in the five-column form
-accepted by [ggideogram()].
+accepted by \code{\link[=ggideogram]{ggideogram()}}.
 }
 \keyword{datasets}

@@ -7,10 +7,11 @@
 track_layout(...)
 }
 \arguments{
-\item{...}{Named [track()] objects.}
+\item{...}{Named \code{\link[=geom_track]{geom_track()}} declarations. The list names supply each
+track identifier and its layers, data and mapping remain together.}
 }
 \value{
-An `ideogram_track_layout` object.
+An \code{ideogram_track_layout} object.
 }
 \description{
 Track names are stable identifiers used by every track layer. Tracks on the
@@ -19,8 +20,8 @@ outwards; adding ggplot2 layers later never changes that order.
 }
 \examples{
 tracks <- track_layout(
-  markers = track(side = "right", width = 0.6),
-  density = track(side = "right", width = 1.2, limits = c(0, 10)),
-  counts = track(side = "left", width = 1, limits = c(0, 100))
+  markers = geom_track(side = "right", width = 0.6),
+  density = geom_track(side = "right", width = 1.2, limits = c(0, 10)),
+  counts = geom_track(side = "left", width = 1, limits = c(0, 100))
 )
 }

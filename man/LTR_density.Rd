@@ -5,8 +5,8 @@
 \alias{LTR_density}
 \title{Human LTR retrotransposon density}
 \format{
-A data frame with 3102 rows and 4 columns: `Chr`, `Start`, `End`,
-  `Value`.
+A data frame with 3102 rows and 4 columns: \code{Chr}, \code{Start}, \code{End},
+\code{Value}.
 }
 \source{
 RIdeogram: \url{https://github.com/TickingClock1992/RIdeogram}
@@ -15,7 +15,7 @@ RIdeogram: \url{https://github.com/TickingClock1992/RIdeogram}
 LTR_density
 }
 \description{
-LTR counts in the same 1 Mb windows as [gene_density], so the two can be
+LTR counts in the same 1 Mb windows as \link{gene_density}, so the two can be
 drawn as two tracks of the same figure.
 }
 \keyword{datasets}

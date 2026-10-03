@@ -2,6 +2,16 @@
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
+ideogram_text_size <- function(role) {
+  unname(c(chromosome = 3.2, label = 3, track = 2.8, bp = 2.8, value = 2.6)[role])
+}
+
+chr_projection_layout <- function(layout) {
+  if (inherits(layout, "ggplot")) layout <- ideogram_plot_layout(layout)
+  check_layout_v2(layout)
+  layout
+}
+
 stopf <- function(...) stop(sprintf(...), call. = FALSE)
 
 # ggplot2 passes the expression used on the right-hand side of `+` through

@@ -3,22 +3,43 @@
 StatChrInterval <- ggplot2::ggproto(
   "StatChrInterval", ggplot2::Stat,
   required_aes = c("chr", "start", "end"),
+  compute_layer = function(self, data, params, layout) {
+    params$ideogram_layout <- layout$coord$layout
+    ggplot2::ggproto_parent(ggplot2::Stat, self)$compute_layer(data, params, layout)
+  },
   compute_panel = function(
       data, scales, placement = "overlay",
-      side = "right", gap = 0.25, track = NULL,
-      na.rm = FALSE) {
-    if (any(data$start > data$end, na.rm = TRUE)) {
-      stopf("Chromosome intervals require `start <= end`.")
+      side = "right", gap = 0.25, track = NULL, track_position = 0.5,
+      na.rm = FALSE, ideogram_layout = NULL) {
+    first <- validate_coordinate(data$start, "start")
+    last <- validate_coordinate(data$end, "end")
+    if (any(first < 1 | first > last | first != floor(first) | last != floor(last))) {
+      stopf("Chromosome intervals require positive integer `start <= end` in one-based closed coordinates.")
     }
-    data$ideogram_chr <- as.character(data$chr)
-    data$ideogram_position <- data$start
-    data$ideogram_end_position <- data$end
+    chr <- validate_chr(data$chr, "chr")
+    source <- ideogram_layout$data$karyotype
+    i <- match(chr, source$.chr)
+    if (anyNA(i) || any(first - 1 < source$.start[i] | last > source$.end[i])) {
+      stopf("Chromosome intervals are outside the source chromosome bounds.")
+    }
+    i <- match(chr, ideogram_layout$chrom$.chr)
+    low <- pmax(first - 1, ideogram_layout$chrom$.start[i])
+    high <- pmin(last, ideogram_layout$chrom$.end[i])
+    keep <- !is.na(i) & low < high
+    if (!any(keep)) return(data.frame())
+    data <- data[keep, , drop = FALSE]
+    data$ideogram_chr <- chr[keep]
+    data$ideogram_position <- low[keep]
+    data$ideogram_end_position <- high[keep]
     data$ideogram_interval <- TRUE
     data$ideogram_interval_placement <- placement
     if (placement == "beside") {
       data$ideogram_side <- side
       data$ideogram_gap <- gap
-      if (!is.null(track)) data$ideogram_marker_track <- track
+      if (!is.null(track)) {
+        data$ideogram_marker_track <- track
+        data$ideogram_track_position <- track_position
+      }
     }
     data$x <- 0
     data$y <- 0
@@ -28,25 +49,7 @@ StatChrInterval <- ggplot2::ggproto(
   }
 )
 
-#' Draw chromosome intervals with a standard segment geom
-#'
-#' `geom_chr_interval()` maps genomic `start`/`end` to the chromosome long
-#' axis and delegates drawing, physical line width, aesthetics, scales and
-#' guides to [ggplot2::GeomSegment]. Use `placement = "beside"` for an
-#' interval track or the default `"overlay"` for a line on the body axis.
-#'
-#' @param mapping Aesthetic mapping with `chr`, `start`, and `end`.
-#' @param data Interval data frame.
-#' @param stat Chromosome interval Stat.
-#' @param position Standard ggplot2 position adjustment.
-#' @param ... Standard segment parameters and constant aesthetics.
-#' @param placement Draw on the body axis or beside it.
-#' @param side,gap Beside placement in chromosome-width units.
-#' @param track Optional declared track used for beside placement.
-#' @param na.rm,show.legend,inherit.aes Standard layer arguments.
-#'
-#' @return A ggplot2 layer using `GeomSegment`.
-#' @export
+#' @noRd
 geom_chr_interval <- function(
     mapping = NULL,
     data = NULL,
@@ -54,20 +57,22 @@ geom_chr_interval <- function(
     position = "identity",
     ...,
     placement = c("overlay", "beside"),
-    side = c("right", "left"),
+    side = c("right", "left", "inner", "outer"),
     gap = 0.25,
     track = NULL,
+    track_position = 0.5,
     na.rm = FALSE,
     show.legend = NA,
     inherit.aes = FALSE) {
   placement <- match.arg(placement)
-  side <- match.arg(side)
+  side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
+  check_track_position(track_position)
   if (!is.null(track) && placement != "beside") {
     stopf("`track` requires `placement = \"beside\"`.")
   }
-  ggplot2::layer(
+  layer <- ggplot2::layer(
     data = data,
     mapping = mapping,
     stat = stat,
@@ -79,45 +84,36 @@ geom_chr_interval <- function(
       placement = placement,
       side = side,
       gap = gap,
-      track = track,
+      track = track, track_position = track_position,
       na.rm = na.rm
     ), list(...))
   )
+  layer$position <- circular_segment_position(layer$position)
+  layer
 }
 
-#' @rdname geom_chr_interval
-#' @export
+#' @noRd
 geom_chr_region <- function(...) geom_chr_interval(...)
 
-#' Draw text at chromosome positions with the standard text geom
-#'
-#' This is the text counterpart of [geom_chr_marker()]. It changes only the
-#' chromosome coordinates; text size, family, alignment, aesthetics, scales
-#' and guides remain ordinary ggplot2 behaviour. Add [geom_chr_link()] when a
-#' displaced label should retain an explicit locus leader.
-#'
-#' @inheritParams geom_chr_marker
-#' @param gap Distance from the chromosome edge to the text anchor, in
-#'   chromosome-body-width units.
-#'
-#' @return A ggplot2 layer using `GeomText`.
-#' @export
+#' @noRd
 geom_chr_text <- function(
     mapping = NULL,
     data = NULL,
     stat = StatChrMarker,
     position = "identity",
     ...,
-    side = c("right", "left"),
+    side = c("right", "left", "inner", "outer"),
     gap = 0.4,
     track = NULL,
+    track_position = 0.5,
     na.rm = FALSE,
     show.legend = NA,
     inherit.aes = FALSE) {
-  side <- match.arg(side)
+  side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
-  ggplot2::layer(
+  check_track_position(track_position)
+  layer <- ggplot2::layer(
     data = data,
     mapping = mapping,
     stat = stat,
@@ -128,9 +124,11 @@ geom_chr_text <- function(
     params = c(list(
       side = side,
       gap = gap,
-      track = track,
+      track = track, track_position = track_position,
       component = "marker",
       na.rm = na.rm
     ), list(...))
   )
+  layer$position <- locus_position(layer$position)
+  layer
 }

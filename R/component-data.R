@@ -154,11 +154,11 @@ attach_chr_component <- function(layout, object, name) {
       name, if (length(collisions) > 1L) "s" else "",
       paste0("`", collisions, "`", collapse = ", "))
   }
-  match_index <- match(layout$chrom$.chr, chr)
+  display_index <- match(layout$chrom$.chr, chr)
+  source_index <- match(layout$data$karyotype$.chr, chr)
   for (column in source_columns) {
-    value <- object$data[[column]][match_index]
-    layout$data$karyotype[[column]] <- value
-    layout$chrom[[column]] <- value
+    layout$data$karyotype[[column]] <- object$data[[column]][source_index]
+    layout$chrom[[column]] <- object$data[[column]][display_index]
   }
   layout
 }

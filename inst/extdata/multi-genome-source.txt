@@ -1,0 +1,37 @@
+Multi-genome example inputs
+
+Populus trichocarpa haplotypes A/B:
+GWHERCL00000000 and GWHERCM00000000, 19 nuclear chromosomes per haplotype.
+Gao et al. (2025), Horticulture Research, doi:10.1093/hr/uhaf012.
+https://ngdc.cncb.ac.cn/gwh/Assembly/83709/show
+https://ngdc.cncb.ac.cn/gwh/Assembly/83710/show
+https://download.cncb.ac.cn/gwh/Plants/Populus_trichocarpa_Pt_hap_GWHERCL00000000/GWHERCL00000000.genome.fasta.gz
+https://download.cncb.ac.cn/gwh/Plants/Populus_trichocarpa_Pt_hap_GWHERCM00000000/GWHERCM00000000.genome.fasta.gz
+Lengths and original identifiers come directly from FASTA headers. Homolog
+groups use the deposited Chr01A/Chr01B through Chr19A/Chr19B assignments.
+
+Triticum aestivum Chinese Spring:
+GCF_018294505.1, IWGSC CS RefSeq v2.1, 21 nuclear chromosomes.
+https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/018/294/505/GCF_018294505.1_IWGSC_CS_RefSeq_v2.1/GCF_018294505.1_IWGSC_CS_RefSeq_v2.1_assembly_report.txt
+Subgenome and homolog group follow the assigned-molecule names 1A through 7D.
+
+Rice and wild rice, Ensembl Plants REST records retrieved 2026-10-01:
+Oryza sativa IRGSP-1.0 and Oryza rufipogon OR_W1943.
+Chromosome 1 lengths from /info/assembly/{species}.
+Complete Chr1 protein-coding genes from Ensembl Plants release 62 GFF3:
+https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-62/gff3/oryza_sativa/Oryza_sativa.IRGSP-1.0.62.gff3.gz
+https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-62/gff3/oryza_rufipogon/Oryza_rufipogon.OR_W1943.62.gff3.gz
+Only Chr1 gene rows with biotype=protein_coding are retained. Each gene retains
+original closed Start/End, Strand and gene identifier. Counts: 4970 rice, 4906 wild rice.
+LASTZ_NET pair Oruf-Osat from /info/compara/species_sets/LASTZ_NET?compara=plants.
+Alignment endpoints from /alignment/region/oryza_sativa/1:{start}-{end},
+compara=plants, method=LASTZ_NET, species_set=oryza_sativa and oryza_rufipogon.
+The two longest Chr1–Chr1 blocks from each of four rice queries are retained:
+1000000–1999999, 7000000–7999999, 14000000–14199999 and 22200000–22399999 bp.
+This is a sampled comparison; each record retains its exact query interval.
+Relative orientation is the equality/difference of the two returned strand fields.
+https://rest.ensembl.org/documentation/info/genomic_alignment_region
+
+Regenerate all tables with Python 3.9+ from the repository root:
+python3 inst/examples/prepare-multi-genome-data.py
+Source records are cached under work/multi-genome-source.

@@ -14,20 +14,22 @@ unproject_chr_point(
 )
 }
 \arguments{
-\item{layout}{An `ideogram_layout_v2` object.}
+\item{layout}{An \code{ideogram_layout_v2} object or a plot from \code{\link[=ggideogram]{ggideogram()}}.}
 
 \item{data}{A data frame.}
 
-\item{chr, x, y}{Column names in `data`.}
+\item{chr, x, y}{Column names in \code{data}.}
 
 \item{tolerance}{Allowed numerical distance beyond a chromosome endpoint,
 in layout units.}
 }
 \value{
-`data` with `.chr` and `.position` appended.
+\code{data} with \code{.chr} and \code{.position} appended.
 }
 \description{
 Projects an x/y position orthogonally onto the named chromosome's long axis
 and returns its genomic coordinate.  Transverse track offsets therefore do
 not alter the recovered genomic position.
+Circular input uses the same unfolded arc-length/radius coordinates returned
+by \code{\link[=project_chr_point]{project_chr_point()}} and \code{\link[=project_chr_track]{project_chr_track()}}.
 }

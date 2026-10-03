@@ -1,4 +1,4 @@
-# Public additive components backed by the shared dimensionless layout.
+# Internal additive components backed by the shared dimensionless layout.
 
 new_chromosome_component <- function(kind, params) {
   structure(
@@ -7,19 +7,8 @@ new_chromosome_component <- function(kind, params) {
   )
 }
 
-#' Add chromosome bodies to an ideogram
-#'
-#' This public component uses the same layout and geometry as
-#' [ggideogram()]. It is useful when a base plot was constructed without the
-#' desired styling; it never creates a second coordinate system.
-#'
-#' @param fill,colour,linewidth Standard chromosome body aesthetics.
-#' @param curve_points Vertices used to approximate each rounded cap.
-#' @param cytoband Include cytobands stored in the plot's semantic data.
-#' @param cytoband_scheme,cytoband_palette,cytoband_bleach Cytoband styling.
-#'
-#' @return An additive ggplot component.
-#' @export
+#' Internal chromosome body component
+#' @noRd
 geom_chromosome <- function(
     fill = "#F7F7F7",
     colour = "#4D4D4D",
@@ -46,16 +35,8 @@ geom_chromosome <- function(
   ))
 }
 
-#' Add cytobands already attached to an ideogram
-#'
-#' Supply the band table through `ggideogram(cytoband = ...)`; this component
-#' only controls its rendering and therefore cannot drift from the host layout.
-#'
-#' @param scheme,palette,bleach Passed to [cytoband_colours()].
-#' @param curve_points Vertices used to approximate rounded boundaries.
-#'
-#' @return An additive ggplot component.
-#' @export
+#' Internal cytoband component
+#' @noRd
 geom_chr_cytoband <- function(
     scheme = c("circos", "biovizbase", "only.centromeres"),
     palette = NULL,
@@ -69,56 +50,31 @@ geom_chr_cytoband <- function(
   ))
 }
 
-#' @rdname geom_chr_cytoband
-#' @param ... Passed to [geom_chr_cytoband()].
-#' @export
+#' Internal cytoband alias
+#' @noRd
 geom_cytoband <- function(...) geom_chr_cytoband(...)
 
-#' Add chromosome names
-#'
-#' @param size,gap,colour,family Standard text settings. `gap` is typographic
-#'   spacing in em and remains independent of panel scaling.
-#'
-#' @return An additive ggplot component.
-#' @export
+#' Internal chromosome name component
+#' @noRd
 geom_chr_name <- function(
-    size = 3.2,
+    size = ideogram_text_size("chromosome"),
     gap = 0.5,
     colour = "#202020",
-    family = "") {
+    family = "",
+    position = c("auto", "start", "end", "middle")) {
   check_positive_layout(size, "size")
   check_nonnegative_layout(gap, "gap")
   new_chromosome_component("name", list(
-    size = size, gap = gap, colour = colour, family = family
+    size = size, gap = gap, colour = colour, family = family,
+    position = match.arg(position)
   ))
 }
 
-#' Add local base-pair axes
-#'
-#' The axis uses the chromosome's own bp projection. Tick length and text size
-#' are physical ggplot2 units; `gap` is a clear distance beyond the outermost
-#' same-side track or marker lane (or the chromosome body) in body-width units.
-#' Ticks extend
-#' only outwards. The axis spine extends the data bounds, and edge labels
-#' reserve physical space in the standard plot margin.
-#'
-#' @param chr `TRUE` for every chromosome or a chromosome vector.
-#' @param side Axis side in the chromosome's local orientation.
-#' @param breaks Explicit breaks, a function of `c(start, end)`, or `NULL`.
-#' @param n Target number of automatic intervals.
-#' @param units Label unit.
-#' @param labels Draw labels as well as ticks.
-#' @param gap Clear track/marker-lane-to-axis distance in body-width units;
-#'   measured from the chromosome body when that side has no track or marker.
-#' @param tick_length Tick length in millimetres.
-#' @param label_gap Typographic label clearance beyond the tick tip, in em.
-#' @param size,family,colour,linewidth Standard ggplot2 appearance settings.
-#'
-#' @return An additive ggplot component.
-#' @export
+#' Internal chromosome bp-axis component
+#' @noRd
 geom_chr_axis <- function(
     chr = TRUE,
-    side = c("left", "right"),
+    side = c("left", "right", "inner", "outer"),
     breaks = NULL,
     n = 6,
     units = c("auto", "bp", "kb", "Mb", "Gb"),
@@ -126,7 +82,7 @@ geom_chr_axis <- function(
     gap = 0.3,
     tick_length = 1.5,
     label_gap = 0.25,
-    size = 2.4,
+    size = ideogram_text_size("bp"),
     family = "",
     colour = "#666666",
     linewidth = 0.3) {
@@ -147,7 +103,7 @@ geom_chr_axis <- function(
   check_nonnegative_layout(linewidth, "linewidth")
   new_chromosome_component("axis", list(
     chr = chr,
-    side = match.arg(side),
+    side = canonical_chr_side(match.arg(side)),
     breaks = breaks,
     n = n,
     units = match.arg(units),
@@ -199,7 +155,7 @@ ggplot_add.ggideogram_chromosome_component <- function(
     },
     name = list(chromosome_name_layer(
       layout, parameters$size, parameters$gap,
-      parameters$family, parameters$colour)),
+      parameters$family, parameters$colour, parameters$position)),
     axis = chromosome_axis_layers(
       layout,
       chr = parameters$chr,
@@ -225,5 +181,6 @@ ggplot_add.ggideogram_chromosome_component <- function(
   if (object$kind == "axis") {
     plot <- reserve_chromosome_axis_space(plot, layers)
   }
+  if (object$kind == "name") plot <- reserve_chromosome_axis_space(plot, list())
   plot
 }

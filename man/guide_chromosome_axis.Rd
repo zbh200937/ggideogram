@@ -23,11 +23,11 @@ guide_chromosome_axis(
 )
 }
 \arguments{
-\item{data}{A karyotype data frame or [as_ideogram_data()] object.}
+\item{data}{A karyotype data frame or \code{\link[=as_ideogram_data]{as_ideogram_data()}} object.}
 
-\item{mapping, centromere}{Passed to [as_ideogram_data()].}
+\item{mapping, centromere}{Passed to \code{\link[=as_ideogram_data]{as_ideogram_data()}}.}
 
-\item{axis_length, body_width, label_gap, show_labels, fill, colour, linewidth, curve_points}{See [scale_x_chromosome()].}
+\item{axis_length, body_width, label_gap, show_labels, fill, colour, linewidth, curve_points}{See \code{\link[=scale_x_chromosome]{scale_x_chromosome()}}.}
 
 \item{title, theme, order, position}{Standard ggplot2 guide arguments.}
 }
@@ -35,8 +35,8 @@ guide_chromosome_axis(
 A ggplot2 guide object.
 }
 \description{
-This guide is normally constructed by [scale_x_chromosome()] or
-[scale_y_chromosome()]. It extends ggplot2's public [ggplot2::GuideAxis]
+This guide is normally constructed by \code{\link[=scale_x_chromosome]{scale_x_chromosome()}} or
+\code{\link[=scale_y_chromosome]{scale_y_chromosome()}}. It extends ggplot2's public \link[ggplot2:GuideAxis]{ggplot2::GuideAxis}
 interface and occupies the normal axis-label slot; it does not inspect or
 edit a built gtable.
 }

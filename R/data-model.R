@@ -1,15 +1,16 @@
 # Semantic data for the next-generation renderer.
 #
-# This file deliberately contains no drawing coordinates.  It turns user
-# columns into stable, prefixed semantic fields while preserving every source
+# It turns user columns into stable, prefixed semantic fields while preserving every source
 # column for later aesthetic mappings.
 
 #' Create semantic ideogram data
 #'
 #' `as_ideogram_data()` separates biological coordinates from rendering.  The
 #' returned object contains the original karyotype columns plus canonical
-#' `.chr`, `.start`, `.end`, `.centromere_start` and `.centromere_end` fields;
-#' it never stores canvas pixels, device dimensions or pre-built grobs.
+#' `.chr`, `.start`, `.end`, `.centromere_start` and `.centromere_end` fields.
+#' GRanges and Seqinfo inputs use their complete sequence lengths to build
+#' the karyotype; unknown lengths must be supplied first. GRanges annotations
+#' themselves can be converted with [as_chr_features()].
 #'
 #' @param x A karyotype-like object.
 #' @param ... Passed to the class method.
@@ -21,7 +22,9 @@ as_ideogram_data <- function(x, ...) {
 }
 #' @param mapping An aesthetic mapping containing `chr`, `start` and `end`.
 #'   Expressions are evaluated in `x`, so source columns do not have to be
-#'   renamed.
+#'   renamed. Optional `genome`, `assembly`, `homolog` and `label` mappings
+#'   identify multiple genomes, declare homolog groups and set displayed names.
+#'   Annotation layers use [chr_key()] to match those composite identifiers.
 #' @param centromere Optional mapping containing `start` and `end`.  When it is
 #'   `NULL`, columns `CE_start` and `CE_end` are used together when present.
 #' @param cytoband Optional cytoband/interval table.
@@ -50,6 +53,7 @@ as_ideogram_data.data.frame <- function(
   karyotype$.chr <- validate_chr(canonical$chr, "mapping$chr")
   karyotype$.start <- validate_coordinate(canonical$start, "mapping$start")
   karyotype$.end <- validate_coordinate(canonical$end, "mapping$end")
+  karyotype <- canonical_genome_fields(karyotype, mapping)
 
   bad_interval <- karyotype$.start < 0 | karyotype$.end <= karyotype$.start
   if (any(bad_interval)) {

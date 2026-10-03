@@ -10,7 +10,7 @@
 #' Count features per window from a GFF file
 #'
 #' Produces a `Chr` / `Start` / `End` / `Value` data frame suitable for
-#' [geom_track_line()], [geom_track_col()] and other chromosome tracks.
+#' [geom_track()] with ordinary ggplot2 line or column layers.
 #'
 #' @param input Path to a GFF file, or a data frame of one already read (columns
 #'   are used positionally, as in GFF: 1 = sequence name, 3 = feature type,

@@ -13,7 +13,7 @@ columns: chromosome, start, end, band name and stain.}
 \item{chr}{Optional chromosome selection and order.}
 }
 \value{
-A data frame with `Chr`, `Start`, `End`, `Name`, and `Stain`.
+A data frame with \code{Chr}, \code{Start}, \code{End}, \code{Name}, and \code{Stain}.
 }
 \description{
 Read a UCSC cytoband table

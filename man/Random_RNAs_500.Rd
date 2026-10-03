@@ -7,12 +7,12 @@
 \format{
 A data frame with 500 rows and 6 columns:
 \describe{
-  \item{Type}{Marker class; one legend row per distinct value.}
-  \item{Shape}{Source shape name (`circle`, `box`, or `triangle`), which maps
-    naturally to standard filled ggplot2 shapes 21, 22, and 24.}
-  \item{Chr}{Chromosome name, matched against the karyotype.}
-  \item{Start, End}{Marker extent; the anchor is the midpoint.}
-  \item{color}{Fill colour.}
+\item{Type}{Marker class; one legend row per distinct value.}
+\item{Shape}{Source shape name (\code{circle}, \code{box}, or \code{triangle}), which maps
+naturally to standard filled ggplot2 shapes 21, 22, and 24.}
+\item{Chr}{Chromosome name, matched against the karyotype.}
+\item{Start, End}{Marker extent; the anchor is the midpoint.}
+\item{color}{Fill colour.}
 }
 }
 \source{
@@ -23,8 +23,8 @@ Random_RNAs_500
 }
 \description{
 Marker positions inherited from RIdeogram. Use the interval midpoint as the
-`position` aesthetic in [geom_chr_marker()]. `color` retains the source
-package's bare hexadecimal strings, so add `#` before passing them to a
+\code{position} aesthetic in \code{\link[=geom_locus]{geom_locus()}}. \code{color} retains the source
+package's bare hexadecimal strings, so add \verb{#} before passing them to a
 standard ggplot2 scale.
 }
 \keyword{datasets}

@@ -132,6 +132,9 @@ chromosome_position_scale <- function(
     body_width, label_gap, show_labels, fill, colour, linewidth,
     curve_points, ...) {
   semantic <- chromosome_axis_semantic(data, mapping, centromere)
+  if (inherits(labels, "waiver") && !is.null(semantic$karyotype$.display_name)) {
+    labels <- stats::setNames(semantic$karyotype$.display_name, semantic$karyotype$.chr)
+  }
   if (inherits(limits, "waiver")) {
     limits <- semantic$karyotype$.chr
   }

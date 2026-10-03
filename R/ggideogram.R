@@ -2,8 +2,7 @@
 #'
 #' `ggideogram()` creates semantic
 #' chromosome data, computes a dimensionless layout, and returns an ordinary
-#' ggplot object with a fixed coordinate ratio. It has no output side effect,
-#' page canvas, DPI conversion or secondary compatibility renderer.
+#' ggplot object with a fixed coordinate ratio.
 #'
 #' The constructor provides chromosome bodies, cytobands, names and local
 #' base-pair axes. Marker, declared tracks and complete inset plots can all be
@@ -12,20 +11,35 @@
 #' @param data A karyotype data frame or an [as_ideogram_data()] object.
 #' @param mapping,centromere,cytoband,cytoband_mapping Passed to
 #'   [as_ideogram_data()] for a data-frame input.
-#' @param ncol,chromosome_width,chromosome_gap,max_chr_length,row_gap,orientation,scale_length Passed to the dimensionless
+#' @param ncol,chromosome_width,chromosome_gap,max_chr_length,row_gap,orientation,scale_length,order_by,genome_order,homolog_order,reverse_chr,radius,clockwise Passed to the dimensionless
 #'   [ideogram_layout()] method.
-#' @param tracks `NULL` or a named [track_layout()] reserved before rendering.
+#' @param start_angle Circular starting angle, clockwise from the top, in degrees.
+#'   `NULL` keeps the closing gap above and to the right: its left boundary is
+#'   the vertical radius at 12 o'clock, for either arrangement direction.
+#' @param gap_angle Angular gap after each circular chromosome: one angle or
+#'   a vector named by chromosome keys. `NULL` uses 2 degrees between chromosomes
+#'   and a 20-degree closing gap for track names and numerical scales.
+#' @param opening_angle One non-negative angle in degrees controlling the closing
+#'   opening independently of the other chromosome gaps. `NULL` uses the closing
+#'   value from `gap_angle`, or 20 degrees when both are `NULL`.
+#' @param tracks `NULL` or a named list of [geom_track()] declarations.
 #' @param fill,colour,linewidth Chromosome body style. Sizes use ordinary
 #'   ggplot2 units.
-#' @param curve_points Number of vertices used to approximate each rounded cap.
+#' @param curve_points Number of samples for chromosome boundaries, including
+#'   rounded caps in linear layouts and arcs in circular layouts.
 #' @param show_names Draw chromosome names.
 #' @param name_size,name_gap,name_colour Name size in ggplot2 millimetres, gap
 #'   in em, and colour.
+#' @param name_position Name placement: `"auto"`, `"start"`, `"end"`, or
+#'   `"middle"`. Endpoints refer to display direction. Circular names share an
+#'   outer label ring.
 #' @param axis `FALSE`, `TRUE`, or a chromosome vector selecting local base-pair
 #'   axes.
-#' @param axis_side Side of the chromosome axis.
+#' @param axis_side Side of the chromosome axis. Circular `"inner"`/`"outer"`
+#'   correspond to `"left"`/`"right"`; its default is outer.
 #' @param axis_breaks Explicit breaks, a function receiving `c(start, end)`, or
-#'   `NULL` for round automatic breaks.
+#'   `NULL` for round automatic breaks. Circular automatic breaks omit the
+#'   terminal endpoint to keep adjacent seam labels separate.
 #' @param axis_n Target automatic break intervals.
 #' @param axis_units Label unit.
 #' @param axis_gap Clear gap beyond the outermost same-side track or marker lane
@@ -40,6 +54,7 @@
 #'   controls passed to [cytoband_colours()].
 #' @param padding Coordinate padding in body-width units.
 #' @param base_family Base font family.
+#' @param chr Optional chromosome identifiers to select, in display order.
 #'
 #' @return A standard ggplot object whose coordinate object owns the single
 #'   `ideogram_layout_v2` source of truth.
@@ -55,39 +70,55 @@ ggideogram <- function(
     cytoband_mapping = NULL,
     ncol = NULL,
     chromosome_width = 1,
-    chromosome_gap = 1,
+    chromosome_gap = 3,
     max_chr_length = 40,
     row_gap = 2,
-    orientation = c("vertical", "horizontal"),
+    orientation = c("vertical", "horizontal", "circular"),
     scale_length = c("global", "per_chr"),
     tracks = NULL,
+    order_by = c("input", "genome", "homolog"),
+    genome_order = NULL,
+    homolog_order = NULL,
+    reverse_chr = character(),
+    radius = 20,
+    start_angle = NULL,
+    gap_angle = NULL,
+    opening_angle = NULL,
+    clockwise = TRUE,
     fill = "#F7F7F7",
     colour = "#4D4D4D",
     linewidth = 0.4,
     curve_points = 32,
     show_names = TRUE,
-    name_size = 3.2,
+    name_size = ideogram_text_size("chromosome"),
     name_gap = 0.5,
     name_colour = "#202020",
+    name_position = c("auto", "start", "end", "middle"),
     axis = FALSE,
-    axis_side = c("left", "right"),
+    axis_side = c("left", "right", "inner", "outer"),
     axis_breaks = NULL,
     axis_n = 6,
     axis_units = c("auto", "bp", "kb", "Mb", "Gb"),
     axis_gap = 0.3,
     axis_tick_length = 1.5,
     axis_label_gap = 0.25,
-    axis_size = 2.4,
+    axis_size = ideogram_text_size("bp"),
     axis_colour = "#666666",
     axis_linewidth = 0.3,
     cytoband_scheme = c("circos", "biovizbase", "only.centromeres"),
     cytoband_palette = NULL,
     cytoband_bleach = 0,
     padding = 0.5,
-    base_family = "") {
+    base_family = "",
+    chr = NULL) {
   orientation <- match.arg(orientation)
   scale_length <- match.arg(scale_length)
-  axis_side <- match.arg(axis_side)
+  order_by <- match.arg(order_by)
+  name_position <- match.arg(name_position)
+  tracks <- normalise_chr_tracks(tracks)
+  outer_axis <- orientation == "circular" && missing(axis_side)
+  axis_side <- canonical_chr_side(match.arg(axis_side))
+  if (outer_axis) axis_side <- "right"
   axis_units <- match.arg(axis_units)
   cytoband_scheme <- match.arg(cytoband_scheme)
   curve_points <- validate_curve_points(curve_points)
@@ -126,6 +157,19 @@ ggideogram <- function(
       cytoband = cytoband, cytoband_mapping = cytoband_mapping)
   }
 
+  if (!is.null(chr)) {
+    chr <- validate_chr(chr, "chr")
+    if (!length(chr) || anyDuplicated(chr) || any(!chr %in% semantic$karyotype$.chr)) {
+      stopf("`chr` must select unique chromosomes in the source karyotype.")
+    }
+    if (!is.null(semantic$view) && !semantic$view$chr %in% chr) stopf("`chr` does not include the view chromosome.")
+    semantic$chr_selection <- chr
+  }
+
+  base_spec <- mget(names(formals(ggideogram)), envir = environment())
+  base_spec$data <- semantic
+  base_spec[c("mapping", "centromere", "cytoband", "cytoband_mapping")] <- rep(list(NULL), 4)
+
   layout <- ideogram_layout(
     semantic, ncol = ncol,
     chromosome_width = chromosome_width,
@@ -135,8 +179,13 @@ ggideogram <- function(
     orientation = orientation,
     scale_length = scale_length,
     curve_points = curve_points,
-    tracks = tracks
+    tracks = tracks,
+    order_by = order_by, genome_order = genome_order,
+    homolog_order = homolog_order, reverse_chr = reverse_chr,
+    radius = radius, start_angle = start_angle, gap_angle = gap_angle,
+    opening_angle = opening_angle, clockwise = clockwise
   )
+  layout$base_spec <- base_spec
 
   layers <- chromosome_body_layers(
     layout, fill = fill, colour = colour, linewidth = linewidth,
@@ -148,7 +197,7 @@ ggideogram <- function(
   if (isTRUE(show_names)) {
     layers <- c(layers, list(chromosome_name_layer(
       layout, size = name_size, gap = name_gap,
-      family = base_family, colour = name_colour)))
+      family = base_family, colour = name_colour, position = name_position)))
   }
   axis_layers <- chromosome_axis_layers(
     layout, chr = axis, side = axis_side,
@@ -159,8 +208,14 @@ ggideogram <- function(
     linewidth = axis_linewidth
   )
 
+  for (i in seq_along(layers)) layers[[i]]$ideogram_base <- TRUE
+  for (i in seq_along(axis_layers)) axis_layers[[i]]$ideogram_base <- TRUE
+
   plot <- ggplot2::ggplot() + layers + axis_layers +
     coord_ideogram_next(layout, padding = padding, clip = "off") +
     theme_ideogram(base_family = base_family)
+  if (is_circular_layout(layout)) plot <- plot + ggplot2::guides(x = "none", y = "none")
+  plot <- add_chr_track_contents(plot, tracks)
+  plot$layers <- lapply(plot$layers, record_ideogram_aesthetics)
   reserve_chromosome_axis_space(plot, axis_layers)
 }

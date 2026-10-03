@@ -7,16 +7,16 @@
 project_chr_track(layout, data, chr, position, value, track)
 }
 \arguments{
-\item{layout}{An `ideogram_layout_v2` object.}
+\item{layout}{An \code{ideogram_layout_v2} object or ggideogram plot.}
 
 \item{data}{A data frame.}
 
-\item{chr, position, value}{Column names in `data`.}
+\item{chr, position, value}{Column names in \code{data}.}
 
 \item{track}{One declared track identifier.}
 }
 \value{
-`data` with stable prefixed semantic and projected columns.
+\code{data} with stable prefixed semantic and projected columns.
 }
 \description{
 This is the public low-level bridge for third-party ggplot2 extensions. The

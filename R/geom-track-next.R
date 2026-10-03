@@ -4,11 +4,14 @@ StatChrTrack <- ggplot2::ggproto(
   "StatChrTrack", ggplot2::Stat,
   required_aes = c("chr", "position", "value"),
   compute_panel = function(data, scales, track, chromosome_separation,
+                           circular = FALSE,
+                           track_geometry = FALSE,
+                           track_clip = "auto",
                            na.rm = FALSE) {
     data$ideogram_chr <- as.character(data$chr)
     data$ideogram_track <- track
     chromosome_code <- match(
-      data$ideogram_chr, unique(data$ideogram_chr)) - 1L
+      data$ideogram_chr, unique(data$ideogram_chr)) - as.integer(!circular)
     data$ideogram_position_shift <- chromosome_code * chromosome_separation
     data$x <- data$position + data$ideogram_position_shift
     data$y <- data$value
@@ -16,58 +19,13 @@ StatChrTrack <- ggplot2::ggproto(
       data$ideogram_chr, data$group,
       drop = TRUE, lex.order = TRUE
     ))
+    if (track_geometry) data$ideogram_track_geometry <- TRUE
+    data$ideogram_track_clip <- track_clip
     data
   }
 )
 
-#' Adapt an ordinary ggplot2 geom to a chromosome track
-#'
-#' `geom_chr_track()` keeps the requested geom unchanged and supplies it with
-#' standard `x`/`y` coordinates through a chromosome-aware Stat and Coord. The
-#' target track must have been declared in `ggideogram(tracks = ...)`.
-#'
-#' The minimum generic protocol is an identity-stat geom that consumes `x` and
-#' `y` and passes its data to `coord$transform()`. This covers ordinary point,
-#' line/path, column/rect, tile and text geoms as well as compatible third-party
-#' geoms. Components whose standard geom internally reconstructs data are
-#' provided by dedicated wrappers such as [geom_track_ribbon()] and
-#' [geom_track_boxplot()].
-#'
-#' @param mapping Aesthetic mappings containing `chr`, `position` and `value`,
-#'   plus aesthetics consumed by `geom`.
-#' @param data Track data frame.
-#' @param geom A ggplot2 geom constructor such as [ggplot2::geom_line()].
-#' @param track One identifier declared by [track_layout()].
-#' @param stat Currently `"identity"`. The adapter supplies its own semantic
-#'   identity Stat; use a dedicated wrapper for statistical geoms.
-#' @param position A standard ggplot2 position adjustment.
-#' @param ... Parameters and constant aesthetics passed unchanged to `geom`.
-#' @param na.rm Passed to the geom layer.
-#' @param show.legend Should the standard ggplot2 guide include this layer?
-#' @param inherit.aes Whether to inherit plot aesthetics. The ideogram base plot
-#'   has no data mapping, so the default is `FALSE`.
-#'
-#' @return An additive ggplot component. After addition, the resulting layer
-#'   retains the ordinary geom class supplied in `geom`.
-#' @examples
-#' chromosomes <- data.frame(Chr = c("A", "B"), Start = 0, End = 100)
-#' signal <- data.frame(
-#'   Chr = rep(c("A", "B"), each = 5),
-#'   Pos = rep(seq(10, 90, length.out = 5), 2),
-#'   Value = c(1:5, 5:1)
-#' )
-#' tracks <- track_layout(
-#'   signal = track(side = "right", width = 1, limits = c(0, 5))
-#' )
-#' ggideogram(chromosomes, tracks = tracks) +
-#'   geom_chr_track(
-#'     data = signal,
-#'     geom = ggplot2::geom_line,
-#'     track = "signal",
-#'     mapping = ggplot2::aes(chr = Chr, position = Pos, value = Value),
-#'     linewidth = 0.4
-#'   )
-#' @export
+#' @noRd
 geom_chr_track <- function(
     mapping = NULL,
     data = NULL,
@@ -151,7 +109,7 @@ update_plot_ideogram_layout <- function(plot, layout) {
   plot
 }
 
-add_dynamic_track_component <- function(object, plot, layout, object_name) {
+register_dynamic_track_range <- function(object, layout) {
   fields <- mapped_fields(
     object$data, object$mapping, c("chr", "position", "value"),
     what = "mapping")
@@ -163,8 +121,9 @@ add_dynamic_track_component <- function(object, plot, layout, object_name) {
     chr <- rep(chr, 3L)
     value <- c(value, tile_range$lower, tile_range$upper)
   }
-  stack_range <- track_position_value_range(
-    object$position, chr, fields$position, value)
+  stack_range <- if (!is.null(object$range_prototype)) {
+    native_range_track_values(object$range_prototype, object$data, object$mapping)
+  } else track_position_value_range(object$position, chr, fields$position, value)
   if (!is.null(stack_range)) {
     chr <- c(chr, stack_range$chr)
     value <- c(value, stack_range$value)
@@ -174,30 +133,127 @@ add_dynamic_track_component <- function(object, plot, layout, object_name) {
     chr <- c(chr, present_chr)
     value <- c(value, rep(0, length(present_chr)))
   }
+  coordinate_names <- intersect(c("xend", "xmin", "xmax", "yend", "ymin", "ymax"),
+    union(names(object$mapping), names(object$params)))
+  coordinates <- lapply(stats::setNames(coordinate_names, coordinate_names), function(aesthetic) {
+    input <- if (aesthetic %in% names(object$params)) object$params[[aesthetic]] else
+      rlang::eval_tidy(object$mapping[[aesthetic]], data = object$data)
+    recycle_semantic(input, nrow(object$data), paste0("track ", aesthetic))
+  })
+  for (aesthetic in intersect(c("xend", "xmin", "xmax"), coordinate_names)) {
+    validate_track_semantics(layout, fields$chr, coordinates[[aesthetic]], fields$value)
+  }
+  for (aesthetic in intersect(c("yend", "ymin", "ymax"), coordinate_names)) {
+    validate_track_semantics(layout, fields$chr, fields$position, coordinates[[aesthetic]])
+    chr <- c(chr, as.character(fields$chr))
+    value <- c(value, coordinates[[aesthetic]])
+  }
   layout <- register_track_values(layout, object$track, chr, value)
+  list(layout = layout, coordinates = coordinates, coordinate_names = coordinate_names)
+}
+
+add_dynamic_track_component <- function(object, plot, layout, object_name) {
+  trained <- register_dynamic_track_range(object, layout)
+  layout <- trained$layout
+  coordinates <- trained$coordinates
+  coordinate_names <- trained$coordinate_names
   plot <- update_plot_ideogram_layout(plot, layout)
 
   geom <- object$geom
   if (!is.null(object$tile_clip)) {
     geom <- resolve_track_tile_geom(layout, object$track, object$tile_clip)
   }
+  mapping <- object$mapping
+  data <- object$data
+  params <- object$params
+  position_fields <- intersect(c("xend", "xmin", "xmax"), coordinate_names)
+  for (aesthetic in intersect(position_fields, names(params))) {
+    column <- paste0(".chr_track_", aesthetic)
+    data[[column]] <- coordinates[[aesthetic]]
+    mapping[[aesthetic]] <- rlang::new_quosure(rlang::sym(column))
+    params[[aesthetic]] <- NULL
+  }
   arguments <- c(
     list(
-      mapping = object$mapping,
-      data = object$data,
+      mapping = mapping,
+      data = data,
       stat = StatChrTrack,
       position = object$position,
       track = object$track,
       chromosome_separation = track_chromosome_separation(
         layout, object$data, object$mapping, object$params),
+      circular = is_circular_layout(layout),
       na.rm = object$na.rm,
       show.legend = object$show.legend,
       inherit.aes = object$inherit.aes
     ),
-    object$params
+    params
   )
-  layer <- do.call(geom, arguments)
+  if ("stat" %in% names(formals(geom))) {
+    layer <- do.call(geom, arguments)
+  } else {
+    # Some native constructors fix their Stat internally (geom_col in 3.5).
+    # Construct their ordinary layer, then install the semantic identity Stat.
+    semantic_params <- arguments[c("track", "chromosome_separation", "circular", "na.rm")]
+    arguments[c("stat", "track", "chromosome_separation", "circular")] <- NULL
+    arguments["mapping"] <- list(NULL)
+    layer <- do.call(geom, arguments)
+    layer$mapping <- mapping
+    layer$stat <- StatChrTrack
+    layer$stat_params <- semantic_params
+  }
+  # Native rectangles become polygon vertices under a nonlinear Coord. Their
+  # generated edges may extend beyond a valid observation's source bp.
+  layer$stat_params$track_geometry <- inherits(layer$geom, "GeomRect")
+  if (inherits(layer$stat, "StatChrTrack")) layer$stat_params$track_clip <-
+    object$tile_clip %||% layout$base_spec$tracks[[object$track]]$clip %||% "auto"
+  if (length(position_fields)) {
+    layer$position <- track_coordinate_position(layer$position, position_fields)
+  }
+  if ("label" %in% layer$geom$required_aes) {
+    # Text geoms may transform anonymous copies of x/y for native nudges.
+    layer$position <- track_label_position(layer$position)
+  }
   ggplot2::ggplot_add(layer, plot, object_name)
+}
+
+shift_track_coordinates <- function(data, fields) {
+  for (field in intersect(fields, names(data))) {
+    data[[field]] <- data[[field]] + data$ideogram_position_shift
+  }
+  data
+}
+
+track_coordinate_position <- function(position, fields) {
+  ggplot2::ggproto("PositionChrTrack", position,
+    setup_params = function(self, data) {
+      ggplot2::ggproto_parent(position, self)$setup_params(
+        shift_track_coordinates(data, fields))
+    },
+    setup_data = function(self, data, params) {
+      ggplot2::ggproto_parent(position, self)$setup_data(
+        shift_track_coordinates(data, fields), params)
+    })
+}
+
+track_label_position <- function(position) {
+  ggplot2::ggproto("PositionChrTrackLabel", position,
+    compute_layer = function(self, data, params, layout) {
+      data <- ggplot2::ggproto_parent(position, self)$compute_layer(
+        data, params, layout)
+      if (!nrow(data)) return(data)
+      original <- data
+      data <- transform_ideogram_track(layout$coord$layout, data)
+      if (all(c("x_orig", "y_orig") %in% names(original))) {
+        original$x <- original$x_orig
+        original$y <- original$y_orig
+        original <- transform_ideogram_track(layout$coord$layout, original)
+        data$x_orig <- original$x
+        data$y_orig <- original$y
+      }
+      data$ideogram_projected <- TRUE
+      data
+    })
 }
 
 resolve_track_tile_geom <- function(layout, track_id, clip) {
@@ -240,33 +296,32 @@ GeomIdeogramTile <- ggplot2::ggproto(
         lineend = lineend, linejoin = linejoin))
     }
 
-    layout <- coord$layout
-    chromosome <- as.character(data$ideogram_chr)
-    children <- lapply(split(seq_len(nrow(data)), chromosome), function(rows) {
-      chr <- chromosome[rows[1]]
-      g <- layout$chrom[layout$index[[chr]], , drop = FALSE]
-      silhouette <- chromosome_section_polygon(
-        g, layout$chromosome_width, layout$curve_points)
-      silhouette <- coord$transform(silhouette, panel_params)
-      mask <- grid::polygonGrob(
-        x = silhouette$x, y = silhouette$y,
-        default.units = "native",
-        gp = grid::gpar(fill = "white", col = NA)
-      )
-      tiles <- ggplot2::GeomTile$draw_panel(
-        data[rows, , drop = FALSE], panel_params, coord,
+    if (is_circular_layout(coord$layout)) data$ideogram_track_geometry <- TRUE
+    mask_chr_geometry(data, panel_params, coord, function(rows) {
+      ggplot2::GeomTile$draw_panel(rows, panel_params, coord,
         lineend = lineend, linejoin = linejoin)
-      grid::grobTree(
-        tiles,
-        vp = grid::viewport(mask = grid::as.mask(mask))
-      )
     })
-    do.call(grid::grobTree, children)
   }
 )
 
+mask_chr_geometry <- function(data, panel_params, coord, draw) {
+  layout <- coord$layout
+  chromosome <- as.character(data$ideogram_chr)
+  children <- lapply(split(seq_len(nrow(data)), chromosome), function(rows) {
+    g <- layout$chrom[layout$index[[chromosome[rows[1]]]], , drop = FALSE]
+    silhouette <- chromosome_section_polygon(g, layout$chromosome_width, layout$curve_points)
+    silhouette <- coord$transform(silhouette, panel_params)
+    mask <- grid::polygonGrob(x = silhouette$x, y = silhouette$y,
+      default.units = "native", gp = grid::gpar(fill = "white", col = NA))
+    grid::grobTree(draw(data[rows, , drop = FALSE]),
+      vp = grid::viewport(mask = grid::as.mask(mask)))
+  })
+  do.call(grid::grobTree, children)
+}
+
 track_tile_value_range <- function(object, value) {
-  if (!identical(object$geom, ggplot2::geom_tile)) return(NULL)
+  if (!identical(object$geom, ggplot2::geom_tile) &&
+      !inherits(object$native_geom, "GeomTile")) return(NULL)
   height <- if ("height" %in% names(object$mapping)) {
     mapped <- rlang::eval_tidy(object$mapping$height, data = object$data)
     recycle_semantic(mapped, nrow(object$data), "mapping$height")
@@ -291,7 +346,9 @@ track_chromosome_separation <- function(layout, data, mapping, params) {
   }
   width <- suppressWarnings(max(abs(width), na.rm = TRUE))
   if (!is.finite(width)) width <- 0
-  genomic_span + max(width, genomic_span * sqrt(.Machine$double.eps))
+  separation <- genomic_span + max(width, genomic_span * sqrt(.Machine$double.eps))
+  if (is_circular_layout(layout)) separation <- max(separation, layout$circular$semantic_separation)
+  separation
 }
 
 track_position_value_range <- function(position, chr, genomic_position, value) {
@@ -333,7 +390,7 @@ validate_track_semantics <- function(layout, chr, position, value) {
 
 require_explicit_track_limits <- function(layout, track_id, component) {
   spec <- track_table_row(layout, track_id)
-  if (is.null(spec$limits[[1]])) {
+  if (is.null(spec$limits[[1]]) && !track_id %in% (layout$scope_fixed_tracks %||% character())) {
     stopf(paste0(
       "`%s` requires explicit `limits` in `track(%s = ...)` because its ",
       "standard ggplot2 Stat/Geom reconstructs coordinates before drawing."),
@@ -394,6 +451,23 @@ combine_track_mapping <- function(mapping, coordinates) {
   mapping
 }
 
+track_initial_mapping <- function(mapping) {
+  expression <- rlang::get_expr(mapping)
+  if (rlang::is_call(expression, "stage")) {
+    expression <- match.call(ggplot2::stage, expression)$start
+    mapping <- if (rlang::is_quosure(mapping)) {
+      rlang::quo_set_expr(mapping, expression)
+    } else expression
+  }
+  delayed <- function(expression) {
+    if (rlang::is_missing(expression) || !rlang::is_call(expression)) return(FALSE)
+    if (rlang::is_call(expression, c("after_stat", "after_scale"))) return(TRUE)
+    any(vapply(rlang::call_args(expression), delayed, logical(1)))
+  }
+  if (is.null(expression) || delayed(expression)) return(NULL)
+  mapping
+}
+
 track_group_values <- function(data, mapping, chr, position = NULL) {
   group <- if ("group" %in% names(mapping)) {
     value <- rlang::eval_tidy(mapping$group, data = data)
@@ -408,7 +482,11 @@ track_group_values <- function(data, mapping, chr, position = NULL) {
     aesthetics <- setdiff(names(mapping),
       c("chr", "position", "value", "x", "y", "ymin", "ymax"))
     for (aesthetic in aesthetics) {
-      value <- rlang::eval_tidy(mapping[[aesthetic]], data = data)
+      # Only initial aesthetics contribute to groups; later stages remain in
+      # the original mapping for the native Stat and Geom to evaluate.
+      initial <- track_initial_mapping(mapping[[aesthetic]])
+      if (is.null(initial)) next
+      value <- rlang::eval_tidy(initial, data = data)
       if (is.factor(value) || is.character(value) || is.logical(value)) {
         groups[[length(groups) + 1L]] <- recycle_semantic(
           value, nrow(data), paste0("mapping$", aesthetic))
@@ -418,12 +496,10 @@ track_group_values <- function(data, mapping, chr, position = NULL) {
   do.call(interaction, c(groups, list(drop = TRUE, lex.order = TRUE)))
 }
 
-build_projected_distribution_layer <- function(object, layout, fields) {
-  projected <- project_track_values_raw(
-    layout, object$track, fields$chr, fields$position, fields$value)
+distribution_track_layer <- function(object, fields) {
   data <- object$data
-  data$.track_x <- projected$x
-  data$.track_y <- projected$y
+  data$.track_x <- fields$position
+  data$.track_y <- fields$value
   data$.track_group <- track_group_values(
     data, object$mapping, fields$chr, fields$position)
   mapping <- track_mapping_without(
@@ -433,17 +509,101 @@ build_projected_distribution_layer <- function(object, layout, fields) {
     group = .data$.track_group
   )
   mapping <- combine_track_mapping(mapping, coordinates)
-  orientation <- if (layout$orientation == "vertical") "y" else "x"
   arguments <- c(
     list(
       mapping = mapping, data = data, position = object$position,
-      orientation = orientation, na.rm = object$na.rm,
+      orientation = "x", na.rm = object$na.rm,
       show.legend = object$show.legend,
       inherit.aes = FALSE
     ),
     object$params
   )
-  do.call(object$geom, arguments)
+  layer <- do.call(object$geom, arguments)
+  layer$data$.track_chr <- as.character(fields$chr)
+  layer$mapping$chr <- ggplot2::aes(chr = .data$.track_chr)$chr
+  native <- layer$stat
+  layer$stat <- ggplot2::ggproto(NULL, native,
+    required_aes = union(native$required_aes, "chr"))
+  layer
+}
+
+distribution_track_values <- function(object, fields) {
+  layer <- distribution_track_layer(object, fields)
+  data <- ggplot2::ggplot_build(ggplot2::ggplot() + layer)$data[[1]]
+  columns <- intersect(c("y", "ymin", "ymax",
+    if (isTRUE(object$params$notch)) c("notchlower", "notchupper")), names(data))
+  values <- unlist(data[columns], use.names = FALSE)
+  list(chr = rep(as.character(data$chr), length(columns)), value = values)
+}
+
+build_projected_distribution_layer <- function(object, layout, fields) {
+  layer <- distribution_track_layer(object, fields)
+  layer$position <- chromosome_distribution_position(
+    layer$position, object$track, isTRUE(object$params$notch))
+  native <- layer$geom
+  layer$geom <- ggplot2::ggproto(NULL, native,
+    parameters = function(extra = FALSE) native$parameters(extra),
+    draw_panel = function(data, panel_params, coord, ..., flipped_aes = FALSE) {
+      native$draw_panel(data, panel_params, coord, ...,
+        flipped_aes = coord$layout$orientation == "vertical")
+    })
+  layer
+}
+
+chromosome_distribution_position <- function(position, track, notch) {
+  ggplot2::ggproto("PositionChrDistribution", position,
+    setup_params = function(data) list(),
+    setup_data = function(data, params) data,
+    compute_layer = function(self, data, params, layout) {
+      if (!nrow(data)) return(data)
+      groups <- split(data, data$chr)
+      computed <- do.call(rbind, lapply(groups, function(rows) {
+        settings <- position$setup_params(rows)
+        rows <- position$setup_data(rows, settings)
+        position$compute_layer(rows, settings, layout)
+      }))
+      project_distribution_data(computed, layout$coord$layout, track, notch)
+    })
+}
+
+project_distribution_data <- function(data, layout, track, notch) {
+  if (!nrow(data)) return(data)
+  raw <- data
+  vertical <- layout$orientation == "vertical"
+  project <- function(position, value) project_track_coordinate_pair(
+    layout, track, as.character(raw$chr), position, value, check_position = FALSE)
+  # Stat and Position use bp/value units; only their finished geometry is mapped.
+  for (field in intersect(c("x", "xmin", "xmax"), names(raw))) {
+    point <- project(raw[[field]], raw$middle %||% raw$y)
+    data[[field]] <- if (vertical) point$y else point$x
+  }
+  values <- c("y", "ymin", "ymax", "lower", "middle", "upper", "ymin_final", "ymax_final",
+    if (notch) c("notchlower", "notchupper"))
+  for (field in intersect(values, names(raw))) {
+    point <- project(raw$x, raw[[field]])
+    data[[field]] <- if (vertical) point$x else point$y
+  }
+  if ("outliers" %in% names(raw)) {
+    data$outliers <- lapply(seq_len(nrow(raw)), function(i) {
+      values <- raw$outliers[[i]]
+      point <- project_track_coordinate_pair(layout, track,
+        rep(as.character(raw$chr[i]), length(values)), rep(raw$x[i], length(values)),
+        values, check_position = FALSE)
+      if (vertical) point$x else point$y
+    })
+  }
+  # Reversed chromosomes still need ordered bounds for native rectangle geoms.
+  for (bounds in list(c("xmin", "xmax"), c("ymin", "ymax"))) {
+    if (all(bounds %in% names(data))) {
+      lower <- pmin(data[[bounds[1]]], data[[bounds[2]]])
+      data[[bounds[2]]] <- pmax(data[[bounds[1]]], data[[bounds[2]]])
+      data[[bounds[1]]] <- lower
+    }
+  }
+  data <- ggplot2::flip_data(data, vertical)
+  data$flipped_aes <- vertical
+  data$ideogram_projected <- TRUE
+  data
 }
 
 build_projected_ribbon_layer <- function(object, layout, fields) {
@@ -493,24 +653,14 @@ build_projected_ribbon_layer <- function(object, layout, fields) {
     ),
     object$params
   )
-  do.call(ggplot2::geom_ribbon, arguments)
+  geom <- if (!is.null(object$native_geom)) object$geom else ggplot2::geom_ribbon
+  do.call(geom, arguments)
 }
 
-#' Common chromosome track geom wrappers
-#'
-#' These functions are small presets over [geom_chr_track()] and retain
-#' ordinary ggplot2 aesthetic, scale and guide semantics. An overlay
-#' `geom_track_tile()` uses a [ggplot2::GeomTile] subclass only to mask its
-#' standard tile output to the chromosome silhouette. All wrappers require
-#' mappings for `chr`, `position` and `value`.
-#'
-#' @inheritParams geom_chr_track
-#' @return An additive chromosome-track component.
-#' @name geom_track_geoms
+#' @noRd
 NULL
 
-#' @rdname geom_track_geoms
-#' @export
+#' @noRd
 geom_track_point <- function(mapping = NULL, data = NULL, track,
                              position = "identity", ...,
                              na.rm = FALSE, show.legend = NA,
@@ -521,8 +671,7 @@ geom_track_point <- function(mapping = NULL, data = NULL, track,
     show.legend = show.legend, inherit.aes = inherit.aes)
 }
 
-#' @rdname geom_track_geoms
-#' @export
+#' @noRd
 geom_track_line <- function(mapping = NULL, data = NULL, track,
                             position = "identity", ...,
                             na.rm = FALSE, show.legend = NA,
@@ -533,8 +682,7 @@ geom_track_line <- function(mapping = NULL, data = NULL, track,
     show.legend = show.legend, inherit.aes = inherit.aes)
 }
 
-#' @rdname geom_track_geoms
-#' @export
+#' @noRd
 geom_track_col <- function(mapping = NULL, data = NULL, track,
                            position = "stack", ...,
                            na.rm = FALSE, show.legend = NA,
@@ -547,11 +695,7 @@ geom_track_col <- function(mapping = NULL, data = NULL, track,
   component
 }
 
-#' @rdname geom_track_geoms
-#' @param clip Tile clipping mode. `"auto"` clips an overlay tile layer to the
-#'   chromosome silhouette and leaves beside tracks unchanged. `"on"` requires
-#'   an overlay track; `"off"` preserves unrestricted rectangular tiles.
-#' @export
+#' @noRd
 geom_track_tile <- function(mapping = NULL, data = NULL, track,
                             position = "identity", ...,
                             clip = c("auto", "on", "off"),
@@ -565,8 +709,7 @@ geom_track_tile <- function(mapping = NULL, data = NULL, track,
   component
 }
 
-#' @rdname geom_track_geoms
-#' @export
+#' @noRd
 geom_track_text <- function(mapping = NULL, data = NULL, track,
                             position = "identity", ...,
                             na.rm = FALSE, show.legend = NA,
@@ -577,19 +720,10 @@ geom_track_text <- function(mapping = NULL, data = NULL, track,
     show.legend = show.legend, inherit.aes = inherit.aes)
 }
 
-#' Draw filled area and ribbon chromosome tracks
-#'
-#' These wrappers project explicit track limits first and then delegate drawing
-#' to the standard [ggplot2::GeomRibbon]. `geom_track_area()` uses zero as its
-#' baseline; `geom_track_ribbon()` maps standard `ymin` and `ymax` aesthetics.
-#'
-#' @inheritParams geom_chr_track
-#' @return An additive chromosome-track component.
-#' @name geom_track_ranges
+#' @noRd
 NULL
 
-#' @rdname geom_track_ranges
-#' @export
+#' @noRd
 geom_track_area <- function(mapping = NULL, data = NULL, track,
                             position = "identity", ...,
                             na.rm = FALSE, show.legend = NA,
@@ -599,8 +733,7 @@ geom_track_area <- function(mapping = NULL, data = NULL, track,
     list(...), na.rm, show.legend, inherit.aes, include_zero = TRUE)
 }
 
-#' @rdname geom_track_ranges
-#' @export
+#' @noRd
 geom_track_ribbon <- function(mapping = NULL, data = NULL, track,
                               position = "identity", ...,
                               na.rm = FALSE, show.legend = NA,
@@ -610,22 +743,10 @@ geom_track_ribbon <- function(mapping = NULL, data = NULL, track,
     list(...), na.rm, show.legend, inherit.aes)
 }
 
-#' Draw distribution geoms in chromosome tracks
-#'
-#' These wrappers project observations through an explicitly limited track and
-#' then use the unmodified standard [ggplot2::GeomBoxplot] or
-#' [ggplot2::GeomViolin] with their standard ggplot2 Stats. Map `chr`,
-#' `position` and `value`; `position` identifies the locus/bin at which each
-#' distribution is centred. Map `group` when multiple distributions share one
-#' locus.
-#'
-#' @inheritParams geom_chr_track
-#' @return An additive chromosome-track component.
-#' @name geom_track_distributions
+#' @noRd
 NULL
 
-#' @rdname geom_track_distributions
-#' @export
+#' @noRd
 geom_track_boxplot <- function(mapping = NULL, data = NULL, track,
                                position = "dodge2", ...,
                                na.rm = FALSE, show.legend = NA,
@@ -635,8 +756,7 @@ geom_track_boxplot <- function(mapping = NULL, data = NULL, track,
     list(...), na.rm, show.legend, inherit.aes)
 }
 
-#' @rdname geom_track_distributions
-#' @export
+#' @noRd
 geom_track_violin <- function(mapping = NULL, data = NULL, track,
                               position = "dodge", ...,
                               na.rm = FALSE, show.legend = NA,
@@ -646,41 +766,17 @@ geom_track_violin <- function(mapping = NULL, data = NULL, track,
     list(...), na.rm, show.legend, inherit.aes)
 }
 
-#' Add a local value axis to a chromosome track
-#'
-#' The axis is drawn at a chromosome endpoint and uses the track's resolved raw
-#' value limits and transformation. Its spine is a standard segment. Tick
-#' length and text size are physical ggplot2 sizes, and label clearance starts
-#' at the tick tip rather than the spine.
-#'
-#' Add an automatic-range axis after at least one data component has registered
-#' that range. An explicitly limited track can receive its axis in any order.
-#'
-#' @param track One declared track identifier.
-#' @param chr `TRUE` for every chromosome or a character vector selecting
-#'   chromosomes.
-#' @param position Chromosome endpoint at which the transverse axis is drawn.
-#' @param breaks `NULL` for pretty breaks, a numeric vector, or a function of
-#'   the raw limits.
-#' @param n Target number of automatic intervals.
-#' @param labels A labelling function or a character vector matching breaks.
-#' @param tick_length Tick length in millimetres.
-#' @param label_gap Typographic gap beyond the tick tip, in em.
-#' @param size,colour,linewidth Standard ggplot2 text, colour and line sizes.
-#' @param family Font family.
-#'
-#' @return An additive track-axis component.
-#' @export
+#' @noRd
 geom_track_axis <- function(
     track,
     chr = TRUE,
-    position = c("end", "start"),
+    position = c("auto", "end", "start", "gap"),
     breaks = NULL,
-    n = 4,
+    n = 1,
     labels = scales::label_number(),
     tick_length = 1.5,
     label_gap = 0.25,
-    size = 2.4,
+    size = ideogram_text_size("value"),
     colour = "#666666",
     linewidth = 0.3,
     family = "") {
@@ -727,11 +823,15 @@ ggplot_add.ggideogram_track_axis_component <- function(
           format_chr_rows(unknown))
   }
   layers <- build_track_axis_layers(layout, object, chromosomes)
+  if (length(layers) && inherits(layers[[3]]$geom, "GeomCircularGapText")) {
+    layout$circular_gap_axes[[object$track]] <- object
+    plot <- update_plot_ideogram_layout(plot, layout)
+  }
   for (index in seq_along(layers)) {
     plot <- ggplot2::ggplot_add(
       layers[[index]], plot, paste0(object_name, "[[", index, "]]"))
   }
-  plot
+  reserve_chromosome_axis_space(plot, layers)
 }
 
 # Resolve axes against the final coordinate layout, after all track layers have
@@ -754,12 +854,22 @@ StatTrackAxis <- ggplot2::ggproto(
 )
 
 build_track_axis_layers <- function(layout, object, chromosomes) {
+  spec <- track_table_row(layout, object$track)
+  position <- object$position
+  if (position == "auto") position <- if (is_circular_layout(layout) &&
+      spec$value_scale != "per_chr" && isTRUE(object$chr)) "gap" else "end"
+  in_gap <- position == "gap"
+  if (in_gap && !is_circular_layout(layout)) stopf("Track-axis `position = \"gap\"` requires a circular layout.")
+  if (in_gap && spec$value_scale == "per_chr" && length(chromosomes) > 1L) {
+    stopf("A gap axis with `value_scale = \"per_chr\"` must select one chromosome.")
+  }
+  if (in_gap) chromosomes <- if (isTRUE(object$chr))
+    layout$chrom$.chr[if (layout$circular$clockwise) nrow(layout$chrom) else 1L] else chromosomes[1L]
   spine <- list()
   ticks <- list()
   text <- list()
   for (index in seq_along(chromosomes)) {
     chr <- chromosomes[index]
-    spec <- track_table_row(layout, object$track)
     key <- track_key_for_rows(spec, chr)
     limits <- layout$track_ranges[[key]]$limits
     if (is.null(limits)) {
@@ -790,7 +900,7 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
     }
 
     g <- layout$chrom[layout$index[[chr]], , drop = FALSE]
-    genomic_position <- if (object$position == "end") g$.end else g$.start
+    genomic_position <- if (position == "end") g$.end else g$.start
     ends <- project_track_values_raw(
       layout, object$track, rep(chr, 2), rep(genomic_position, 2), limits)
     at <- project_track_values_raw(
@@ -799,7 +909,16 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
     dx <- g$.axis_end_x - g$.axis_start_x
     dy <- g$.axis_end_y - g$.axis_start_y
     axis_length <- sqrt(dx^2 + dy^2)
-    direction <- if (object$position == "end") 1 else -1
+    direction <- if (position == "end") 1 else -1
+    if (in_gap) {
+      arc <- layout$circular$label_gap$left_arc
+      ends <- circular_xy(layout, rep(arc, 2), ends$y)
+      at <- circular_xy(layout, rep(arc, length(breaks)), at$y)
+      theta <- layout$circular$label_gap$left_angle * pi / 180
+      dx <- cos(theta); dy <- -sin(theta); axis_length <- direction <- 1
+      if (abs(dx) < 1e-12) dx <- 0
+      if (abs(dy) < 1e-12) dy <- 0
+    }
     spine[[index]] <- data.frame(
       x = ends$x[1], y = ends$y[1],
       xend = ends$x[2], yend = ends$y[2]
@@ -819,6 +938,9 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
   ticks <- do.call(rbind, ticks)
   text <- do.call(rbind, text)
   if (is.null(spine) || !nrow(spine)) return(list())
+  if (in_gap) {
+    spine$ideogram_cartesian <- ticks$ideogram_cartesian <- text$ideogram_cartesian <- TRUE
+  }
   layers <- list(
     ggplot2::geom_segment(
       data = spine,
@@ -843,7 +965,7 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
         x = .data$x, y = .data$y, label = .data$label,
         nx = .data$nx, ny = .data$ny),
       stat = "identity", position = "identity",
-      geom = GeomIdeogramAxisText,
+      geom = if (in_gap) GeomCircularGapText else GeomIdeogramAxisText,
       inherit.aes = FALSE, show.legend = FALSE,
       params = list(
         tick_length = object$tick_length,
@@ -852,6 +974,7 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
         family = object$family, na.rm = FALSE)
     )
   )
+  if (in_gap) layers[[3]]$geom_params$gap_track <- object$track
   for (part in seq_along(layers)) {
     layers[[part]]$stat <- StatTrackAxis
     layers[[part]]$stat_params <- list(

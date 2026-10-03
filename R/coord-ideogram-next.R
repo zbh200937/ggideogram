@@ -10,7 +10,7 @@ coord_ideogram_next <- function(layout, padding = 0.5, clip = "off") {
   ylim <- layout$bounds$y + c(-padding, padding)
 
   ggplot2::ggproto(
-    NULL, ggplot2::CoordCartesian,
+    NULL, ggplot2::CoordFixed,
     limits = list(x = xlim, y = ylim),
     expand = FALSE,
     clip = clip,
@@ -18,23 +18,49 @@ coord_ideogram_next <- function(layout, padding = 0.5, clip = "off") {
     reverse = "none",
     layout = layout,
     padding = padding,
+    is_linear = function(self) !is_circular_layout(self$layout),
+    distance = function(self, x, y, panel_params) {
+      if (is_circular_layout(self$layout)) return(circular_coordinate_distance(self$layout, x, y))
+      ggplot2::ggproto_parent(ggplot2::CoordCartesian, self)$distance(x, y, panel_params)
+    },
     setup_panel_params = function(self, scale_x, scale_y, params = list()) {
       panel <- ggplot2::ggproto_parent(ggplot2::CoordCartesian, self)$setup_panel_params(
         scale_x, scale_y, params)
       # Each build and panel owns a fresh registry shared by its inset layers.
       panel$ideogram_insets <- new.env(parent = emptyenv())
+      panel$ideogram_labels <- new.env(parent = emptyenv())
       panel
     },
     transform = function(self, data, panel_params) {
       semantic <- "ideogram_track" %in% names(data) ||
         all(c("ideogram_chr", "ideogram_position") %in% names(data))
-      if (semantic && nrow(data)) {
+      projected <- "ideogram_projected" %in% names(data) &&
+        all(data$ideogram_projected %in% TRUE)
+      if (semantic && !projected && nrow(data)) {
         data <- transform_ideogram_semantics(self$layout, data)
       }
+      if (is_circular_layout(self$layout)) data <- circular_transform_data(self$layout, data)
       ggplot2::ggproto_parent(ggplot2::CoordCartesian, self)$transform(
         data, panel_params)
     }
   )
+}
+
+circular_segment_position <- function(position) {
+  position <- locus_position(position)
+  if (inherits(position, "PositionChrLocus")) return(position)
+  ggplot2::ggproto("PositionChrSegment", position,
+    compute_layer = function(self, data, params, layout) {
+      data <- ggplot2::ggproto_parent(position, self)$compute_layer(
+        data, params, layout)
+      chr_layout <- layout$coord$layout
+      if (is_circular_layout(chr_layout) && nrow(data)) {
+        # Native nonlinear segments expand both endpoints into a path.
+        data <- transform_ideogram_semantics(chr_layout, data)
+        data$ideogram_projected <- TRUE
+      }
+      data
+    })
 }
 
 transform_ideogram_semantics <- function(layout, data) {
@@ -142,12 +168,10 @@ marker_track_offsets <- function(layout, track_id, data = NULL) {
   use_inner_edge <- !is.null(data) &&
     "ideogram_inset_track_edge" %in% names(data) &&
     all(data$ideogram_inset_track_edge %in% TRUE)
-  offset <- if (use_inner_edge && spec$side != "overlay") {
-    spec$low_offset
-  } else {
-    mean(c(spec$low_offset, spec$high_offset))
-  }
-  rep(offset, length(track_id))
+  fraction <- if (use_inner_edge && spec$side != "overlay") 0 else
+    data$ideogram_track_position %||% 0.5
+  offset <- spec$low_offset + fraction * (spec$high_offset - spec$low_offset)
+  rep(offset, length.out = length(track_id))
 }
 
 offset_chr_points_signed <- function(layout, chr, point, offset) {
@@ -160,6 +184,7 @@ offset_chr_points_signed <- function(layout, chr, point, offset) {
   normal <- chromosome_right_normal(layout, g)
   point$x <- point$x + normal$nx * offset
   point$y <- point$y + normal$ny * offset
+  if (is_circular_layout(layout) && any(point$y <= 0)) stopf("A circular offset reaches or crosses the circle center.")
   point
 }
 
@@ -176,17 +201,20 @@ transform_ideogram_track <- function(layout, data) {
   track_id <- track_id[1]
 
   raw <- data
+  check_position <- !('ideogram_track_geometry' %in% names(data) && all(data$ideogram_track_geometry))
+  clip_geometry <- !identical(raw$ideogram_track_clip[1] %||%
+    layout$base_spec$tracks[[track_id]]$clip %||% "auto", "off")
   shift <- raw$ideogram_position_shift %||% rep(0, nrow(raw))
   main <- project_track_coordinate_pair(
-    layout, track_id, chr, raw$x - shift, raw$y,
-    check_position = TRUE)
+    layout, track_id, chr, restore_track_position(layout, chr, raw$x, shift), raw$y,
+    check_position = check_position, clip_position = clip_geometry)
   data$x <- main$x
   data$y <- main$y
 
   if (all(c("xend", "yend") %in% names(raw))) {
     endpoint <- project_track_coordinate_pair(
-      layout, track_id, chr, raw$xend - shift, raw$yend,
-      check_position = TRUE)
+      layout, track_id, chr, restore_track_position(layout, chr, raw$xend, shift), raw$yend,
+      check_position = check_position, clip_position = clip_geometry)
     data$xend <- endpoint$x
     data$yend <- endpoint$y
   }
@@ -196,16 +224,16 @@ transform_ideogram_track <- function(layout, data) {
     corners <- list(
       project_track_coordinate_pair(
         layout, track_id, chr, raw$xmin - shift, raw$ymin,
-        check_position = FALSE),
+        check_position = FALSE, clip_position = clip_geometry),
       project_track_coordinate_pair(
         layout, track_id, chr, raw$xmin - shift, raw$ymax,
-        check_position = FALSE),
+        check_position = FALSE, clip_position = clip_geometry),
       project_track_coordinate_pair(
         layout, track_id, chr, raw$xmax - shift, raw$ymin,
-        check_position = FALSE),
+        check_position = FALSE, clip_position = clip_geometry),
       project_track_coordinate_pair(
         layout, track_id, chr, raw$xmax - shift, raw$ymax,
-        check_position = FALSE)
+        check_position = FALSE, clip_position = clip_geometry)
     )
     x <- do.call(cbind, lapply(corners, `[[`, "x"))
     y <- do.call(cbind, lapply(corners, `[[`, "y"))
@@ -217,12 +245,28 @@ transform_ideogram_track <- function(layout, data) {
   data
 }
 
+restore_track_position <- function(layout, chr, coordinate, shift) {
+  position <- coordinate - shift
+  g <- layout$chrom[match_layout_chr(layout, chr), , drop = FALSE]
+  tolerance <- 4 * .Machine$double.eps * pmax(1, abs(coordinate), abs(shift))
+  # Subtracting the chromosome separation can move an exact endpoint by an ulp.
+  near <- position >= g$.start - tolerance & position <= g$.end + tolerance
+  ifelse(near, pmin(pmax(position, g$.start), g$.end), position)
+}
+
 project_track_coordinate_pair <- function(
-    layout, track_id, chr, position, value, check_position) {
+    layout, track_id, chr, position, value, check_position, clip_position = TRUE) {
   missing <- is.na(position) | is.na(value)
   result <- list(x = rep(NA_real_, length(chr)),
                  y = rep(NA_real_, length(chr)))
   if (all(missing)) return(result)
+  if (!check_position && clip_position) {
+    # Widths created by native rectangle geoms are display geometry. Keep
+    # their bp/value observations intact, but crop that geometry at the
+    # displayed chromosome endpoints, including circular sector boundaries.
+    g <- layout$chrom[match_layout_chr(layout, chr[!missing]), , drop = FALSE]
+    position[!missing] <- pmin(pmax(position[!missing], g$.start), g$.end)
+  }
   projected <- project_track_values_raw(
     layout, track_id, chr[!missing], position[!missing], value[!missing],
     check_position = check_position)
@@ -232,7 +276,7 @@ project_track_coordinate_pair <- function(
 }
 
 offset_chr_points <- function(layout, chr, point, side, distance) {
-  side <- as.character(side)
+  side <- canonical_chr_side(as.character(side))
   if (length(side) == 1L) side <- rep(side, length(chr))
   if (length(distance) == 1L) distance <- rep(distance, length(chr))
   if (length(side) != length(chr) || anyNA(side) ||
@@ -250,6 +294,7 @@ offset_chr_points <- function(layout, chr, point, side, distance) {
   sign <- ifelse(side == "right", 1, -1)
   point$x <- point$x + normal$nx * sign * distance
   point$y <- point$y + normal$ny * sign * distance
+  if (is_circular_layout(layout) && any(point$y <= 0)) stopf("A circular offset reaches or crosses the circle center.")
   point
 }
 

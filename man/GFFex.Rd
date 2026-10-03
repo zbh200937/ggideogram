@@ -12,19 +12,19 @@ are used positionally, as in GFF: 1 = sequence name, 3 = feature type,
 4 = start).}
 
 \item{karyotype}{Path to a tab-separated karyotype file with a header, or a
-data frame with `Chr` and `End`.}
+data frame with \code{Chr} and \code{End}.}
 
 \item{feature}{Feature type to count, matched against column 3 of the GFF.}
 
 \item{window}{Window size in base pairs.}
 }
 \value{
-A data frame with columns `Chr`, `Start`, `End`, `Value`, in
-  karyotype order. Windows are half-open on the left: a feature at position
-  `p` falls in the window with `Start <= p <= End`. The last window of each
-  chromosome is truncated to the chromosome's `End`.
+A data frame with columns \code{Chr}, \code{Start}, \code{End}, \code{Value}, in
+karyotype order. Windows are half-open on the left: a feature at position
+\code{p} falls in the window with \verb{Start <= p <= End}. The last window of each
+chromosome is truncated to the chromosome's \code{End}.
 }
 \description{
-Produces a `Chr` / `Start` / `End` / `Value` data frame suitable for
-[geom_track_line()], [geom_track_col()] and other chromosome tracks.
+Produces a \code{Chr} / \code{Start} / \code{End} / \code{Value} data frame suitable for
+\code{\link[=geom_track]{geom_track()}} with ordinary ggplot2 line or column layers.
 }

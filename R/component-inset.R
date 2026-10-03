@@ -9,7 +9,7 @@ StatChrInset <- ggplot2::ggproto(
     position <- if ("position" %in% names(data)) {
       data$position
     } else {
-      (data$start + data$end) / 2
+      (data$start - 1 + data$end) / 2
     }
     data$ideogram_chr <- as.character(data$chr)
     data$ideogram_position <- position
@@ -67,7 +67,12 @@ GeomChrInset <- ggplot2::ggproto(
           width = width, height = height,
           just = c(justification$hjust[index],
                    justification$vjust[index]),
-          clip = clip
+          clip = clip,
+          # Nested plot viewports can turn ordinary clipping off.
+          mask = if (clip == "on") {
+            grid::as.mask(grid::rectGrob(
+              gp = grid::gpar(fill = "white", col = NA)))
+          } else "inherit"
         )
       )
     })
@@ -75,60 +80,7 @@ GeomChrInset <- ggplot2::ggproto(
   }
 )
 
-#' Anchor complete ggplot or grob components to chromosomes
-#'
-#' `geom_chr_inset()` keeps each child plot intact: its coordinate system,
-#' theme and guides are rebuilt inside a dedicated viewport and do not enter
-#' the host plot's scales. The child is never rasterized or decomposed into
-#' guessed semantic layers.
-#'
-#' Map `chr`, `plot`, and either `position` or both `start`/`end`. Interval
-#' anchors use their midpoint. A `plot` column must be a list-column containing
-#' complete ggplot objects or grid grobs.
-#'
-#' @param mapping Aesthetic mapping containing the chromosome keys and `plot`.
-#' @param data Inset data frame.
-#' @param stat Semantic inset Stat; normally unchanged.
-#' @param position Standard ggplot2 position adjustment; normally identity.
-#' @param ... Additional layer parameters.
-#' @param width,height One positive scalar [grid::unit()] each. Use `"npc"`
-#'   for normalized host-panel dimensions or physical units such as `"mm"`.
-#' @param placement `"beside"` offsets the anchor transversely;
-#'   `"center"` anchors on the chromosome axis.
-#' @param side,gap Fallback beside placement, with `gap` in chromosome-width
-#'   units.
-#' @param track Optional declared track whose inner boundary owns the inset
-#'   anchor and whose width reserves outward component space.
-#' @param hjust,vjust Viewport justification at the anchor. `NULL` uses a safe
-#'   placement-aware default: a beside inset attaches its inner edge to the
-#'   anchor and extends only outwards; a centred inset uses `0.5`.
-#' @param clip Clip the child to its viewport.
-#' @param overlap What to do when normalized-panel (`"npc"`) inset rectangles
-#'   overlap one another or a chromosome body: `"error"` (default), `"warn"`,
-#'   or `"allow"`. Declare a sufficiently wide inset [track()] to resolve an
-#'   error instead of hiding the collision.
-#' @param na.rm Remove missing required coordinates silently.
-#' @param show.legend Insets do not participate in host guides; retained for a
-#'   ggplot2-style layer signature and fixed to `FALSE` by default.
-#' @param inherit.aes Whether to inherit host aesthetics.
-#'
-#' @return A ggplot2 layer using `GeomChrInset`.
-#' @examples
-#' chromosomes <- data.frame(Chr = "A", Start = 0, End = 100)
-#' child <- ggplot2::ggplot(
-#'   data.frame(x = 1:3, y = c(1, 3, 2)),
-#'   ggplot2::aes(x, y)
-#' ) + ggplot2::geom_line()
-#' inset <- data.frame(Chr = "A", Pos = 50)
-#' inset$Plot <- list(child)
-#' ggideogram(chromosomes) +
-#'   geom_chr_inset(
-#'     data = inset,
-#'     ggplot2::aes(chr = Chr, position = Pos, plot = Plot),
-#'     width = grid::unit(0.25, "npc"),
-#'     height = grid::unit(0.25, "npc")
-#'   )
-#' @export
+#' @noRd
 geom_chr_inset <- function(
     mapping = NULL,
     data = NULL,
@@ -138,7 +90,7 @@ geom_chr_inset <- function(
     width,
     height,
     placement = c("beside", "center"),
-    side = c("right", "left"),
+    side = c("right", "left", "inner", "outer"),
     gap = 0.25,
     track = NULL,
     hjust = NULL,
@@ -149,7 +101,7 @@ geom_chr_inset <- function(
     show.legend = FALSE,
     inherit.aes = FALSE) {
   placement <- match.arg(placement)
-  side <- match.arg(side)
+  side <- canonical_chr_side(match.arg(side))
   clip <- match.arg(clip)
   overlap <- match.arg(overlap)
   check_inset_unit(width, "width")
@@ -181,6 +133,9 @@ check_inset_unit <- function(x, what) {
   if (!grid::is.unit(x) || length(x) != 1L ||
       !is.finite(as.numeric(x)) || as.numeric(x) <= 0) {
     stopf("`%s` must be one positive `grid::unit()` value.", what)
+  }
+  if (!grid::unitType(x) %in% c("npc", "mm", "cm", "inches", "points", "picas", "bigpts")) {
+    stopf("`%s` must use a physical unit or 'npc'.", what)
   }
   invisible(x)
 }
@@ -214,7 +169,14 @@ inset_justification <- function(coord, data, placement, hjust, vjust) {
   if (any(!side %in% c("left", "right"))) {
     stopf("Beside inset tracks must be on the left or right side.")
   }
-  if (coord$layout$orientation == "vertical") {
+  if (is_circular_layout(coord$layout)) {
+    point <- project_positions_checked(coord$layout, data$ideogram_chr, data$ideogram_position)
+    theta <- circular_theta(coord$layout, point$x)
+    sign <- ifelse(side == "right", 1, -1)
+    nx <- sign * sin(theta); ny <- sign * cos(theta)
+    automatic_hjust <- ifelse(abs(nx) < sqrt(.Machine$double.eps), 0.5, ifelse(nx > 0, 0, 1))
+    automatic_vjust <- ifelse(abs(ny) < sqrt(.Machine$double.eps), 0.5, ifelse(ny > 0, 0, 1))
+  } else if (coord$layout$orientation == "vertical") {
     automatic_hjust <- ifelse(side == "right", 0, 1)
     automatic_vjust <- rep(0.5, nrow(data))
   } else {
@@ -271,7 +233,19 @@ check_inset_overlap <- function(
     registry$entries <- c(entries, list(list(id = layer_id, rectangle = current)))
   }
   rectangle <- current
-  if (placement == "beside") {
+  if (placement == "beside" && is_circular_layout(coord$layout)) {
+    body <- chromosome_polygon_data(coord$layout, coord$layout$curve_points)
+    body <- coord$transform(body, panel_params)
+    polygons <- split(body, body$.chr)
+    for (inset_index in seq_len(nrow(rectangle))) {
+      hit <- vapply(polygons, function(p) rectangle_polygon_overlap(rectangle[inset_index, ], p), logical(1))
+      if (any(hit)) {
+        collision <- c(collision, sprintf("inset %d overlaps chromosome %s", inset_index,
+          names(polygons)[which(hit)[1]]))
+        break
+      }
+    }
+  } else if (placement == "beside") {
     body_min <- coord$transform(
       data.frame(x = coord$layout$chrom$.x_min,
                  y = coord$layout$chrom$.y_min), panel_params)
@@ -301,6 +275,38 @@ check_inset_overlap <- function(
   if (action == "error") stop(message, call. = FALSE)
   warning(message, call. = FALSE)
   invisible(TRUE)
+}
+
+rectangle_polygon_overlap <- function(rectangle, polygon) {
+  r <- rectangle
+  x <- polygon$x; y <- polygon$y
+  if (max(x) <= r$left || min(x) >= r$right || max(y) <= r$bottom || min(y) >= r$top) return(FALSE)
+  if (any(x > r$left & x < r$right & y > r$bottom & y < r$top)) return(TRUE)
+  corners <- data.frame(x = c(r$left, r$right, r$right, r$left),
+    y = c(r$bottom, r$bottom, r$top, r$top))
+  x1 <- utils::head(x, -1L); x2 <- utils::tail(x, -1L)
+  y1 <- utils::head(y, -1L); y2 <- utils::tail(y, -1L)
+  if (any(points_inside_polygon(corners$x, corners$y, polygon))) return(TRUE)
+  for (i in seq_len(4)) {
+    j <- i %% 4 + 1L
+    ax <- corners$x[i]; ay <- corners$y[i]; bx <- corners$x[j]; by <- corners$y[j]
+    side1 <- (bx - ax) * (y1 - ay) - (by - ay) * (x1 - ax)
+    side2 <- (bx - ax) * (y2 - ay) - (by - ay) * (x2 - ax)
+    side3 <- (x2 - x1) * (ay - y1) - (y2 - y1) * (ax - x1)
+    side4 <- (x2 - x1) * (by - y1) - (y2 - y1) * (bx - x1)
+    if (any(side1 * side2 < 0 & side3 * side4 < 0)) return(TRUE)
+  }
+  FALSE
+}
+
+points_inside_polygon <- function(x, y, polygon) {
+  x1 <- utils::head(polygon$x, -1L); x2 <- utils::tail(polygon$x, -1L)
+  y1 <- utils::head(polygon$y, -1L); y2 <- utils::tail(polygon$y, -1L)
+  vapply(seq_along(x), function(i) {
+    cross <- (y1 > y[i]) != (y2 > y[i])
+    sum(x[i] < x1[cross] + (y[i] - y1[cross]) *
+      (x2[cross] - x1[cross]) / (y2[cross] - y1[cross])) %% 2 == 1
+  }, logical(1))
 }
 
 validate_inset_mapping <- function(data, mapping) {

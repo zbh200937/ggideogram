@@ -1,7 +1,7 @@
 Package: ggideogram
 Type: Package
 Title: Chromosome Ideograms Drawn with 'ggplot2'
-Version: 0.2.0
+Version: 0.5.0
 Authors@R: c(
     person("zbh200937", role = c("aut", "cre"),
            email = "83059609+zbh200937@users.noreply.github.com"),
@@ -26,6 +26,11 @@ Description: Extends the grammar of graphics to chromosome coordinates.
     objects can be anchored to genomic loci without entering the host scales.
     Native discrete position guides can draw chromosomes directly as the x or
     y axis of an otherwise ordinary 'ggplot2' chart.
+    Standard annotation inputs support local genomic views, gene structures,
+    interval summaries, paired loci and multi-genome comparisons. Compatible
+    interactive layers can be viewed with the optional 'ggiraph' backend.
+    Circular layouts retain base-pair sectors, radial tracks and curved
+    connections through the same native layers and coordinate protocol.
     Results are ordinary 'ggplot' objects that can be themed, saved, combined
     with 'patchwork' or 'cowplot', or reused as components by other extensions.
     This independent refactor derives chromosome geometry and bundled example
@@ -37,7 +42,8 @@ BugReports: https://github.com/zbh200937/ggideogram/issues
 Encoding: UTF-8
 LazyData: true
 Depends: R (>= 4.1.0)
-Imports: ggplot2 (>= 3.5.0), grDevices, grid, rlang, scales, stats, utils
-Suggests: cowplot, patchwork, svglite, testthat (>= 3.0.0)
+Imports: ggplot2 (>= 3.5.0), grDevices, grid, rlang, scales, stats, tools, utils
+Suggests: cowplot, GenomicRanges, ggiraph (>= 0.9.0), ggnewscale, ggrepel (>= 0.9.5), htmlwidgets, patchwork, ragg, Seqinfo, svglite, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
+Roxygen: list(markdown = TRUE)

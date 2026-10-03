@@ -94,7 +94,7 @@ test_that("inset collisions are explicit instead of silently covering bodies", {
   child_grob <- grid::rectGrob(gp = grid::gpar(fill = "gold"))
   insets <- data.frame(Chr = c("A", "B"), Pos = c(40, 40))
   insets$Plot <- I(list(child_plot, child_grob))
-  crowded <- ggideogram(component_kar, show_names = FALSE) +
+  crowded <- ggideogram(component_kar, chromosome_gap = 1, show_names = FALSE) +
     geom_chr_inset(
       data = insets,
       ggplot2::aes(chr = Chr, position = Pos, plot = Plot),
@@ -146,7 +146,7 @@ test_that("insets support intervals, centre placement and declared tracks", {
     )
   centred_data <- utils::tail(
     ggplot2::ggplot_build(centred)$data, 1)[[1]]
-  expect_equal(centred_data$ideogram_position, 40)
+  expect_equal(centred_data$ideogram_position, 39.5)
   expect_false("ideogram_side" %in% names(centred_data))
 
   tracks <- track_layout(insets = track("right", width = 1, gap = 0.2))
@@ -165,9 +165,9 @@ test_that("insets support intervals, centre placement and declared tracks", {
     inset_data, built$layout$panel_params[[1]])
   axis <- project_chr_point(
     tracked$coordinates$layout,
-    data.frame(Chr = "A", Pos = 40), "Chr", "Pos")
+    data.frame(Chr = "A", Pos = 39.5), "Chr", "Pos")
   expect_gt(xy$x, 0.5)
-  expect_equal(axis$.position, 40)
+  expect_equal(axis$.position, 39.5)
   expect_no_error(ggplot2::ggplotGrob(tracked))
 })
 
@@ -181,6 +181,11 @@ test_that("inset contracts reject ambiguous units and payloads", {
     geom_chr_inset(data = data, mapping,
                    width = 0.2, height = grid::unit(1, "cm")),
     "grid::unit"
+  )
+  expect_error(
+    geom_locus_inset(child, data = data, ggplot2::aes(chr = Chr, position = Pos),
+      width = grid::unit(1, "null"), height = grid::unit(1, "cm")),
+    "physical unit or 'npc'"
   )
   bad <- data.frame(Chr = "A", Pos = 40)
   bad$Plot <- I(list("not a plot"))

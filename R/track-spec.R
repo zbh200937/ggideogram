@@ -1,46 +1,29 @@
 # Declarative track specifications for the dimensionless renderer.
 
-#' Declare one chromosome track
-#'
-#' A track owns a stable transverse region beside (or over) every chromosome.
-#' Its dimensions are normalized chromosome-body-width units, while point,
-#' text and line sizes remain ordinary ggplot2 physical units.
-#'
-#' @param side Track placement: `"right"`, `"left"`, or `"overlay"`.
-#' @param width Width of the value region in chromosome-body-width units.
-#' @param gap Clear distance from the chromosome body or preceding track. If
-#'   `NULL`, the documented default is `0.2` beside a chromosome and `0` for an
-#'   overlay.
-#' @param value_scale Scope of an automatically derived value range:
-#'   `"global"` shares one range across all global tracks, `"per_track"`
-#'   shares within this track, and `"per_chr"` resolves each chromosome
-#'   separately.
-#' @param limits Optional finite increasing raw-data limits. Explicit limits
-#'   make a track independent of layer-addition order and are required by
-#'   components whose standard ggplot2 Stat must run after global projection,
-#'   including ribbon, area, boxplot and violin tracks.
-#' @param transform A transformation name understood by
-#'   [scales::as.transform()] or a scales transform object.
-#' @param reverse Reverse the direction from low to high values.
-#'
-#' @return An `ideogram_track_spec` object, to be named inside
-#'   [track_layout()].
-#' @export
+#' @noRd
 track <- function(
-    side = c("right", "left", "overlay"),
+    side = c("right", "left", "overlay", "outer", "inner"),
     width = 1,
     gap = NULL,
     value_scale = c("per_track", "global", "per_chr"),
     limits = NULL,
     transform = "identity",
-    reverse = FALSE) {
-  side <- match.arg(side)
+    reverse = FALSE,
+    offset = 0,
+    .partial = FALSE) {
+  side <- canonical_chr_side(match.arg(side))
   value_scale <- match.arg(value_scale)
   gap <- gap %||% if (side == "overlay") 0 else 0.2
   check_positive_layout(width, "width")
   check_nonnegative_layout(gap, "gap")
-  if (side == "overlay" && gap != 0) {
+  if (!is.numeric(offset) || length(offset) != 1L || !is.finite(offset)) {
+    stopf("`offset` must be one finite number.")
+  }
+  if (!.partial && side == "overlay" && gap != 0) {
     stopf("An overlay track must use `gap = 0`.")
+  }
+  if (!.partial && side != "overlay" && offset != 0) {
+    stopf("Only an overlay track can use a non-zero `offset`.")
   }
   if (!is.logical(reverse) || length(reverse) != 1L || is.na(reverse)) {
     stopf("`reverse` must be `TRUE` or `FALSE`.")
@@ -76,10 +59,18 @@ track <- function(
       limits = limits,
       transform = transformer,
       transform_name = transformer$name,
-      reverse = reverse
+      reverse = reverse,
+      offset = offset
     ),
     class = "ideogram_track_spec"
   )
+}
+
+validate_track_spec <- function(spec) {
+  args <- setdiff(names(formals(track)), ".partial")
+  geometry <- do.call(track, spec[args])
+  spec[names(geometry)] <- geometry
+  spec
 }
 
 #' Combine named chromosome tracks
@@ -88,14 +79,15 @@ track <- function(
 #' same side are laid out in declaration order from the chromosome body
 #' outwards; adding ggplot2 layers later never changes that order.
 #'
-#' @param ... Named [track()] objects.
+#' @param ... Named [geom_track()] declarations. The list names supply each
+#'   track identifier and its layers, data and mapping remain together.
 #'
 #' @return An `ideogram_track_layout` object.
 #' @examples
 #' tracks <- track_layout(
-#'   markers = track(side = "right", width = 0.6),
-#'   density = track(side = "right", width = 1.2, limits = c(0, 10)),
-#'   counts = track(side = "left", width = 1, limits = c(0, 100))
+#'   markers = geom_track(side = "right", width = 0.6),
+#'   density = geom_track(side = "right", width = 1.2, limits = c(0, 10)),
+#'   counts = geom_track(side = "left", width = 1, limits = c(0, 100))
 #' )
 #' @export
 track_layout <- function(...) {
@@ -111,7 +103,7 @@ track_layout <- function(...) {
   }
   bad <- !vapply(specs, inherits, logical(1), "ideogram_track_spec")
   if (any(bad)) {
-    stopf("Track%s %s %s not created by `track()`.",
+    stopf("Track%s %s %s not created by `geom_track()`.",
           if (sum(bad) > 1L) "s" else "",
           paste0("`", ids[bad], "`", collapse = ", "),
           if (sum(bad) > 1L) "were" else "was")
@@ -142,6 +134,7 @@ print.ideogram_track_layout <- function(x, ...) {
 }
 
 resolve_track_geometry <- function(tracks, chromosome_width) {
+  tracks <- normalise_chr_tracks(tracks)
   if (is.null(tracks)) tracks <- track_layout()
   if (!inherits(tracks, "ideogram_track_layout")) {
     stopf("`tracks` must be NULL or created by `track_layout()`.")
@@ -150,7 +143,7 @@ resolve_track_geometry <- function(tracks, chromosome_width) {
     table <- data.frame(
       id = character(), side = character(), width = numeric(),
       gap = numeric(), value_scale = character(), reverse = logical(),
-      transform_name = character(), low_offset = numeric(),
+      transform_name = character(), offset = numeric(), low_offset = numeric(),
       high_offset = numeric(), stringsAsFactors = FALSE
     )
     table$limits <- I(list())
@@ -164,14 +157,14 @@ resolve_track_geometry <- function(tracks, chromosome_width) {
   for (index in seq_along(tracks)) {
     spec <- tracks[[index]]
     if (spec$side == "overlay") {
-      if (spec$width > chromosome_width) {
+      if (abs(spec$offset) + spec$width / 2 > chromosome_width / 2 + sqrt(.Machine$double.eps)) {
         stopf(paste0(
-          "Overlay track `%s` is wider than the chromosome body.\n",
-          "  Reduce its `width` to at most %s or place it beside the body."),
+          "Overlay track `%s` extends beyond the chromosome body.\n",
+          "  Adjust its `width` or `offset` to fit inside body width %s."),
           names(tracks)[index], format(chromosome_width))
       }
-      low <- -spec$width / 2
-      high <- spec$width / 2
+      low <- spec$offset - spec$width / 2
+      high <- spec$offset + spec$width / 2
     } else if (spec$side == "right") {
       low <- right_cursor + spec$gap
       high <- low + spec$width
@@ -185,7 +178,7 @@ resolve_track_geometry <- function(tracks, chromosome_width) {
       id = names(tracks)[index], side = spec$side,
       width = spec$width, gap = spec$gap,
       value_scale = spec$value_scale, reverse = spec$reverse,
-      transform_name = spec$transform_name,
+      transform_name = spec$transform_name, offset = spec$offset,
       low_offset = low, high_offset = high,
       stringsAsFactors = FALSE
     )
@@ -387,7 +380,7 @@ project_track_values_raw <- function(layout, track_id, chr, position, value,
 #' track must be declared in the layout and its value range must already be
 #' explicit or registered by a track component.
 #'
-#' @param layout An `ideogram_layout_v2` object.
+#' @param layout An `ideogram_layout_v2` object or ggideogram plot.
 #' @param data A data frame.
 #' @param chr,position,value Column names in `data`.
 #' @param track One declared track identifier.
@@ -395,6 +388,7 @@ project_track_values_raw <- function(layout, track_id, chr, position, value,
 #' @return `data` with stable prefixed semantic and projected columns.
 #' @export
 project_chr_track <- function(layout, data, chr, position, value, track) {
+  layout <- chr_projection_layout(layout)
   check_layout_v2(layout)
   check_projection_data(data)
   chr_value <- projection_column(data, chr, "chr")

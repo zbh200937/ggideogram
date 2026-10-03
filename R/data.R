@@ -27,8 +27,8 @@
 #' Human gene density
 #'
 #' Gene counts in 1 Mb windows across [human_karyotype]. Suitable for a
-#' [geom_track_line()] or [geom_track_col()] layer after mapping each window
-#' midpoint to `position`.
+#' [geom_track()] with native ggplot2::geom_line() or ggplot2::geom_col() after
+#' mapping each window midpoint to x and its count to y.
 #'
 #' @format A data frame with 3102 rows and 4 columns: `Chr`, `Start`, `End`,
 #'   `Value`.
@@ -48,7 +48,7 @@
 #' 500 random non-coding RNAs
 #'
 #' Marker positions inherited from RIdeogram. Use the interval midpoint as the
-#' `position` aesthetic in [geom_chr_marker()]. `color` retains the source
+#' `position` aesthetic in [geom_locus()]. `color` retains the source
 #' package's bare hexadecimal strings, so add `#` before passing them to a
 #' standard ggplot2 scale.
 #'

@@ -12,7 +12,7 @@ cytoband_colours(
 )
 }
 \arguments{
-\item{stain}{Character vector such as `"gneg"`, `"gpos50"`, or `"acen"`.}
+\item{stain}{Character vector such as \code{"gneg"}, \code{"gpos50"}, or \code{"acen"}.}
 
 \item{scheme}{Palette family.}
 
@@ -24,6 +24,6 @@ cytoband_colours(
 A hexadecimal colour vector.
 }
 \description{
-Maps cytoband stain names to established palettes. Untabulated `gposNN`
-names are interpolated between `gneg` and `gpos`.
+Maps cytoband stain names to established palettes. Untabulated \code{gposNN}
+names are interpolated between \code{gneg} and \code{gpos}.
 }

@@ -7,11 +7,11 @@
 get_ideogram_attachment(plot, name, type = c("chr", "locus"))
 }
 \arguments{
-\item{plot}{A [ggideogram()] plot.}
+\item{plot}{A \code{\link[=ggideogram]{ggideogram()}} plot.}
 
-\item{name}{Attachment name supplied to [chr_data()] or [locus_data()].}
+\item{name}{Attachment name supplied to \code{\link[=chr_data]{chr_data()}} or \code{\link[=locus_data]{locus_data()}}.}
 
-\item{type}{Attachment registry, `"chr"` or `"locus"`.}
+\item{type}{Attachment registry, \code{"chr"} or \code{"locus"}.}
 }
 \value{
 The canonical attached data frame.

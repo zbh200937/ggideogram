@@ -12,8 +12,8 @@ cytoband_karyotype(cytoband, chr = NULL)
 \item{chr}{Optional chromosome selection and order.}
 }
 \value{
-A karyotype data frame accepted by [ggideogram()].
+A karyotype data frame accepted by \code{\link[=ggideogram]{ggideogram()}}.
 }
 \description{
-Chromosome ends come from the final band and centromeres from `acen` bands.
+Chromosome ends come from the final band and centromeres from \code{acen} bands.
 }

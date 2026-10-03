@@ -14,11 +14,11 @@ locus_data(
 \arguments{
 \item{data}{A data frame to attach.}
 
-\item{by}{A named character vector mapping canonical `chr` and `position` to
-source columns, for example `c(chr = "Chr", position = "Pos")`.}
+\item{by}{A named character vector mapping canonical \code{chr} and \code{position} to
+source columns, for example \code{c(chr = "Chr", position = "Pos")}.}
 
 \item{relationship}{Expected key relationship. Repeated chromosome-position
-pairs require the explicit `"many-to-many"` choice.}
+pairs require the explicit \code{"many-to-many"} choice.}
 
 \item{name}{Optional stable attachment name.}
 }
@@ -26,9 +26,9 @@ pairs require the explicit `"many-to-many"` choice.}
 An additive ideogram data component.
 }
 \description{
-`locus_data()` validates chromosome and genomic-position keys and stores a
-canonical `.chr`/`.position` table in the plot's attachment registry. It
+\code{locus_data()} validates chromosome and genomic-position keys and stores a
+canonical \code{.chr}/\code{.position} table in the plot's attachment registry. It
 does not guess how an arbitrary downstream geom should use the records;
-extensions can retrieve them with [get_ideogram_attachment()] and use the
+extensions can retrieve them with \code{\link[=get_ideogram_attachment]{get_ideogram_attachment()}} and use the
 public projection functions.
 }

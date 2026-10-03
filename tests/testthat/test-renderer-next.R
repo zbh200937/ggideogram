@@ -74,7 +74,15 @@ test_that("chromosome names use standard text size and typographic gap", {
   expect_s3_class(name1$geom, "GeomText")
   expect_equal(name1$aes_params$size, 2.8)
   expect_equal(name1$data$y, name2$data$y)
-  expect_gt(name2$aes_params$vjust, name1$aes_params$vjust)
+  name_data <- ggplot2::ggplot_build(p2)$data[[length(p2$layers)]]
+  expect_true(all(name_data$vjust == 0.5))
+  expect_gt(name2$geom_params$name_gap, name1$geom_params$name_gap)
+  expect_equal(name1$data$y, p1$coordinates$layout$chrom$.axis_start_y)
+  horizontal <- ggideogram(renderer_kar, orientation = "horizontal")
+  label <- horizontal$layers[[length(horizontal$layers)]]
+  expect_equal(label$data$x, horizontal$coordinates$layout$chrom$.axis_start_x)
+  label_data <- ggplot2::ggplot_build(horizontal)$data[[length(horizontal$layers)]]
+  expect_true(all(label_data$hjust == 0.5))
 })
 
 test_that("local chromosome axes use physical ticks and standard text", {

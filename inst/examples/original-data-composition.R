@@ -1,7 +1,7 @@
 # Composition example built from the four datasets bundled with ggideogram.
 #
 # From a source checkout:
-#   Rscript -e 'pkgload::load_all("."); source("inst/examples/original-data-composition.R")'
+#   Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/original-data-composition.R")'
 
 suppressPackageStartupMessages({
   library(ggideogram)
@@ -17,11 +17,12 @@ figure <- list(
   dpi = 200,
   panel_widths = c(1.2, 1),
   base_size = 9,
+  row_gap = 5,
   marker_size = 0.65,
   marker_stroke = 0.18,
   marker_separation = 0.18,
   ideogram_margin_pt = c(top = 5.5, right = 5.5, bottom = 5.5, left = 18),
-  output_dir = file.path("inst", "examples"),
+  output_dir = file.path("work", "api-optimization", "examples", "original-data-composition"),
   output_stem = "original-data-composition"
 )
 
@@ -30,10 +31,10 @@ data("gene_density", package = "ggideogram")
 data("LTR_density", package = "ggideogram")
 data("Random_RNAs_500", package = "ggideogram")
 
-gene_density$Position <- (gene_density$Start + gene_density$End) / 2
-LTR_density$Position <- (LTR_density$Start + LTR_density$End) / 2
+gene_density$Position <- (gene_density$Start - 1 + gene_density$End) / 2
+LTR_density$Position <- (LTR_density$Start - 1 + LTR_density$End) / 2
 Random_RNAs_500$Position <-
-  (Random_RNAs_500$Start + Random_RNAs_500$End) / 2
+  (Random_RNAs_500$Start - 1 + Random_RNAs_500$End) / 2
 
 # Original marker names are translated once to standard filled ggplot2 shapes.
 # The renderer itself has no shape registry or dataset-specific branch.
@@ -47,17 +48,9 @@ if (length(unknown_shapes)) {
 rna_shapes <- stats::setNames(shape_lookup[rna_key$Shape], rna_key$Type)
 rna_colours <- stats::setNames(paste0("#", rna_key$color), rna_key$Type)
 
-tracks <- track_layout(
-  markers = track(side = "right", width = 0.65, gap = 0.20),
-  genes = track(
-    side = "right", width = 1.15, gap = 0.25,
-    limits = range(gene_density$Value, na.rm = TRUE)
-  ),
-  ltr = track(
-    side = "right", width = 1.15, gap = 0.25,
-    limits = range(LTR_density$Value, na.rm = TRUE)
-  )
-)
+tracks <- track_layout(markers = geom_track(side = "right", width = 0.65, gap = 0.2), genes = geom_track(side = "right",
+    width = 1.15, gap = 0.25, limits = range(gene_density$Value, na.rm = TRUE)), ltr = geom_track(side = "right",
+    width = 1.15, gap = 0.25, limits = range(LTR_density$Value, na.rm = TRUE)))
 
 # Choose the chromosome grid from the data, declared tracks and actual slot
 # aspect. Restricting candidates to exact divisors avoids anonymous empty cells
@@ -73,7 +66,7 @@ target_aspect <-
   figure$height_mm
 candidate_aspect <- vapply(column_candidates, function(columns) {
   candidate_layout <- ideogram_layout(
-    semantic, ncol = columns, tracks = tracks
+    semantic, ncol = columns, tracks = tracks, row_gap = figure$row_gap
   )
   diff(candidate_layout$bounds$x) / diff(candidate_layout$bounds$y)
 }, numeric(1))
@@ -82,10 +75,7 @@ ideogram_columns <- column_candidates[
 ]
 
 # One visible bp ruler per chromosome row documents the longitudinal alignment
-# shared by both side tracks without repeating colliding labels 24 times. The
-# transverse value scales stay local to their declared tracks; drawing 24 tiny
-# copies of those axes would be less informative than the ordinary summary
-# panels B and C.
+# shared by both side tracks. Their common value ranges are stated below panel A.
 row_axis_chromosomes <- human_karyotype$Chr[
   seq.int(1, chromosome_count, by = ideogram_columns)
 ]
@@ -96,56 +86,32 @@ repel <- position_chr_repel(
 panel_a <- ggideogram(
   human_karyotype,
   ncol = ideogram_columns,
+  row_gap = figure$row_gap,
   tracks = tracks,
   axis = row_axis_chromosomes,
+  axis_breaks = seq(0, 250e6, 50e6),
   axis_side = "left",
   base_family = "sans"
 ) +
-  geom_track_line(
-    data = gene_density,
-    mapping = aes(
-      chr = Chr, position = Position, value = Value, group = Chr
-    ),
-    track = "genes",
-    colour = "#277DA1",
-    linewidth = 0.25
-  ) +
-  geom_track_col(
-    data = LTR_density,
-    mapping = aes(
-      chr = Chr, position = Position, value = Value,
-      width = End - Start
-    ),
-    track = "ltr",
-    position = "identity",
-    fill = "#43AA8B",
-    alpha = 0.70
-  ) +
-  geom_chr_link(
-    data = Random_RNAs_500,
-    mapping = aes(chr = Chr, position = Position),
-    position = repel,
-    track = "markers",
-    colour = "#777777",
-    linewidth = 0.12,
-    alpha = 0.45
-  ) +
-  geom_chr_marker(
-    data = Random_RNAs_500,
-    mapping = aes(
-      chr = Chr, position = Position, shape = Type, fill = Type
-    ),
-    position = repel,
-    track = "markers",
-    size = figure$marker_size,
-    stroke = figure$marker_stroke,
-    colour = "#303030"
-  ) +
+  geom_track(data = gene_density, mapping = aes(chr = Chr, x = Position, y = Value, group = Chr),
+      track = "genes", geom = ggplot2::geom_line(colour = "#277DA1", linewidth = 0.25)) +
+  geom_track(data = LTR_density, mapping = aes(chr = Chr, x = Position, y = Value, width = End -
+      Start), track = "ltr", geom = ggplot2::geom_col(position = "identity", fill = "#43AA8B",
+      alpha = 0.7)) +
+  geom_locus(geom = "link", data = Random_RNAs_500, mapping = aes(chr = Chr, position = Position),
+      position = repel, track = "markers", colour = "#777777", linewidth = 0.12, alpha = 0.45) +
+  geom_locus(geom = "point", data = Random_RNAs_500, mapping = aes(chr = Chr, position = Position,
+      shape = Type, fill = Type), position = repel, track = "markers", size = figure$marker_size,
+      stroke = figure$marker_stroke, colour = "#303030") +
   scale_shape_manual(values = rna_shapes) +
   scale_fill_manual(values = rna_colours) +
   labs(
     title = "Human chromosome ideogram",
-    subtitle = "bp-aligned gene and LTR tracks; native ggplot2 RNA markers",
+    subtitle = "Gene and LTR counts with RNA loci",
+    caption = sprintf(paste0("1 Mb windows; terminal windows may be shorter.\n",
+      "Blue: genes (%g-%g); green: LTRs (%g-%g)."),
+      min(gene_density$Value), max(gene_density$Value),
+      min(LTR_density$Value), max(LTR_density$Value)),
     shape = "RNA type",
     fill = "RNA type"
   ) +
@@ -160,6 +126,7 @@ panel_a <- ggideogram(
     legend.text = element_text(size = figure$base_size),
     plot.title = element_text(face = "bold", size = figure$base_size + 1),
     plot.subtitle = element_text(size = figure$base_size),
+    plot.caption = element_text(size = figure$base_size - 1, hjust = 0),
     plot.margin = do.call(
       margin,
       as.list(unname(figure$ideogram_margin_pt))

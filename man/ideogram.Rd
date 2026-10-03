@@ -7,15 +7,13 @@
 ideogram(...)
 }
 \arguments{
-\item{...}{Passed unchanged to [ggideogram()].}
+\item{...}{Passed unchanged to \code{\link[=ggideogram]{ggideogram()}}.}
 }
 \value{
-The same standard ggplot object returned by [ggideogram()].
+The same standard ggplot object returned by \code{\link[=ggideogram]{ggideogram()}}.
 }
 \description{
-`ideogram()` is a thin alias of [ggideogram()]. It exists for users coming
-from RIdeogram, but it has no compatibility renderer, fixed page, output
-side effect, `label_type` switch, or private layer branch. Add markers,
+\code{ideogram()} is a thin alias of \code{\link[=ggideogram]{ggideogram()}}. Add markers,
 tracks and inset plots with the exported ggplot2-style components.
 }
 \examples{

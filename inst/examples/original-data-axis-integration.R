@@ -1,7 +1,7 @@
 # Native chromosome-axis examples built only from data bundled with
 # ggideogram. Run from a source checkout after loading the package:
 #
-#   Rscript -e 'pkgload::load_all("."); source("inst/examples/original-data-axis-integration.R")'
+#   Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/original-data-axis-integration.R")'
 
 suppressPackageStartupMessages({
   library(ggideogram)
@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
 # Every device and appearance choice is named here and can be changed without
 # touching the axis engine or the biological data.
 axis_gallery <- list(
-  output_dir = file.path("inst", "examples"),
+  output_dir = file.path("work", "api-optimization", "examples", "original-data-axis-integration"),
   dpi = 300,
   base_size = 10.5,
   body_fill = "#FAFAFA",

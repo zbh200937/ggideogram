@@ -12,13 +12,13 @@ window_edges(end, window)
 \item{window}{Window size in base pairs.}
 }
 \value{
-List of `lower` (0-based, exclusive) and `upper` (inclusive) edges.
+List of \code{lower} (0-based, exclusive) and \code{upper} (inclusive) edges.
 }
 \description{
-Right edges are every whole multiple of `window` below `end`, then `end`
-itself. Counting the multiples rather than calling `seq()` from `window` is
-what lets a chromosome shorter than one window through -- `seq()` errors with
-"wrong sign in 'by' argument" there. `unique()` keeps an exact multiple from
+Right edges are every whole multiple of \code{window} below \code{end}, then \code{end}
+itself. Counting the multiples rather than calling \code{seq()} from \code{window} is
+what lets a chromosome shorter than one window through -- \code{seq()} errors with
+"wrong sign in 'by' argument" there. \code{unique()} keeps an exact multiple from
 duplicating the last edge.
 }
 \keyword{internal}

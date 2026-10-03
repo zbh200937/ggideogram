@@ -17,18 +17,18 @@ save_ideogram(
 \arguments{
 \item{filename}{Output filename.}
 
-\item{plot}{A [ggideogram()] plot or any standard ggplot composition.}
+\item{plot}{A \code{\link[=ggideogram]{ggideogram()}} plot or any standard ggplot composition.}
 
-\item{width, height, units, dpi}{Standard [ggplot2::ggsave()] arguments.}
+\item{width, height, units, dpi}{Standard \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}} arguments.}
 
-\item{...}{Additional arguments passed to [ggplot2::ggsave()].}
+\item{...}{Additional arguments passed to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 }
 \value{
-`filename`, invisibly.
+\code{filename}, invisibly.
 }
 \description{
 This convenience wrapper validates the plot and delegates to
-[ggplot2::ggsave()]. Width and height are ordinary device choices and are
-never inferred from a historical canvas. Omitting both uses ggplot2's own
+\code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}. Width and height are ordinary device choices.
+Omitting both uses ggplot2's own
 device defaults.
 }
