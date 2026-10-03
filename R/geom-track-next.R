@@ -777,9 +777,9 @@ geom_track_axis <- function(
     tick_length = 1.5,
     label_gap = 0.25,
     size = ideogram_text_size("value"),
-    colour = "#666666",
-    linewidth = 0.3,
-    family = "") {
+    colour = ideogram_colour("axis"),
+    linewidth = ideogram_linewidth("axis"),
+    family = NULL) {
   position <- match.arg(position)
   if (!isTRUE(chr) && (!is.character(chr) || !length(chr))) {
     stopf("`chr` must be `TRUE` or a non-empty chromosome vector.")
@@ -854,6 +854,7 @@ StatTrackAxis <- ggplot2::ggproto(
 )
 
 build_track_axis_layers <- function(layout, object, chromosomes) {
+  object$family <- object$family %||% layout$base_spec$base_family %||% ""
   spec <- track_table_row(layout, object$track)
   position <- object$position
   if (position == "auto") position <- if (is_circular_layout(layout) &&

@@ -2,10 +2,6 @@
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
-ideogram_text_size <- function(role) {
-  unname(c(chromosome = 3.2, label = 3, track = 2.8, bp = 2.8, value = 2.6)[role])
-}
-
 chr_projection_layout <- function(layout) {
   if (inherits(layout, "ggplot")) layout <- ideogram_plot_layout(layout)
   check_layout_v2(layout)
@@ -66,14 +62,13 @@ axis_unit <- function(step, units) {
 }
 
 axis_labels <- function(breaks, div, suffix, digits = NULL) {
-  if (is.null(digits)) {
-    step <- if (length(breaks) > 1L) min(diff(breaks)) else breaks[1]
-    digits <- max(0, min(3, ceiling(-log10(max(step, 1) / div))))
+  values <- breaks / div
+  labels <- if (is.null(digits)) {
+    format(values, trim = TRUE, scientific = FALSE, digits = 15)
+  } else {
+    formatC(values, format = "f", digits = digits)
   }
-  paste0(
-    formatC(breaks / div, format = "f", digits = digits),
-    " ", suffix
-  )
+  paste0(labels, " ", suffix)
 }
 
 # Least-squares one-dimensional separation. Subtracting the required spacing

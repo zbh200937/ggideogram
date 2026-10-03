@@ -32,7 +32,8 @@ ggideogram_track_spec <- function(...) track(...)
 #' @param side Track side: right/left, outer/inner for circles, or overlay
 #'   inside the chromosome body.
 #' @param width,gap Track width and gap in chromosome-body-width units. The
-#'   default width is 2 beside the body and 1 inside it; gap is 0.2 beside
+#'   default width is 6 for gene-model tracks, 2 for other beside tracks,
+#'   and 1 inside the body; gap is 0.2 beside
 #'   and 0 inside. Native geom widths
 #'   belong to the layer, e.g. geom = ggplot2::geom_col(width = 1e6).
 #' @param value_scale Auto range: per_track (default), per_chr, or global.
@@ -87,6 +88,11 @@ geom_track <- function(mapping = NULL, data = NULL, geom = NULL, track = NULL,
     check_unused_args(...)
     layers <- chr_track_layers(layers)
   }
+  gene_models <- vapply(layers, function(layer) {
+    if (inherits(layer, "ggideogram_object")) layer <- layer$component
+    inherits(layer, "ggideogram_gene_component")
+  }, logical(1))
+  if (missing(width) && side != "overlay" && any(gene_models)) spec$width <- 6
   if (!is.null(data) && !is.data.frame(data)) stopf("Track `data` must be a data frame.")
   if (!is.null(mapping) && !inherits(mapping, "uneval") && !inherits(mapping, "ggplot2::mapping")) {
     stopf("Track `mapping` must be created with aes().")
@@ -417,11 +423,12 @@ track_scope_owners <- function(layout, spec, contents) {
 }
 
 add_track_scope_title <- function(plot, id, title, owners) {
+  layout <- ideogram_plot_layout(plot)
   settings <- utils::modifyList(list(size = ideogram_text_size("track"),
-    colour = "#202020", family = "", fontface = 1, gap = 0.3),
+    colour = ideogram_colour("text"), family = layout$base_spec$base_family %||% "",
+    fontface = 1, gap = 0.3),
     track_label_settings(title))
   if (is.null(settings$text) || !nzchar(settings$text) || !length(owners)) return(plot)
-  layout <- ideogram_plot_layout(plot)
   selected <- match(owners[1], layout$chrom$.chr)
   g <- layout$chrom[selected, , drop = FALSE]
   spec <- track_table_row(layout, id)

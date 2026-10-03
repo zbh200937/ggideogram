@@ -273,6 +273,20 @@ linear_name_axis_clearance <- function(plot, name_layer) {
   hidden <- !names$name_chr %in% layout$chrom$.chr
   if (any(hidden) && !is.null(previous) && length(previous) == nrow(names))
     clearance[hidden] <- previous[hidden]
+  gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label), plot$layers)
+  for (layer in gene_labels) {
+    for (i in seq_len(nrow(names))) {
+      same_chr <- layer$data$.model_chr == names$name_chr[i]
+      if (!any(same_chr)) next
+      dimensions <- circular_text_dimensions(layer$data$.model_label[same_chr],
+        layer$aes_params$size, layer$aes_params$family %||% "")
+      if (names$nx[i] < 0) {
+        clearance[i] <- max(clearance[i], dimensions$width * layer$aes_params$hjust)
+      } else if (names$ny[i] > 0) {
+        clearance[i] <- max(clearance[i], dimensions$height * (1 - layer$aes_params$vjust))
+      }
+    }
+  }
   axes <- Filter(function(layer) inherits(layer$geom, "GeomIdeogramAxisText") &&
     (inherits(layer$stat, "StatTrackAxis") || !is.null(layer$ideogram_track_title)), plot$layers)
   for (layer in axes) {
@@ -318,7 +332,7 @@ chromosome_text_dimensions <- function(data, parse = FALSE) {
 GeomIdeogramTick <- ggplot2::ggproto(
   "GeomIdeogramTick", ggplot2::Geom,
   required_aes = c("x", "y", "nx", "ny"),
-  default_aes = ggplot2::aes(colour = "#666666", linewidth = 0.3,
+  default_aes = ggplot2::aes(colour = ideogram_colour("axis"), linewidth = ideogram_linewidth("axis"),
                              alpha = NA),
   draw_key = ggplot2::draw_key_blank,
   draw_panel = function(data, panel_params, coord, tick_length = 1.5,
@@ -508,6 +522,8 @@ reserve_chromosome_axis_space <- function(plot, layers) {
     }
   }
   plot <- update_plot_ideogram_layout(plot, layout)
+  layers <- Filter(function(layer) !is.null(layer$ideogram_axis_spec) ||
+    inherits(layer$stat, "StatTrackAxis") || !is.null(layer$ideogram_track_title), plot$layers)
   needed <- grid::unit(rep(0, 4), "mm") # top, right, bottom, left
   reserve <- function(current, extent, at) {
     if (any(at)) max(current, extent[at]) else current
@@ -545,6 +561,16 @@ reserve_chromosome_axis_space <- function(plot, layers) {
     needed[1] <- reserve(needed[1], height / 2, top & data$ny == 0)
   }
   if (!is_circular_layout(layout)) {
+    gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label), plot$layers)
+    for (layer in gene_labels) {
+      dimensions <- circular_text_dimensions(layer$data$.model_label,
+        layer$aes_params$size, layer$aes_params$family %||% "")
+      if (layout$orientation == "horizontal") {
+        needed[4] <- max(needed[4], dimensions$width * layer$aes_params$hjust)
+      } else {
+        needed[1] <- max(needed[1], dimensions$height * (1 - layer$aes_params$vjust))
+      }
+    }
     names <- Filter(function(layer) !is.null(layer$ideogram_name_gap), plot$layers)
     for (layer in names) {
       axis_clearance <- linear_name_axis_clearance(plot, layer)

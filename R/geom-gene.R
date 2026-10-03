@@ -2,7 +2,7 @@
 geom_chr_transcript <- function(
     mapping = NULL, data = NULL, track = NULL, stat = "identity", position = "identity",
     ..., lane_order = NULL, block_height = 0.35,
-    line_colour = "#626A73", line_width = 0.22,
+    line_colour = ideogram_colour("annotation"), line_width = ideogram_linewidth("annotation"),
     arrow = grid::arrow(length = grid::unit(0.65, "mm"), type = "open"),
     arrow_min_bp = 0, arrow_spacing_bp = NULL, arrow_margin_bp = 0,
     labels = TRUE, label_size = ideogram_text_size("label"), label_gap = 0.3,
@@ -32,7 +32,7 @@ geom_chr_transcript <- function(
 geom_chr_gene <- function(
     mapping = NULL, data = NULL, track = NULL, stat = "identity", position = "identity",
     ..., lane_order = NULL, block_height = 0.35,
-    line_colour = "#626A73", line_width = 0.22,
+    line_colour = ideogram_colour("annotation"), line_width = ideogram_linewidth("annotation"),
     arrow = grid::arrow(length = grid::unit(0.65, "mm"), type = "open"),
     arrow_min_bp = 0, arrow_spacing_bp = NULL, arrow_margin_bp = 0,
     labels = TRUE, label_size = ideogram_text_size("label"), label_gap = 0.3,
@@ -225,7 +225,7 @@ ggplot_add.ggideogram_gene_component <- function(object, plot, ...) {
       rows <- blocks[(blocks$.model_type == "exon") == outline, , drop = FALSE]
       if (!nrow(rows)) next
       rect_mapping <- if (outline) track_mapping_without(mapping, "fill") else mapping
-      params <- utils::modifyList(list(fill = "#4477AA", colour = NA), object$params)
+      params <- utils::modifyList(list(fill = ideogram_colour("gene"), colour = NA), object$params)
       if (outline) {
         params$fill <- NA
         if (!"colour" %in% names(object$params)) params$colour <- object$line_colour
@@ -255,11 +255,14 @@ ggplot_add.ggideogram_gene_component <- function(object, plot, ...) {
       angle[flip] <- (angle[flip] + 360) %% 360 - 180
       hjust <- ifelse(flip, -object$label_gap, 1 + object$label_gap)
     }
-    plot <- plot + ggplot2::geom_text(data = backbone,
+    label <- ggplot2::geom_text(data = backbone,
       mapping = ggplot2::aes(x = .data$.lx, y = .data$.ly, label = .data$.model_label),
       angle = angle, hjust = hjust,
       vjust = if (vertical) -object$label_gap else 0.5,
-      size = object$label_size, colour = "black", inherit.aes = FALSE)
+      size = object$label_size, family = layout$base_spec$base_family %||% "",
+      colour = "black", inherit.aes = FALSE)
+    label$ideogram_gene_label <- TRUE
+    plot <- reserve_chromosome_axis_space(plot + label, list())
   }
   plot
 }

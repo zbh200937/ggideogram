@@ -10,9 +10,9 @@ new_chromosome_component <- function(kind, params) {
 #' Internal chromosome body component
 #' @noRd
 geom_chromosome <- function(
-    fill = "#F7F7F7",
-    colour = "#4D4D4D",
-    linewidth = 0.4,
+    fill = ideogram_colour("body"),
+    colour = ideogram_colour("outline"),
+    linewidth = ideogram_linewidth("body"),
     curve_points = 32,
     cytoband = TRUE,
     cytoband_scheme = c("circos", "biovizbase", "only.centromeres"),
@@ -59,7 +59,7 @@ geom_cytoband <- function(...) geom_chr_cytoband(...)
 geom_chr_name <- function(
     size = ideogram_text_size("chromosome"),
     gap = 0.5,
-    colour = "#202020",
+    colour = ideogram_colour("text"),
     family = "",
     position = c("auto", "start", "end", "middle")) {
   check_positive_layout(size, "size")
@@ -84,8 +84,8 @@ geom_chr_axis <- function(
     label_gap = 0.25,
     size = ideogram_text_size("bp"),
     family = "",
-    colour = "#666666",
-    linewidth = 0.3) {
+    colour = ideogram_colour("axis"),
+    linewidth = ideogram_linewidth("axis")) {
   if (!isTRUE(chr) && (!is.character(chr) || !length(chr))) {
     stopf("`chr` must be `TRUE` or a non-empty chromosome vector.")
   }

@@ -361,20 +361,34 @@ ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
 #' @export
 ggplot_add.ggideogram_track_scope <- function(object, plot, ...) {
   layout <- ideogram_plot_layout(plot)
-  if (is.null(object$track)) stopf("Supply a unique `track` identifier when adding geom_track() with +.")
+  if (is.null(object$track)) {
+    stopf("Supply a unique `track` identifier when adding geom_track() with +.")
+  }
   specs <- layout$base_spec$tracks %||% track_layout()
   id <- object$track
   if (id %in% names(specs)) {
     previous <- specs[[id]]
     for (arg in object$geometry_args) previous[arg] <- object[arg]
     supplied <- object$supplied_args
-    if ("side" %in% supplied && !"gap" %in% supplied) previous$gap <- object$gap
-    if ("side" %in% supplied && previous$side != "overlay" && !"offset" %in% supplied) previous$offset <- 0
+    if ("side" %in% supplied && !"gap" %in% supplied) {
+      previous$gap <- object$gap
+    }
+    if ("side" %in% supplied && previous$side != "overlay" && !"offset" %in% supplied) {
+      previous$offset <- 0
+    }
     for (arg in intersect(supplied, c("chr", "clip"))) previous[arg] <- object[arg]
-    if ("label" %in% supplied) previous$label <- if (is.null(object$label)) NULL else
-      utils::modifyList(track_label_settings(previous$label), track_label_settings(object$label), keep.null = TRUE)
-    if ("axis" %in% supplied) previous$axis <- if (is.list(object$axis))
-      utils::modifyList(if (is.list(previous$axis)) previous$axis else list(), object$axis, keep.null = TRUE) else object$axis
+    if ("label" %in% supplied) {
+      previous$label <- if (is.null(object$label)) NULL else {
+        utils::modifyList(track_label_settings(previous$label),
+          track_label_settings(object$label), keep.null = TRUE)
+      }
+    }
+    if ("axis" %in% supplied) {
+      previous$axis <- if (is.list(object$axis)) {
+        settings <- if (is.list(previous$axis)) previous$axis else list()
+        utils::modifyList(settings, object$axis, keep.null = TRUE)
+      } else object$axis
+    }
     if (isTRUE(object$replace)) {
       previous$parts <- NULL
       previous$layers <- object$layers
@@ -384,16 +398,23 @@ ggplot_add.ggideogram_track_scope <- function(object, plot, ...) {
       part$inherit_data <- !"data" %in% supplied
       part$inherit_mapping <- !"mapping" %in% supplied
       previous$parts <- c(previous$parts %||% list(previous), list(part))
-    } else for (arg in intersect(supplied, c("data", "mapping"))) previous[arg] <- object[arg]
-    if (isTRUE(object$replace) || length(intersect(supplied, c("limits", "value_scale", "transform", "chr"))) ||
-        (!length(object$layers) && length(intersect(supplied, c("data", "mapping"))))) {
+    } else {
+      for (arg in intersect(supplied, c("data", "mapping"))) previous[arg] <- object[arg]
+    }
+    range_changed <- any(c("limits", "value_scale", "transform", "chr") %in% supplied)
+    data_changed <- !length(object$layers) && any(c("data", "mapping") %in% supplied)
+    if (isTRUE(object$replace) || range_changed || data_changed) {
       previous$frozen_ranges <- NULL
       if (previous$value_scale == "global" || specs[[id]]$value_scale == "global") {
-        for (key in names(specs)) if (specs[[key]]$value_scale == "global") specs[[key]]$frozen_ranges <- NULL
+        for (key in names(specs)) {
+          if (specs[[key]]$value_scale == "global") specs[[key]]$frozen_ranges <- NULL
+        }
       }
     }
     specs[[id]] <- validate_track_spec(previous)
-  } else specs[[id]] <- object
+  } else {
+    specs[[id]] <- object
+  }
   spec <- layout$base_spec
   spec$tracks <- specs
   spec$data <- layout$data
@@ -402,8 +423,10 @@ ggplot_add.ggideogram_track_scope <- function(object, plot, ...) {
   updated$attachments <- layout$attachments
   metadata <- intersect(setdiff(names(layout$chrom), names(updated$chrom)),
     names(updated$data$karyotype))
-  for (column in metadata) updated$chrom[[column]] <-
-    updated$data$karyotype[[column]][match(updated$chrom$.chr, updated$data$karyotype$.chr)]
+  for (column in metadata) {
+    updated$chrom[[column]] <- updated$data$karyotype[[column]][
+      match(updated$chrom$.chr, updated$data$karyotype$.chr)]
+  }
   rebuilt <- update_plot_ideogram_layout(rebuilt, updated)
   generated <- rebuilt$layers
   used <- rep(FALSE, length(generated))
@@ -442,9 +465,13 @@ ggplot_add.ggideogram_track_scope <- function(object, plot, ...) {
       previous <- Filter(function(candidate) identical(candidate$ideogram_recipe_id,
         layer$ideogram_recipe_id), plot$layers)
       count <- min(length(previous), length(rebuilt$layers) - before)
-      for (j in seq_len(count)) rebuilt$layers[[before + j]] <-
-        preserve_ideogram_aesthetics(rebuilt$layers[[before + j]], previous[[j]])
-    } else rebuilt <- rebuilt + layer
+      for (j in seq_len(count)) {
+        rebuilt$layers[[before + j]] <-
+          preserve_ideogram_aesthetics(rebuilt$layers[[before + j]], previous[[j]])
+      }
+    } else {
+      rebuilt <- rebuilt + layer
+    }
   }
   rebuilt$layers <- c(rebuilt$layers, generated[!used])
   rebuilt$scales <- plot$scales

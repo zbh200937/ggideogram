@@ -11,8 +11,11 @@
 #' @param data A karyotype data frame or an [as_ideogram_data()] object.
 #' @param mapping,centromere,cytoband,cytoband_mapping Passed to
 #'   [as_ideogram_data()] for a data-frame input.
-#' @param ncol,chromosome_width,chromosome_gap,max_chr_length,row_gap,orientation,scale_length,order_by,genome_order,homolog_order,reverse_chr,radius,clockwise Passed to the dimensionless
+#' @param ncol,chromosome_width,max_chr_length,row_gap,orientation,scale_length,order_by,genome_order,homolog_order,reverse_chr,radius,clockwise Passed to the dimensionless
 #'   [ideogram_layout()] method.
+#' @param chromosome_gap Clear space between chromosome columns, in body-width
+#'   units. `NULL` uses 8 when constructing a vertical plot with a bp axis,
+#'   and 3 otherwise. An explicit value is retained.
 #' @param start_angle Circular starting angle, clockwise from the top, in degrees.
 #'   `NULL` keeps the closing gap above and to the right: its left boundary is
 #'   the vertical radius at 12 o'clock, for either arrangement direction.
@@ -70,7 +73,7 @@ ggideogram <- function(
     cytoband_mapping = NULL,
     ncol = NULL,
     chromosome_width = 1,
-    chromosome_gap = 3,
+    chromosome_gap = NULL,
     max_chr_length = 40,
     row_gap = 2,
     orientation = c("vertical", "horizontal", "circular"),
@@ -85,14 +88,14 @@ ggideogram <- function(
     gap_angle = NULL,
     opening_angle = NULL,
     clockwise = TRUE,
-    fill = "#F7F7F7",
-    colour = "#4D4D4D",
-    linewidth = 0.4,
+    fill = ideogram_colour("body"),
+    colour = ideogram_colour("outline"),
+    linewidth = ideogram_linewidth("body"),
     curve_points = 32,
     show_names = TRUE,
     name_size = ideogram_text_size("chromosome"),
     name_gap = 0.5,
-    name_colour = "#202020",
+    name_colour = ideogram_colour("text"),
     name_position = c("auto", "start", "end", "middle"),
     axis = FALSE,
     axis_side = c("left", "right", "inner", "outer"),
@@ -103,8 +106,8 @@ ggideogram <- function(
     axis_tick_length = 1.5,
     axis_label_gap = 0.25,
     axis_size = ideogram_text_size("bp"),
-    axis_colour = "#666666",
-    axis_linewidth = 0.3,
+    axis_colour = ideogram_colour("axis"),
+    axis_linewidth = ideogram_linewidth("axis"),
     cytoband_scheme = c("circos", "biovizbase", "only.centromeres"),
     cytoband_palette = NULL,
     cytoband_bleach = 0,
@@ -173,7 +176,8 @@ ggideogram <- function(
   layout <- ideogram_layout(
     semantic, ncol = ncol,
     chromosome_width = chromosome_width,
-    chromosome_gap = chromosome_gap,
+    chromosome_gap = chromosome_gap %||%
+      if (orientation == "vertical" && !identical(axis, FALSE)) 8 else 3,
     max_chr_length = max_chr_length,
     row_gap = row_gap,
     orientation = orientation,

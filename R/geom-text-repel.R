@@ -3,7 +3,7 @@ geom_chr_text_repel <- function(mapping = NULL, data = NULL, track = NULL,
     side = c("right", "left", "outer", "inner"), width = NULL, gap = 0.2,
     columns = 1, max_labels = Inf, overflow = c("warn", "omit"),
     seed = 1, max.iter = 10000, box.padding = 0.4, force = 1, force_pull = 1,
-    segment_colour = "#626A73", segment_linewidth = 0.22, background = "white",
+    segment_colour = ideogram_colour("annotation"), segment_linewidth = ideogram_linewidth("annotation"), background = "white",
     stat = "identity", position = "identity", parse = FALSE, ...,
     na.rm = FALSE, show.legend = NA, inherit.aes = FALSE) {
   if (!requireNamespace("ggrepel", quietly = TRUE)) stopf("Install the optional `ggrepel` package to arrange physical labels.")

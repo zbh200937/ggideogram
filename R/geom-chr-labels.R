@@ -3,7 +3,7 @@
 geom_chr_labels <- function(mapping = NULL, data = NULL, track = NULL,
     side = c("right", "left", "outer", "inner"), width = NULL, gap = 0.2,
     connection_height = 5, label_gap = 0, padding = 0.6,
-    segment_colour = "#626A73", segment_linewidth = 0.22,
+    segment_colour = ideogram_colour("annotation"), segment_linewidth = ideogram_linewidth("annotation"),
     stat = "identity", position = "identity", parse = FALSE, ...,
     na.rm = FALSE, show.legend = NA, inherit.aes = FALSE) {
   if (!identical(stat, "identity")) stopf("Ordered labels require stat = 'identity'.")

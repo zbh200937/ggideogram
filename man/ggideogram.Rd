@@ -12,7 +12,7 @@ ggideogram(
   cytoband_mapping = NULL,
   ncol = NULL,
   chromosome_width = 1,
-  chromosome_gap = 3,
+  chromosome_gap = NULL,
   max_chr_length = 40,
   row_gap = 2,
   orientation = c("vertical", "horizontal", "circular"),
@@ -27,14 +27,14 @@ ggideogram(
   gap_angle = NULL,
   opening_angle = NULL,
   clockwise = TRUE,
-  fill = "#F7F7F7",
-  colour = "#4D4D4D",
-  linewidth = 0.4,
+  fill = ideogram_colour("body"),
+  colour = ideogram_colour("outline"),
+  linewidth = ideogram_linewidth("body"),
   curve_points = 32,
   show_names = TRUE,
   name_size = ideogram_text_size("chromosome"),
   name_gap = 0.5,
-  name_colour = "#202020",
+  name_colour = ideogram_colour("text"),
   name_position = c("auto", "start", "end", "middle"),
   axis = FALSE,
   axis_side = c("left", "right", "inner", "outer"),
@@ -45,8 +45,8 @@ ggideogram(
   axis_tick_length = 1.5,
   axis_label_gap = 0.25,
   axis_size = ideogram_text_size("bp"),
-  axis_colour = "#666666",
-  axis_linewidth = 0.3,
+  axis_colour = ideogram_colour("axis"),
+  axis_linewidth = ideogram_linewidth("axis"),
   cytoband_scheme = c("circos", "biovizbase", "only.centromeres"),
   cytoband_palette = NULL,
   cytoband_bleach = 0,
@@ -61,8 +61,12 @@ ggideogram(
 \item{mapping, centromere, cytoband, cytoband_mapping}{Passed to
 \code{\link[=as_ideogram_data]{as_ideogram_data()}} for a data-frame input.}
 
-\item{ncol, chromosome_width, chromosome_gap, max_chr_length, row_gap, orientation, scale_length, order_by, genome_order, homolog_order, reverse_chr, radius, clockwise}{Passed to the dimensionless
+\item{ncol, chromosome_width, max_chr_length, row_gap, orientation, scale_length, order_by, genome_order, homolog_order, reverse_chr, radius, clockwise}{Passed to the dimensionless
 \code{\link[=ideogram_layout]{ideogram_layout()}} method.}
+
+\item{chromosome_gap}{Clear space between chromosome columns, in body-width
+units. \code{NULL} uses 8 when constructing a vertical plot with a bp axis,
+and 3 otherwise. An explicit value is retained.}
 
 \item{tracks}{\code{NULL} or a named list of \code{\link[=geom_track]{geom_track()}} declarations.}
 

@@ -1,5 +1,12 @@
 # ggideogram 0.5.0
 
+- Local bp axes preserve fractional unit offsets. Vertical bp axes receive
+  wider default chromosome spacing; explicit spacing remains available.
+- Gene-model tracks default to a wider layout, with measured label margins
+  and chromosome-name clearance. Track rebuilds retain value-axis margins.
+- Track titles and value axes inherit base_family unless explicitly styled.
+  Component colours, line widths and font sizes share one set of defaults.
+
 - Native boxplot and violin statistics and positions run before chromosome
   projection, preserving bp widths, value bandwidths and nonlinear summaries.
   Automatic limits include untrimmed density tails and enabled notches.

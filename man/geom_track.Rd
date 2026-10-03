@@ -41,7 +41,8 @@ list name supplies the identifier.}
 inside the chromosome body.}
 
 \item{width, gap}{Track width and gap in chromosome-body-width units. The
-default width is 2 beside the body and 1 inside it; gap is 0.2 beside
+default width is 6 for gene-model tracks, 2 for other beside tracks,
+and 1 inside the body; gap is 0.2 beside
 and 0 inside. Native geom widths
 belong to the layer, e.g. geom = ggplot2::geom_col(width = 1e6).}
 

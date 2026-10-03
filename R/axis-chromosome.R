@@ -73,9 +73,9 @@ scale_x_chromosome <- function(
     body_width = grid::unit(1.8, "mm"),
     label_gap = grid::unit(1, "mm"),
     show_labels = TRUE,
-    fill = "#F7F7F7",
-    colour = "#4D4D4D",
-    linewidth = 0.4,
+    fill = ideogram_colour("body"),
+    colour = ideogram_colour("outline"),
+    linewidth = ideogram_linewidth("body"),
     curve_points = 32,
     ...) {
   chromosome_position_scale(
@@ -109,9 +109,9 @@ scale_y_chromosome <- function(
     body_width = grid::unit(1.8, "mm"),
     label_gap = grid::unit(1, "mm"),
     show_labels = TRUE,
-    fill = "#F7F7F7",
-    colour = "#4D4D4D",
-    linewidth = 0.4,
+    fill = ideogram_colour("body"),
+    colour = ideogram_colour("outline"),
+    linewidth = ideogram_linewidth("body"),
     curve_points = 32,
     ...) {
   chromosome_position_scale(
@@ -199,9 +199,9 @@ guide_chromosome_axis <- function(
     body_width = grid::unit(1.8, "mm"),
     label_gap = grid::unit(1, "mm"),
     show_labels = TRUE,
-    fill = "#F7F7F7",
-    colour = "#4D4D4D",
-    linewidth = 0.4,
+    fill = ideogram_colour("body"),
+    colour = ideogram_colour("outline"),
+    linewidth = ideogram_linewidth("body"),
     curve_points = 32,
     title = ggplot2::waiver(),
     theme = NULL,
@@ -254,9 +254,9 @@ GuideChromosomeAxis <- ggplot2::ggproto(
       body_width = NULL,
       label_gap = NULL,
       show_labels = TRUE,
-      fill = "#F7F7F7",
-      colour = "#4D4D4D",
-      linewidth = 0.4,
+      fill = ideogram_colour("body"),
+      colour = ideogram_colour("outline"),
+      linewidth = ideogram_linewidth("body"),
       curve_points = 32
     )
   ),
