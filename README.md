@@ -3,28 +3,28 @@
 [![R-CMD-check](https://github.com/zbh200937/ggideogram/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/zbh200937/ggideogram/actions/workflows/R-CMD-check.yaml)
 [![License: Artistic-2.0](https://img.shields.io/badge/license-Artistic--2.0-blue.svg)](LICENSE)
 
-**用 ggplot2 绘制染色体、基因结构、多轨道与基因组连接。**
+**Draw chromosomes, gene models, quantitative tracks and genomic links with ggplot2.**
 
-`ggideogram()` 返回标准 **ggplot 对象**。染色体与轨道共享原始 bp 坐标；颜色、点、线、文字和图例沿用 ggplot2。你可以加入普通 geom，定位完整 ggplot/grob 子图，也可以将 ideogram 交给 patchwork 或 cowplot 组合。
+`ggideogram()` returns an ordinary **ggplot object**. Chromosomes and tracks share source bp coordinates, while colours, points, lines, text and legends follow ggplot2. Add native geom layers, anchor complete ggplot/grob insets, or combine ideograms with patchwork and cowplot.
 
-![拟南芥局部环形图：基因结构、数值轨道和位点连接](inst/examples/optimized-local-circle.png)
+![Local Arabidopsis circular view with gene models, quantitative tracks and locus links](inst/examples/optimized-local-circle.png)
 
-[快速开始](#快速开始) · [公共函数](#公共函数) · [示例画廊](#示例画廊) · [English overview](#english-overview)
+[Quick start](#quick-start) · [Public functions](#public-functions) · [Example gallery](#example-gallery)
 
-## 安装
+## Installation
 
-需要 R ≥ 4.1、ggplot2 ≥ 3.5。以下安装块同时安装本文组合示例使用的 patchwork。
+Requires R ≥ 4.1 and ggplot2 ≥ 3.5. This installation block also installs patchwork for the composition examples below.
 
 ```r
 install.packages(c("remotes", "patchwork"))
 remotes::install_github("zbh200937/ggideogram")
 ```
 
-克隆仓库后也可在源码目录运行 `R CMD INSTALL .`。自由避让标签需要 ggrepel；交互图需要 ggiraph 和 htmlwidgets；GRanges 输入需要 GenomicRanges。
+After cloning the repository, you can also run `R CMD INSTALL .` from the source directory. Optional features require ggrepel for repelled labels, ggiraph and htmlwidgets for interactive plots, and GenomicRanges for GRanges input.
 
-## 快速开始
+## Quick start
 
-以下 R 代码块按顺序运行即可。数据均随包提供，不需要另外下载。
+Run the R blocks below in order. All example data are bundled with the package.
 
 ```r
 library(ggideogram)
@@ -33,7 +33,7 @@ library(ggplot2)
 data(human_karyotype, package = "ggideogram")
 data(gene_density, package = "ggideogram")
 
-# 闭区间对应的绘图边界为 Start - 1 和 End。
+# Closed intervals have plotting boundaries at Start - 1 and End.
 density <- transform(gene_density, Mid = (Start - 1 + End) / 2)
 
 p <- ggideogram(human_karyotype, chr = c("1", "2"),
@@ -50,11 +50,11 @@ p <- ggideogram(human_karyotype, chr = c("1", "2"),
 p
 ```
 
-轨道映射中，**`x` 始终是原始 bp，`y` 始终是原始观测值**，与显示方向无关。同一命名轨道里的图层共享空间与值域；图层自己的数据、映射和样式可以分别设置。
+In track mappings, **`x` always means source bp and `y` always means the raw observation value**, regardless of the display orientation. Layers in the same named track share space and value ranges; individual layers can override data, mappings and styles.
 
-### 水平、垂直和环形
+### Horizontal, vertical and circular layouts
 
-同一组数据与轨道可用于三种方向。`reverse_chr` 只改变指定染色体的显示方向。
+Use the same data and track definitions in all three layouts. `reverse_chr` changes the display direction of selected chromosomes while preserving source coordinates.
 
 ```r
 tracks <- list(
@@ -72,19 +72,19 @@ p_circular <- ggideogram(human_karyotype,
 p_circular
 ```
 
-`side = "left"` 对应竖排左侧、横排上侧和环形内侧；`"right"` 对应另一侧。环形也可直接使用 `"inner"` / `"outer"`，主体内轨道使用 `"overlay"`。`width` 与 `gap` 以染色体主体宽度为单位；原生 geom 的点大小、字号和线宽保持 ggplot2 的物理尺寸语义。
+`side = "left"` means left in a vertical layout, above in a horizontal layout, and inward in a circular layout; `"right"` selects the opposite side. Circular layouts also accept `"inner"` / `"outer"`. Use `"overlay"` for tracks inside chromosome bodies. Track `width` and `gap` are measured in chromosome body widths; native point sizes, text sizes and line widths retain ggplot2's physical sizing.
 
-### 调整轨道
+### Adjusting a track
 
-使用同一 `track` 名称即可更新已有轨道。省略的参数保持原值；新内容默认追加，`replace = TRUE` 替换内容。
+Reuse the same `track` name to update a track. Omitted settings stay unchanged; new layers are appended unless `replace = TRUE` is set.
 
-例如 `p + geom_track(track = "density", width = 4, gap = 0.5)` 调整空间，`label = list(size = 2.8)` 调整标题字号，`axis = list(n = 2)` 调整数值刻度数量。
+For example, `p + geom_track(track = "density", width = 4, gap = 0.5)` adjusts space, `label = list(size = 2.8)` changes the title size, and `axis = list(n = 2)` adjusts the number of value-axis ticks.
 
-`limits`、`value_scale`、`transform` 和 `reverse` 控制轨道数值尺度；`label = NULL` 移除标题，`axis = FALSE` 关闭数值轴。原生 point、line、col、area、ribbon、tile、text、boxplot 和 violin 可通过 `geom` 或 `layers` 接入。箱线与小提琴的统计在原始值上计算，宽度参数使用 bp。兼容的第三方 identity geom 也可使用这一入口，具体示例见[交互轨道脚本](inst/examples/interactive-gallery.R)。
+`limits`, `value_scale`, `transform` and `reverse` control the track's value scale. Set `label = NULL` to remove its title or `axis = FALSE` to hide its value axis. Native point, line, col, area, ribbon, tile, text, boxplot and violin layers enter through `geom` or `layers`. Boxplot and violin statistics run on raw values, with widths specified in bp. Compatible third-party identity geoms can use the same interface; see the [interactive track examples](inst/examples/interactive-gallery.R).
 
-## 局部视图与基因结构
+## Local views and gene models
 
-下面使用包内拟南芥 TAIR10 / Araport11 注释，按 GFF3 的 Parent 关系连接转录本和基因，再绘制 Chr1 的局部结构。
+This example uses bundled Arabidopsis TAIR10 / Araport11 annotations. It resolves GFF3 Parent relationships between transcripts and genes, then draws a local view of Chr1.
 
 ```r
 features <- read_chr_features(system.file("extdata",
@@ -111,17 +111,17 @@ p_genes <- ggideogram(view, orientation = "horizontal", axis = TRUE) +
 p_genes
 ```
 
-外显子以轮廓表达完整区间，CDS 和显式 UTR 使用填充；内含子箭头表示链方向。`mode = "gene"` 表达基因内同类区间的并集，`mode = "transcript"` 配合 `transcript` 映射逐条绘制转录本。完整源注释可用于局部轨道，结构按显示窗口裁切，刻度保留原始 bp。
+Exon outlines show complete exon intervals, CDS and explicitly annotated UTRs use fills, and intron arrows indicate strand direction. `mode = "gene"` shows the union of each feature type within a gene; `mode = "transcript"` with a `transcript` mapping draws individual transcripts. Local tracks accept complete source annotations, clip structures to the display window, and retain original bp labels.
 
-`read_karyotype()` 读取 chrom.sizes / FAI；`read_chr_features()` 读取 BED / GFF3 / GTF，`as_chr_features()` 接入数据框或 GRanges。**BED 由读取函数转换为 1-based closed；GFF3、GTF 和 GRanges 保留其注释坐标。** 染色体名称和组装版本应与核型一致。
+`read_karyotype()` reads chrom.sizes / FAI files. `read_chr_features()` reads BED / GFF3 / GTF, and `as_chr_features()` accepts data frames or GRanges. **The BED reader converts coordinates to 1-based closed intervals; GFF3, GTF and GRanges retain their annotation coordinates.** Chromosome names and assembly versions should match the karyotype.
 
-需要窗口汇总时，`bin_genome()` 提供区间中点计数（`count`）、区间并集覆盖率（`coverage`）和按重叠长度加权的均值（`weighted_mean`）；统计结果可直接映射到数值轨道。
+For window summaries, `bin_genome()` provides interval midpoint counts (`count`), union coverage fractions (`coverage`), and means weighted by overlap length (`weighted_mean`). Map the results directly to quantitative tracks.
 
-## 位点标注与双端连接
+## Locus annotations and links
 
-`geom_locus()` 接入点、文字、区间和引导线。文字可选择 `position = "identity"`、`"spread"` 或 `"repel"`。有序展开按实际文字尺寸安排位置，引导线仍连接真实位点；`track` 和 `track_position` 可把标注放在已声明轨道的近端、中线或远端。完整代码见[位点与标签示例](inst/examples/label-layout-gallery.R)。
+`geom_locus()` adds points, text, intervals and leaders. Text accepts `position = "identity"`, `"spread"` or `"repel"`. Ordered spreading uses actual text dimensions while leaders retain the source loci. `track` and `track_position` place annotations at a declared track's near edge, middle or far edge. See the [label examples](inst/examples/label-layout-gallery.R) for complete code.
 
-下面绘制 MCScanX 官方拟南芥示例中的 Chr1–Chr5 共线性区块。
+The following plot shows Chr1–Chr5 collinear blocks from the official MCScanX Arabidopsis example.
 
 ```r
 blocks <- read.delim(system.file("extdata",
@@ -139,11 +139,11 @@ p_links <- ggideogram(arabidopsis, orientation = "circular") +
 p_links
 ```
 
-`type = "point"` 连接两个位点；`type = "interval"` 保留两端区间宽度。也可用 `chr_nodes()` 建立唯一 ID 节点表，再通过 `aes(from, to)` 连接。多基因组数据使用 `chr_key()` 区分基因组、染色体与组装版本，见[多基因组示例](inst/examples/multi-genome-gallery.R)。
+`type = "point"` connects two loci; `type = "interval"` preserves interval widths at both ends. You can also build a node table with unique IDs using `chr_nodes()`, then connect nodes through `aes(from, to)`. For multiple genomes, `chr_key()` distinguishes genome, chromosome and assembly identities; see the [multi-genome examples](inst/examples/multi-genome-gallery.R).
 
-## 完整子图与外部组合
+## Insets and plot composition
 
-完整子图保留自己的坐标、主题和图例；`geom_locus_inset()` 只将其锚点定位到主图 bp。
+A complete inset retains its own coordinates, theme and guides. `geom_locus_inset()` anchors it to the host plot's bp coordinates.
 
 ```r
 child <- ggplot(subset(density, Chr == "1"), aes(Value)) +
@@ -160,7 +160,7 @@ p_inset <- ggideogram(human_karyotype, chr = "1",
     width = grid::unit(40, "mm"), height = grid::unit(30, "mm"))
 p_inset
 
-# ideogram 作为并列面板，或嵌入另一张图。
+# Use the ideogram as a panel or embed it in another plot.
 p_combined <- patchwork::wrap_plots(p, child, widths = c(2, 1))
 p_embedded <- child + patchwork::inset_element(p_circular,
   left = 0.5, bottom = 0.5, right = 1, top = 1)
@@ -170,7 +170,7 @@ ggsave("ideogram-combined.pdf", p_combined,
   width = 180, height = 100, units = "mm")
 ```
 
-染色体也可直接作为普通 ggplot 的离散 x/y 轴，按染色体键与原生图层对齐。
+Chromosomes can also form the native discrete x/y axis of an ordinary ggplot, aligning with its layers by chromosome key.
 
 ```r
 p_axis <- ggplot(subset(gene_density, Chr %in% c("1", "2", "3")),
@@ -182,49 +182,39 @@ p_axis <- ggplot(subset(gene_density, Chr %in% c("1", "2", "3")),
 p_axis
 ```
 
-## 公共函数
+## Public functions
 
-| 用途 | 入口 |
+| Purpose | Functions |
 | --- | --- |
-| 建图与染色体主体、名称、刻度、条带、内部填充 | `ggideogram()`、`geom_chr(component = ...)` |
-| 声明或调整轨道，接入原生图层 | `geom_track()`、`track_layout()` |
-| 基因与转录本结构 | `geom_genemodel(mode = ...)` |
-| 位点点标记、文字、区间与引导线 | `geom_locus(geom = ...)` |
-| 节点表与双端关系 | `chr_nodes()`、`geom_chrlink(type = ...)` |
-| 定位完整子图、提取标准 grob | `geom_locus_inset()`、`as_ideogram_grob()` |
-| 染色体作为普通图的轴 | `scale_x_chromosome()`、`scale_y_chromosome()` |
-| 数据读取、局部窗口、窗口汇总 | `read_karyotype()`、`read_chr_features()`、`chr_view()`、`view_chr_data()`、`bin_genome()` |
-| 扩展包的数据投影 | `project_chr_point()`、`project_chr_interval()`、`project_chr_track()` |
-| 交互查看与源记录选择、导出 | `as_ideogram_widget()` |
+| Build plots; draw chromosome bodies, names, ticks, bands and internal fills | `ggideogram()`, `geom_chr(component = ...)` |
+| Declare or adjust tracks and add native layers | `geom_track()`, `track_layout()` |
+| Gene and transcript structures | `geom_genemodel(mode = ...)` |
+| Locus points, text, intervals and leaders | `geom_locus(geom = ...)` |
+| Node tables and paired relationships | `chr_nodes()`, `geom_chrlink(type = ...)` |
+| Anchor complete insets or extract a standard grob | `geom_locus_inset()`, `as_ideogram_grob()` |
+| Chromosome axes for ordinary plots | `scale_x_chromosome()`, `scale_y_chromosome()` |
+| Read data, select local views and summarize windows | `read_karyotype()`, `read_chr_features()`, `chr_view()`, `view_chr_data()`, `bin_genome()` |
+| Coordinate projections for extensions | `project_chr_point()`, `project_chr_interval()`, `project_chr_track()` |
+| Interactive viewing, selection and source-record export | `as_ideogram_widget()` |
 
-详细参数及示例见各函数的 R 帮助页，例如 `?geom_track`。主图样式继续使用 `theme()`、`scale_*()` 和 `guides()`。
+See individual R help pages, such as `?geom_track`, for parameters and examples. Use standard `theme()`, `scale_*()` and `guides()` to style plots.
 
-## 示例画廊
+## Example gallery
 
-| 内容 | 可运行脚本 / 已有图形 |
+| Content | Runnable scripts / figures |
 | --- | --- |
-| 局部环形、同轨多层、基因结构与 ID 连接 | [脚本](inst/examples/optimized-gallery.R) · [PNG](inst/examples/optimized-local-circle.png) · [PDF](inst/examples/optimized-local-circle.pdf) |
-| ideogram 与普通柱状图、箱线图组合 | [脚本](inst/examples/original-data-composition.R) · [PNG](inst/examples/original-data-composition.png) |
-| 完整子图向内接入、ideogram 向外嵌入 | [脚本](inst/examples/original-data-gallery.R) · [PNG](inst/examples/gallery-bidirectional-insets.png) |
-| 原生染色体 x/y 轴 | [脚本](inst/examples/original-data-axis-integration.R) · [x 轴图](inst/examples/original-data-chromosome-x-axis.png) · [y 轴图](inst/examples/original-data-chromosome-y-axis.png) |
-| 局部窗口与基因、转录本结构 | [局部视图](inst/examples/local-view-gallery.R) · [基因结构](inst/examples/gene-structure-gallery.R) |
-| 内部填充、密集标签、共线性与多基因组 | [内部注释](inst/examples/internal-annotation-gallery.R) · [标签](inst/examples/label-layout-gallery.R) · [连接](inst/examples/connection-gallery.R) · [多基因组](inst/examples/multi-genome-gallery.R) |
-| 全基因组环形与交互 | [环形](inst/examples/circular-gallery.R) · [交互](inst/examples/interactive-gallery.R) |
+| Local circular views, shared tracks, gene models and ID links | [Script](inst/examples/optimized-gallery.R) · [PNG](inst/examples/optimized-local-circle.png) · [PDF](inst/examples/optimized-local-circle.pdf) |
+| Ideograms combined with ordinary bar charts and boxplots | [Script](inst/examples/original-data-composition.R) · [PNG](inst/examples/original-data-composition.png) |
+| Complete plots inside ideograms, and ideograms inside other plots | [Script](inst/examples/original-data-gallery.R) · [PNG](inst/examples/gallery-bidirectional-insets.png) |
+| Native chromosome x/y axes | [Script](inst/examples/original-data-axis-integration.R) · [x-axis figure](inst/examples/original-data-chromosome-x-axis.png) · [y-axis figure](inst/examples/original-data-chromosome-y-axis.png) |
+| Local windows, genes and transcripts | [Local views](inst/examples/local-view-gallery.R) · [Gene models](inst/examples/gene-structure-gallery.R) |
+| Internal fills, dense labels, synteny and multiple genomes | [Internal annotations](inst/examples/internal-annotation-gallery.R) · [Labels](inst/examples/label-layout-gallery.R) · [Links](inst/examples/connection-gallery.R) · [Multiple genomes](inst/examples/multi-genome-gallery.R) |
+| Whole-genome circular and interactive plots | [Circular](inst/examples/circular-gallery.R) · [Interactive](inst/examples/interactive-gallery.R) |
 
-各脚本开头列出运行方法，相关数据随包提供于 [inst/extdata](inst/extdata)。数据来源与准备方法见脚本注释及该目录中的来源说明。
+Each script starts with run instructions. Associated data are bundled in [inst/extdata](inst/extdata); source records and preparation details appear in script comments and provenance files in that directory.
 
-## 致谢与许可证
+## Acknowledgements and license
 
-本项目的染色体几何与部分示例数据源自 [RIdeogram](https://github.com/TickingClock1992/RIdeogram)。感谢原作者 Zhaodong Hao、Dekang Lv、Ying Ge、Jisen Shi、Dolf Weijers、Guangchuang Yu 和 Jinhui Chen。原论文：Hao et al. (2020), *RIdeogram: drawing SVG graphics to visualize and map genome-wide data on the idiograms*, [PeerJ Computer Science 6:e251](https://doi.org/10.7717/peerj-cs.251)。
+This project's chromosome geometry and some example datasets derive from [RIdeogram](https://github.com/TickingClock1992/RIdeogram). We thank its original authors: Zhaodong Hao, Dekang Lv, Ying Ge, Jisen Shi, Dolf Weijers, Guangchuang Yu and Jinhui Chen. Original publication: Hao et al. (2020), *RIdeogram: drawing SVG graphics to visualize and map genome-wide data on the idiograms*, [PeerJ Computer Science 6:e251](https://doi.org/10.7717/peerj-cs.251).
 
-`ggideogram` 是独立的 ggplot2 扩展，重构了数据模型、布局、原生图层与组合接口，采用 [Artistic License 2.0](LICENSE)。包内其他来源的数据附有来源记录，MCScanX 材料的许可证见 [MCScanX-LICENSE.txt](inst/extdata/MCScanX-LICENSE.txt)。
-
-## English overview
-
-**ggideogram extends ggplot2 to chromosome coordinates.** It returns an ordinary ggplot with shared genomic bp coordinates for chromosome bodies, gene models, quantitative tracks, locus annotations and links.
-
-Use `geom_track()` to add native ggplot2 layers: **x is source bp and y is the raw track value**, whether the layout is vertical, horizontal or circular. Track settings control space and value ranges; native layers retain their styling and guides. `geom_genemodel()` shows exon outlines, CDS/UTR fills and intron direction. `geom_locus()` adds points and labels, and `geom_chrlink()` connects loci or intervals.
-
-`geom_locus_inset()` anchors a complete ggplot/grob with its own coordinates. Ideograms also work as patchwork/cowplot panels or insets. `scale_x_chromosome()` and `scale_y_chromosome()` provide chromosome axes for ordinary charts. Readers support chromosome sizes/FAI, BED, GFF3/GTF and optional GRanges input; local views preserve source coordinates. Compatible ggiraph layers provide optional interactive viewing.
-
-Install from GitHub with the installation block above, then run the examples from top to bottom. They use bundled human and Arabidopsis data. R ≥ 4.1 and ggplot2 ≥ 3.5 are required. This independent refactor derives chromosome geometry and example data from **RIdeogram by Hao et al.** and is distributed under **Artistic-2.0**.
+`ggideogram` is an independent ggplot2 extension with a reworked data model, layout, native layers and composition interfaces, distributed under the [Artistic License 2.0](LICENSE). Other bundled datasets include source records; the license for MCScanX materials is provided in [MCScanX-LICENSE.txt](inst/extdata/MCScanX-LICENSE.txt).
