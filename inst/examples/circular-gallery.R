@@ -3,8 +3,12 @@ library(ggideogram)
 library(ggplot2)
 source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
 output <- 'work/api-optimization/examples/circular-gallery'
-circle_theme <- function(plot) gallery_theme(plot.margin = plot$theme$plot.margin,
-  legend.box.spacing = plot$theme$legend.box.spacing)
+circle_theme <- function(plot) {
+  spacing <- plot$theme$legend.box.spacing
+  if (is.null(spacing)) spacing <- grid::unit(0, 'mm')
+  gallery_theme(plot.margin = plot$theme$plot.margin,
+    legend.box.spacing = grid::unit.pmax(spacing, gallery_legend_spacing))
+}
 circle_style <- list(orientation = 'circular', name_size = 2.9, name_colour = 'black',
   fill = '#F0F2F4', colour = '#626A73', linewidth = 0.22, chromosome_width = 0.85,
   axis_size = 2.7, axis_colour = 'black', axis_linewidth = 0.22,
@@ -34,10 +38,10 @@ p_human <- do.call(ggideogram, c(list(data = k, radius = 25, gap_angle = gaps,
       geom = ggplot2::geom_line(colour = "#4477AA", linewidth = 0.22)) +
   geom_track(data = centromeres, track = "body", mapping = aes(chr = Chr, x = Mid, y = 0.5),
       geom = ggplot2::geom_point(colour = "#A85469", size = 1.2)) +
-  geom_track(track = "count", axis = list(chr = "1", position = "gap", breaks = c(0, count_max),
-      size = 2.7, colour = "black", linewidth = 0.22, tick_length = 1)) +
-  geom_track(track = "rate", axis = list(chr = "1", position = "gap", breaks = c(0, rate_max),
-      size = 2.7, colour = "black", linewidth = 0.22, tick_length = 1)) +
+  geom_track(track = "count", axis = gallery_axis(chr = "1", position = "gap", breaks = c(0, count_max),
+      colour = "black", linewidth = 0.22, tick_length = 1)) +
+  geom_track(track = "rate", axis = gallery_axis(chr = "1", position = "gap", breaks = c(0, rate_max),
+      colour = "black", linewidth = 0.22, tick_length = 1)) +
   annotate('text', x = 0, y = 0, label = 'Human · GRCh38\n24 chromosomes\n\nOuter: genes / Mb\nInner: genes per window\nPink: centromere midpoint',
     size = 2.9, lineheight = 1.25, colour = 'black')
 p_human <- p_human + circle_theme(p_human)
@@ -75,11 +79,13 @@ p_synteny <- do.call(ggideogram, c(list(data = k, radius = 23,
   geom_chr(component = "fill", data = spans, track = "body", aes(chr = Chr, start = Start,
       end = End, fill = Direction), key_glyph = gallery_key) +
   geom_chr(component = "body", fill = NA, colour = "#626A73", linewidth = 0.22, cytoband = FALSE) +
-  geom_track(track = "count", axis = list(chr = "1", position = "gap", breaks = c(0, count_max), size = 2.7,
+  geom_track(track = "count", axis = gallery_axis(chr = "1", position = "gap", breaks = c(0, count_max),
       colour = "black", linewidth = 0.22, tick_length = 1)) +
   scale_fill_manual(values = c('+' = '#4477AA', '-' = '#CC6677'), name = 'Block order',
     breaks = c('+', '-'), labels = c('Same', 'Reversed'))
 p_synteny <- p_synteny + circle_theme(p_synteny)
+p_synteny <- p_synteny + labs(title = 'Arabidopsis · Chr1 and Chr5',
+  caption = 'TAIR10 chromosome lengths; ten bundled MCScanX blocks.\nInner bars: displayed gene-pair endpoints per 1 Mb window.')
 gallery_save(p_synteny, output, '02-arabidopsis-synteny', height = 185)
 
 # 3. All 21 Chinese Spring chromosomes, ordered A/B/D with explicit group gaps.

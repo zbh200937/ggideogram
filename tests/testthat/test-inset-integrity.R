@@ -1,3 +1,25 @@
+test_that("interval insets use closed integer boundaries and retain their anchors", {
+  k <- data.frame(Chr = 'A', Start = 100, End = 200)
+  inset <- function(start, end) geom_locus_inset(grid::rectGrob(),
+    data = data.frame(Chr = 'A', Start = start, End = end),
+    mapping = ggplot2::aes(chr = Chr, start = Start, end = End),
+    width = grid::unit(2, 'mm'), height = grid::unit(2, 'mm'))
+  for (orientation in c('vertical', 'horizontal', 'circular')) {
+    base <- ggideogram(k, orientation = orientation, show_names = FALSE)
+    expect_error(ggplot2::ggplotGrob(base + inset(100, 120)), 'outside')
+    p <- base + inset(101, 101)
+    actual <- utils::tail(ggplot2::ggplot_build(p)$data, 1)[[1]]
+    expect_equal(actual$ideogram_position, 100.5)
+    expect_equal(actual$ideogram_inset_start, 101)
+    expect_equal(actual$ideogram_inset_end, 101)
+    expect_no_warning(ggplot2::ggplotGrob(p))
+  }
+  expect_error(inset(120.4, 140.2), 'closed integer')
+  expect_error(inset(0, 20), 'closed integer')
+  expect_error(inset(140, 120), 'closed integer')
+  expect_error(inset(NA_real_, 120), 'closed integer')
+})
+
 inset_integrity_fixture <- function(component = NULL) {
   karyotype <- data.frame(Chr = "A", Start = 0, End = 100)
   if (is.null(component)) {

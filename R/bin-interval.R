@@ -1,7 +1,7 @@
 # Explicit interval statistics for fixed chromosome windows.
 
 bin_interval_windows <- function(data, karyotype, window, value, FUN, empty,
-                                 method, group, ...) {
+                                 method, group, count_position, ...) {
   input <- window_input(data, karyotype, window)
   k <- input$karyotype
   chr <- input$chr; start <- input$start; end <- input$end
@@ -27,6 +27,9 @@ bin_interval_windows <- function(data, karyotype, window, value, FUN, empty,
     if (!is.null(value)) stopf('Count and coverage do not use a `value` column.')
     values <- rep(1, nrow(data))
   }
+  if (method != 'count') count_position <- NULL else
+    if (!'End' %in% names(data)) count_position <- 'start'
+  at <- if (method == 'count') window_position(start, end, count_position) else NULL
   groups <- if (length(group)) unique(data[group]) else data.frame(.all = 1)
   parts <- list()
   for (gi in seq_len(nrow(groups))) {
@@ -45,25 +48,13 @@ bin_interval_windows <- function(data, karyotype, window, value, FUN, empty,
         Value = if (method == 'weighted_mean') NA_real_ else 0,
         Width = upper - lower + 1, N = 0L, N_valid = 0L, stringsAsFactors = FALSE)
       if (method == 'count') {
-        midpoint <- (start[rows] + end[rows]) / 2
-        index <- findInterval(midpoint, upper, left.open = TRUE) + 1L
+        index <- findInterval(at[rows], upper, left.open = TRUE) + 1L
         result$N <- tabulate(index, nbins = length(upper))
         result$N_valid <- result$N
         result$Value <- as.numeric(result$N)
         result$Rate <- result$Value / result$Width * 1e6
-      } else for (wi in seq_along(upper)) {
-        lo <- pmax(start[rows], lower[wi]); hi <- pmin(end[rows], upper[wi])
-        hit <- lo <= hi
-        result$N[wi] <- sum(hit)
-        valid <- hit & !is.na(values[rows])
-        result$N_valid[wi] <- sum(valid)
-        if (method == 'coverage') {
-          result$Value[wi] <- union_covered_bp(lo[hit], hi[hit]) / result$Width[wi]
-        } else if (any(valid) && (na.rm || all(valid[hit]))) {
-          weights <- hi[valid] - lo[valid] + 1
-          result$Value[wi] <- sum(values[rows][valid] * (weights / sum(weights)))
-        }
-      }
+      } else result <- summarise_interval_windows(result, start[rows], end[rows],
+        values[rows], method, na.rm)
       for (name in group) result[[name]] <- groups[[name]][gi]
       parts[[length(parts) + 1L]] <- result
     }
@@ -76,12 +67,34 @@ bin_interval_windows <- function(data, karyotype, window, value, FUN, empty,
     if (method == 'count') out$Rate <- numeric()
   }
   rownames(out) <- NULL
-  attr(out, 'window_summary') <- list(method = method, group = group,
-    coordinates = '1-based closed', unit = switch(method,
-      count = 'features', coverage = 'fraction', weighted_mean = value),
-    na.rm = na.rm, overlap = if (method == 'coverage') 'union' else
-      if (method == 'weighted_mean') 'independent observations' else 'midpoint')
+  attr(out, 'window_summary') <- window_metadata(method, window, group, value,
+    count_position, na.rm, empty = if (method == 'weighted_mean') NA_real_ else 0)
   out
+}
+
+summarise_interval_windows <- function(result, start, end, values, method, na.rm) {
+  index <- order(start, end)
+  start <- start[index]; end <- end[index]; values <- values[index]
+  last <- findInterval(result$End, start)
+  active <- integer(); previous <- 0L
+  for (wi in seq_len(nrow(result))) {
+    if (last[wi] > previous) active <- c(active, seq.int(previous + 1L, last[wi]))
+    previous <- last[wi]
+    active <- active[end[active] >= result$Start[wi]]
+    if (!length(active)) next
+    lo <- pmax(start[active], result$Start[wi])
+    hi <- pmin(end[active], result$End[wi])
+    valid <- !is.na(values[active])
+    result$N[wi] <- length(active)
+    result$N_valid[wi] <- sum(valid)
+    if (method == 'coverage') {
+      result$Value[wi] <- union_covered_bp(lo, hi) / result$Width[wi]
+    } else if (any(valid) && (na.rm || all(valid))) {
+      weights <- hi[valid] - lo[valid] + 1
+      result$Value[wi] <- sum(values[active][valid] * (weights / sum(weights)))
+    }
+  }
+  result
 }
 
 union_covered_bp <- function(start, end) {

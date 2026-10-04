@@ -14,6 +14,7 @@ columns: chromosome, start, end, band name and stain.}
 }
 \value{
 A data frame with \code{Chr}, \code{Start}, \code{End}, \code{Name}, and \code{Stain}.
+UCSC 0-based half-open intervals are converted to 1-based closed intervals.
 }
 \description{
 Read a UCSC cytoband table

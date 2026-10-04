@@ -68,7 +68,7 @@ transform_ideogram_semantics <- function(layout, data) {
     return(transform_ideogram_track(layout, data))
   }
   if (all(c("ideogram_inset_start", "ideogram_inset_end") %in% names(data))) {
-    project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_start)
+    project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_start - 1)
     project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_end)
   }
   data <- apply_chr_repel_request(layout, data)

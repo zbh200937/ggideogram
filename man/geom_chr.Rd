@@ -37,7 +37,9 @@ NULL uses the constructor default on a new plot.}
 
 \item{...}{Component styling. A new plot also accepts \code{\link[=ggideogram]{ggideogram()}} layout
 arguments such as \code{orientation}. Names accept size/gap/position; axes
-accept side/breaks/units.}
+accept side/breaks/units. Bodies accept fill/colour/linewidth/alpha/linetype.
+Unsupported parameters and visual mappings outside \code{component = "fill"}
+raise an error.}
 }
 \value{
 An additive chromosome component returning a standard ggplot.

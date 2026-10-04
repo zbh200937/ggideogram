@@ -57,7 +57,7 @@ test_that("ideogram_data validates scientific coordinate invariants", {
 
 test_that("cytobands retain source columns and are bounded by chromosomes", {
   kar <- data.frame(Chr = c("A", "B"), Start = 0, End = c(100, 80))
-  bands <- data.frame(seqname = c("A", "A", "B"), lo = c(0, 50, 0),
+  bands <- data.frame(seqname = c("A", "A", "B"), lo = c(1, 51, 1),
                       hi = c(50, 100, 80), stain = c("gneg", "gpos", "gneg"))
   x <- as_ideogram_data(
     kar,

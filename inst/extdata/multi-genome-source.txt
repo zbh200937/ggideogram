@@ -32,6 +32,15 @@ This is a sampled comparison; each record retains its exact query interval.
 Relative orientation is the equality/difference of the two returned strand fields.
 https://rest.ensembl.org/documentation/info/genomic_alignment_region
 
+The bundled multi-genome-rest-snapshot.json preserves the original assembly
+responses and the eight selected blocks without alignment sequence strings.
+It records the exact requests, source-response SHA-256 hashes, selection rule
+and checksums of the five output tables. The historical Compara release was
+not recorded; it is stored as null, separately from GFF3 annotation release 62.
+Regeneration replays these fixed REST records and checks each output table
+before writing it. It does not fetch updated alignments from the live API.
+
 Regenerate all tables with Python 3.9+ from the repository root:
 python3 inst/examples/prepare-multi-genome-data.py
-Source records are cached under work/multi-genome-source.
+Versioned FASTA-header, assembly-report and GFF3 records are cached under
+work/multi-genome-source; fixed REST records are bundled in inst/extdata.

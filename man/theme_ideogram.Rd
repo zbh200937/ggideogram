@@ -27,4 +27,7 @@ A ggplot2 theme.
 \code{theme_ideogram()} is a small \code{\link[ggplot2:theme_void]{ggplot2::theme_void()}} preset. It does not
 remove guides, set a page size, or alter coordinate scaling. A later
 \code{theme()} call therefore overrides it exactly as for any other ggplot.
+The default gap between the plot and its legends is 6 mm. Circular plots
+can reserve additional space for chromosome text; set \code{legend.box.spacing}
+in a later \code{theme()} call to choose an explicit gap.
 }

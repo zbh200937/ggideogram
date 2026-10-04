@@ -16,13 +16,18 @@ naturally to standard filled ggplot2 shapes 21, 22, and 24.}
 }
 }
 \source{
-RIdeogram: \url{https://github.com/TickingClock1992/RIdeogram}
+GENCODE annotations, randomly sampled and distributed with RIdeogram:
+\url{https://github.com/TickingClock1992/RIdeogram}.
 }
 \usage{
 Random_RNAs_500
 }
 \description{
-Marker positions inherited from RIdeogram. Use the interval midpoint as the
+A random sample of 500 tRNA, rRNA and miRNA annotations from GENCODE,
+inherited unchanged from RIdeogram. Counts of this sample describe sampled
+records, not the complete RNA annotation catalogue or RNA expression.
+The original GENCODE release and sampling seed are not recorded upstream.
+Use the interval midpoint as the
 \code{position} aesthetic in \code{\link[=geom_locus]{geom_locus()}}. \code{color} retains the source
 package's bare hexadecimal strings, so add \verb{#} before passing them to a
 standard ggplot2 scale.

@@ -13,7 +13,8 @@ bin_genome(
   empty = NULL,
   ...,
   method = NULL,
-  group = NULL
+  group = NULL,
+  count_position = c("midpoint", "start", "end")
 )
 }
 \arguments{
@@ -35,12 +36,13 @@ each chromosome's \code{Start + 1} and end at its \code{End}.}
 \code{\link[=length]{length()}} when \code{value} is \code{NULL} and \code{\link[=mean]{mean()}} otherwise.}
 
 \item{empty}{Value for a window with no rows in it. Defaults to \code{0} for
-counts and \code{NA} for a summary of nothing.}
+counts and \code{NA} for a summary of nothing. Missing results from occupied
+windows remain missing; they are not replaced by \code{empty}.}
 
 \item{...}{Passed to \code{FUN}.}
 
 \item{method}{Explicit \code{"count"}, \code{"coverage"}, or \code{"weighted_mean"}.
-Count assigns each feature once by its midpoint. Coverage is the union of
+Count assigns each feature once by \code{count_position}. Coverage is the union of
 covered bases divided by actual window width. Weighted mean uses each
 interval's overlap length; overlapping observations contribute separately.
 \code{NULL} retains the original \code{FUN} behavior.}
@@ -49,12 +51,25 @@ interval's overlap length; overlapping observations contribute separately.
 explicit \code{method}. Every observed group receives every karyotype window.
 For weighted means, \code{na.rm = TRUE} in \code{...} excludes missing values and
 their weights; otherwise a missing overlapping value produces \code{NA}.}
+
+\item{count_position}{Representative position for count and \code{FUN} summaries:
+\code{"midpoint"} (default), \code{"start"}, or \code{"end"}. With no \code{End} column all
+three use \code{Start}. Coverage and weighted means do not accept an explicit
+setting because they use the complete interval.}
 }
 \value{
 A data frame with \code{Chr}, \code{Start}, \code{End}, \code{Value}, in karyotype order.
 Window coordinates are 1-based closed intervals.
 Explicit methods additionally return \code{Width}, \code{N} and \code{N_valid}; counts
-include \code{Rate} per Mb. Method and unit are stored in \code{window_summary}.
+include \code{Rate} per Mb. All results carry a \code{window_summary} attribute with
+\code{method}, \code{group}, \code{coordinates}, \code{unit}, \code{value}, \code{window}, \code{count_position},
+\code{na.rm}, \code{overlap}, \code{empty} and \code{summary}. Default row counts use method
+\code{"count"}; other \code{FUN} calls use \code{"summary"} and record the function
+expression. Count units are \code{"features"}, coverage units are \code{"fraction"}.
+For weighted means and \code{FUN} summaries, \code{unit} is \code{NULL} and \code{value} names
+the input column; units are not inferred from column names. \code{window} is
+the requested width in bp; actual widths follow each row's boundaries.
+For \code{FUN}, \code{na.rm} records only an explicitly forwarded argument.
 }
 \description{
 Summarises a table of positions or intervals into equal-width windows along
@@ -62,12 +77,18 @@ each chromosome, giving the \code{Chr} / \code{Start} / \code{End} / \code{Value
 by chromosome track layers.
 }
 \details{
-A row is assigned to the window containing its midpoint when it has an \code{End},
-and its \code{Start} otherwise, so an interval is counted once however long it is.
+Count and \code{FUN} summaries assign each row to one window. By default the
+representative position is \code{(Start + End) / 2} when \code{End} is present, and
+\code{Start} otherwise. A position exactly at a window's end belongs to that
+window. Coverage and weighted means use complete interval overlaps.
 }
 \examples{
 kar <- data.frame(Chr = "A", Start = 0, End = 2500)
 snps <- data.frame(Chr = "A", Start = c(10, 20, 1500), Qual = c(30, 50, 99))
 bin_genome(snps, kar, window = 1000)
 bin_genome(snps, kar, window = 1000, value = "Qual", FUN = max)
+intervals <- data.frame(Chr = "A", Start = 950, End = 1150)
+counts <- bin_genome(intervals, kar, window = 1000, method = "count",
+  count_position = "start")
+attr(counts, "window_summary")
 }

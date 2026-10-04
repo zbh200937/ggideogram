@@ -30,6 +30,8 @@ ggideogram(
   fill = ideogram_colour("body"),
   colour = ideogram_colour("outline"),
   linewidth = ideogram_linewidth("body"),
+  alpha = NA,
+  linetype = 1,
   curve_points = 32,
   show_names = TRUE,
   name_size = ideogram_text_size("chromosome"),
@@ -82,7 +84,7 @@ and a 20-degree closing gap for track names and numerical scales.}
 opening independently of the other chromosome gaps. \code{NULL} uses the closing
 value from \code{gap_angle}, or 20 degrees when both are \code{NULL}.}
 
-\item{fill, colour, linewidth}{Chromosome body style. Sizes use ordinary
+\item{fill, colour, linewidth, alpha, linetype}{Chromosome body style. Sizes use ordinary
 ggplot2 units.}
 
 \item{curve_points}{Number of samples for chromosome boundaries, including

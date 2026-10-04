@@ -330,8 +330,9 @@ validate_inset_mapping <- function(data, mapping) {
                               what = "mapping")
     if (!is.numeric(interval$start) || !is.numeric(interval$end) ||
         any(!is.finite(interval$start)) || any(!is.finite(interval$end)) ||
-        any(interval$start > interval$end)) {
-      stopf("Inset intervals require finite numeric `start <= end`.")
+        any(interval$start < 1 | interval$start > interval$end |
+            interval$start != floor(interval$start) | interval$end != floor(interval$end))) {
+      stopf("Inset intervals require positive closed integer `start <= end`.")
     }
   }
   plots <- base$plot

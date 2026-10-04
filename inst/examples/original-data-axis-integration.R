@@ -20,8 +20,8 @@ axis_gallery <- list(
   plot_margin_pt = c(top = 7, right = 8, bottom = 7, left = 8),
   axis_text_size = 9,
   x_axis = list(
-    width_mm = 280,
-    height_mm = 130,
+    width_mm = 185,
+    height_mm = 100,
     axis_length_mm = 16,
     body_width_mm = 1.5,
     label_gap_mm = 0.8,
@@ -49,6 +49,8 @@ axis_gallery <- list(
 data("human_karyotype", package = "ggideogram")
 data("gene_density", package = "ggideogram")
 data("Random_RNAs_500", package = "ggideogram")
+gene_density$Width <- gene_density$End - gene_density$Start + 1
+gene_density$Rate <- gene_density$Value / (gene_density$Width / 1e6)
 
 chromosome_order <- as.character(human_karyotype$Chr)
 if (any(!Random_RNAs_500$Chr %in% chromosome_order) ||
@@ -116,13 +118,13 @@ x_axis_plot <- ggplot(rna_counts, aes(Chr, Records)) +
     expand = expansion(mult = axis_gallery$x_axis$value_expand)
   ) +
   labs(
-    title = "RNA records across human chromosomes",
+    title = "Sampled RNA annotations across human chromosomes",
     subtitle = paste0(
       format(nrow(Random_RNAs_500), big.mark = ","),
-      " bundled RNA loci"
+      " randomly selected GENCODE RNA annotations"
     ),
     x = "Chromosome",
-    y = "RNA records"
+    y = "Sampled records"
   ) +
   publication_theme +
   theme(
@@ -133,7 +135,7 @@ x_axis_plot <- ggplot(rna_counts, aes(Chr, Records)) +
 # The chromosome guide is the y axis of an otherwise ordinary geom_boxplot
 # plot. All original 1 Mb windows remain in the input; boxplot outliers are
 # rendered as small native ggplot2 points rather than suppressed.
-y_axis_plot <- ggplot(gene_density, aes(Value, Chr)) +
+y_axis_plot <- ggplot(gene_density, aes(Rate, Chr)) +
   geom_boxplot(
     orientation = "y",
     width = axis_gallery$y_axis$box_width,
@@ -162,9 +164,9 @@ y_axis_plot <- ggplot(gene_density, aes(Value, Chr)) +
     title = "Gene density across human chromosomes",
     subtitle = paste0(
       format(nrow(gene_density), big.mark = ","),
-      " original 1 Mb windows"
+      " windows; density normalized by actual window width"
     ),
-    x = "Genes per 1 Mb window",
+    x = "Genes / Mb",
     y = "Chromosome"
   ) +
   publication_theme +

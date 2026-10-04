@@ -66,7 +66,9 @@ preserve_ideogram_aesthetics <- function(layer, previous) {
 #'   [geom_track()].
 #' @param ... Component styling. A new plot also accepts [ggideogram()] layout
 #'   arguments such as `orientation`. Names accept size/gap/position; axes
-#'   accept side/breaks/units.
+#'   accept side/breaks/units. Bodies accept fill/colour/linewidth/alpha/linetype.
+#'   Unsupported parameters and visual mappings outside `component = "fill"`
+#'   raise an error.
 #' @return An additive chromosome component returning a standard ggplot.
 #' @examples
 #' k <- data.frame(Chr = c("A", "B"), Start = 0, End = c(100, 80))
@@ -135,6 +137,9 @@ geom_genemodel <- function(mapping = NULL, data = NULL, track = NULL,
 #'   segment_colour = "#626A73", and segment_linewidth = 0.22 mm. Its default
 #'   gap is 0.2 body widths. Text defaults to size = 3 mm. Free repulsion
 #'   accepts columns, seed, max.iter, box.padding and overflow.
+#'   Explicit arguments override an existing layer's styling and position;
+#'   omitted arguments retain the layer's settings. Native layers must use
+#'   `stat = "identity"`; summarise the source data before adding loci.
 #' @return An additive locus component using native point/text/segment geoms
 #'   or a compatible text extension.
 #' @export
@@ -152,14 +157,24 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
     geom <- match.arg(geom, c("point", "text", "interval", "link"))
     fun <- switch(geom, point = geom_chr_marker, text = geom_chr_text,
       interval = geom_chr_interval, link = geom_chr_link)
+    params <- list(...)
+    if (!is.null(params$stat) && !identical(params$stat, "identity") &&
+        !inherits(params$stat, "StatIdentity")) {
+      stopf("Locus layers require stat = 'identity'; summarise source data before adding loci.")
+    }
+    params$stat <- NULL
     args <- c(list(mapping = mapping, data = data, track = track, side = side,
-      gap = gap, position = position, track_position = track_position), list(...))
+      gap = gap, position = position, track_position = track_position), params)
     if (geom == "text" && is.null(args$size) && is.null(mapping$size)) args$size <- ideogram_text_size("label")
     if (geom == "interval" && !is.null(track)) args$placement <- "beside"
     return(new_ideogram_object(do.call(fun, args)))
   }
-  prototype <- if (is.function(geom)) geom(position = position, ...) else geom
+  prototype <- locus_native_layer(geom, list(...),
+    if (missing(position)) NULL else position)
   if (!inherits(prototype, "Layer")) stopf("`geom` must be a point, text, or segment layer.")
+  if (!inherits(prototype$stat, "StatIdentity")) {
+    stopf("Locus layers require stat = 'identity'; summarise source data before adding loci.")
+  }
   mapping <- scope_mapping(mapping, prototype$mapping)
   data <- scope_layer_data(prototype$data, data)
   if (!is.null(mapping$x) && is.null(mapping$position)) mapping$position <- mapping$x
@@ -183,6 +198,23 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
   new_ideogram_object(base)
 }
 
+locus_native_layer <- function(geom, params, position = NULL) {
+  if (is.function(geom)) {
+    return(do.call(geom, c(list(position = position %||% "identity"), params)))
+  }
+  if (!inherits(geom, "Layer") || (!length(params) && is.null(position))) return(geom)
+  settings <- c("stat", "show.legend", "inherit.aes", "check.aes", "check.param")
+  args <- list(geom = geom$geom, stat = geom$stat, mapping = geom$mapping,
+    data = if (inherits(geom$data, "waiver")) NULL else geom$data,
+    position = position %||% geom$position,
+    show.legend = geom$show.legend, inherit.aes = geom$inherit.aes)
+  args <- utils::modifyList(args, params[intersect(names(params), settings)])
+  defaults <- c(geom$stat_params, geom$geom_params, geom$aes_params)
+  defaults <- defaults[!duplicated(names(defaults), fromLast = TRUE)]
+  args$params <- utils::modifyList(defaults, params[!names(params) %in% settings])
+  do.call(ggplot2::layer, args)
+}
+
 locus_text_component <- function(mapping, data, geom, track, side, gap,
     width, position, params) {
   fun <- if (position == "spread") geom_chr_labels else geom_chr_text_repel
@@ -191,11 +223,9 @@ locus_text_component <- function(mapping, data, geom, track, side, gap,
     c("mapping", "data", "...", "stat", "position", "parse", "na.rm", "show.legend", "inherit.aes"))
   if (is.character(geom)) {
     if (!identical(geom, "text")) stopf("`position = '%s'` requires a text geom.", position)
-    prototype <- ggplot2::geom_text()
-  } else if (is.function(geom)) {
-    prototype <- do.call(geom, c(list(position = "identity"),
-      params[!names(params) %in% controls]))
-  } else prototype <- geom
+    geom <- ggplot2::geom_text
+  }
+  prototype <- locus_native_layer(geom, params[!names(params) %in% controls], "identity")
   if (!inherits(prototype, "Layer") || !inherits(prototype$geom, "GeomText")) {
     stopf("`position = '%s'` requires a text geom.", position)
   }
@@ -294,6 +324,12 @@ ggplot_add.ggideogram_object <- function(object, plot, ...) {
 #' @method ggplot_add ggideogram_chr_component
 #' @export
 ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
+  if (!"fill" %in% object$components) {
+    visual <- setdiff(names(object$mapping),
+      c("chr", "start", "end", "genome", "assembly", "homolog", "label"))
+    if (length(visual)) stopf("Chromosome components do not support mapped aesthetics: %s. Use fixed styling or component = 'fill'.",
+      paste(visual, collapse = ", "))
+  }
   if (!inherits(plot$coordinates$layout, "ideogram_layout_v2")) {
     has_fill <- "fill" %in% object$components
     data <- if (has_fill) plot$data else object$data %||% plot$data
@@ -332,6 +368,10 @@ ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
   components <- object$components
   if (isTRUE(object$names) && !"name" %in% components) components <- c(components, "name")
   if (isTRUE(object$axis) && !"axis" %in% components) components <- c(components, "axis")
+  accepted <- unique(unlist(lapply(components, chromosome_component_parameters)))
+  unused <- setdiff(names(object$params), accepted)
+  if (length(unused)) stopf("Unsupported chromosome component parameter%s: %s.",
+    if (length(unused) > 1L) "s" else "", paste(unused, collapse = ", "))
   for (kind in components) {
     if (kind == "fill") {
       params <- object$params
@@ -355,6 +395,15 @@ ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
   original$bounds <- updated$bounds
   if (!is.null(updated$circular_name_axis)) original$circular_name_axis <- updated$circular_name_axis
   update_plot_ideogram_layout(plot, original)
+}
+
+chromosome_component_parameters <- function(kind) {
+  fun <- switch(kind, body = geom_chromosome, name = geom_chr_name,
+    axis = geom_chr_axis, band = geom_chr_cytoband, fill = geom_chr_fill)
+  parameters <- setdiff(names(formals(fun)), "...")
+  if (kind == "fill") parameters <- union(parameters,
+    c(ggplot2::GeomRect$aesthetics(), ggplot2::GeomRect$parameters(extra = TRUE), "key_glyph"))
+  parameters
 }
 
 #' @method ggplot_add ggideogram_track_scope

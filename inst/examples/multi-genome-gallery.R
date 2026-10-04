@@ -28,6 +28,8 @@ p <- do.call(ggideogram, c(list(data = semantic(k), order_by = 'genome',
   geom_chr(component = "body", fill = NA, colour = "#626A73", linewidth = 0.22, cytoband = FALSE) +
   scale_fill_manual(values = c(A = '#AACCEE', B = '#F4CBD2'), name = 'Haplotype') +
   gallery_theme(plot.margin = margin(14, 16, 6, 36))
+p <- p + labs(title = 'Populus trichocarpa · phased haplotypes',
+  caption = 'GWHERCL00000000 / GWHERCM00000000. Nineteen chromosomes per haplotype.')
 gallery_save(p, output, '01-poplar-haplotypes', height = 160)
 
 # 2. A/B/D subgenomes, grouped horizontally; identical chromosome names remain distinct.
@@ -44,6 +46,8 @@ p <- do.call(ggideogram, c(list(data = semantic(k), order_by = 'genome',
   geom_chr(component = "body", fill = NA, colour = "#626A73", linewidth = 0.22, cytoband = FALSE) +
   scale_fill_manual(values = c(A = '#AACCEE', B = '#F4CBD2', D = '#DCEAC4'), name = 'Subgenome') +
   gallery_theme(plot.margin = margin(12, 16, 12, 27))
+p <- p + labs(title = 'Wheat · A, B and D subgenomes',
+  caption = 'Chinese Spring CS RefSeq v2.1. Twenty-one nuclear chromosomes; common bp scale.')
 gallery_save(p, output, '02-wheat-subgenomes', height = 87)
 
 # 3. Full Chr1 in rice and wild rice; sampled LASTZ blocks and complete gene density.
@@ -77,10 +81,10 @@ p <- do.call(ggideogram, c(list(data = semantic(k), order_by = 'homolog',
       x = Mid, y = Rate), geom = ggplot2::geom_line(colour = "#4477AA", linewidth = 0.25)) +
   geom_track(data = counts[counts$Chr == lower_chr, ], track = "lower_density", mapping = aes(chr = Chr,
       x = Mid, y = Rate), geom = ggplot2::geom_line(colour = "#4477AA", linewidth = 0.25)) +
-  geom_track(track = "upper_density", axis = list(chr = upper_chr, breaks = c(0, high/2,
-      high), size = 2.9, colour = "black", linewidth = 0.22, tick_length = 1.2)) +
-  geom_track(track = "lower_density", axis = list(chr = lower_chr, breaks = c(0, high/2,
-      high), size = 2.9, colour = "black", linewidth = 0.22, tick_length = 1.2)) +
+  geom_track(track = "upper_density", axis = gallery_axis(chr = upper_chr, breaks = c(0, high/2,
+      high), colour = "black", linewidth = 0.22, tick_length = 1.2)) +
+  geom_track(track = "lower_density", axis = gallery_axis(chr = lower_chr, breaks = c(0, high/2,
+      high), colour = "black", linewidth = 0.22, tick_length = 1.2)) +
   geom_chr(component = "axis", chr = upper_chr, side = "left", units = "Mb", breaks = function(range) seq(0,
       range[2], 1e+07), size = 2.9, colour = "black", linewidth = 0.22, tick_length = 1.2) +
   geom_chr(component = "axis", chr = lower_chr, side = "right", units = "Mb", breaks = function(range) seq(0,
@@ -89,7 +93,9 @@ p <- do.call(ggideogram, c(list(data = semantic(k), order_by = 'homolog',
   scale_fill_gradient(low = '#F2F5F8', high = '#4477AA', limits = c(0, high),
     name = 'Genes / Mb', guide = guide_colourbar(barwidth = grid::unit(32, 'mm'),
       barheight = grid::unit(2, 'mm'))) +
-  gallery_theme(plot.margin = margin(12, 30, 9, 86), legend.box.spacing = grid::unit(5, 'mm'))
+  gallery_theme(plot.margin = margin(12, 30, 9, 86))
+p <- p + labs(title = 'Rice and wild rice · Chr1',
+  caption = 'IRGSP-1.0 / OR_W1943. Genes per Mb; eight sampled LASTZ_NET alignment blocks.')
 gallery_save(p, output, '03-rice-comparison', height = 80)
 writeLines(c(
   '01: Populus trichocarpa, 19 nuclear chromosomes in each phased haplotype; shared bp scale.',

@@ -266,8 +266,13 @@ reserve_circular_text_space <- function(plot) {
     for (i in seq_len(4)) needed[i] <- max(needed[i], max(overhang[[i]]))
   }
   margin <- plot$theme$plot.margin %||% theme_ideogram()$plot.margin
-  spacing <- plot$theme$legend.box.spacing %||% grid::unit(0, "mm")
-  plot <- plot + ggplot2::theme(plot.margin = grid::unit.pmax(margin, needed),
-    legend.box.spacing = grid::unit.pmax(spacing, needed[3]))
+  plot <- plot + ggplot2::theme(plot.margin = grid::unit.pmax(margin, needed))
+  spacing <- plot$theme$legend.box.spacing
+  # Only preset spacing grows automatically; explicit theme units keep priority.
+  if (isTRUE(attr(spacing, "ideogram_auto_spacing"))) {
+    spacing <- grid::unit.pmax(spacing, needed[3])
+    attr(spacing, "ideogram_auto_spacing") <- TRUE
+    plot <- plot + ggplot2::theme(legend.box.spacing = spacing)
+  }
   reserve_ideogram_heading_space(plot, needed[1])
 }

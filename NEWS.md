@@ -1,5 +1,38 @@
 # ggideogram 0.5.0
 
+- Cytoband tables consistently use 1-based closed intervals; UCSC imports,
+  centromere boundaries and single-base bands share the same bp projection.
+- Locus layers reject unsupported statistics and honor explicit native style
+  and position overrides. Chromosome bodies accept alpha and linetype;
+  unsupported component parameters are reported.
+- GFF3 examples expand multiple Parent relationships. Local coverage is drawn
+  by window boundaries, and gallery figures include source context.
+- Coverage and weighted-mean summaries scan sorted overlapping intervals.
+  Track ranges, distribution statistics and value axes have separate modules.
+
+- Window statistics share a metadata contract across FUN, explicit methods
+  and GFFex. count_position selects midpoint, start or end assignments;
+  GFFex retains start counts through the same engine. Summary units are not
+  inferred from value-column names. Metadata reads only the exact na.rm
+  argument, preserving lazy evaluation of other arguments passed to FUN.
+- Package and gallery defaults now share 2.2 mm track value text and a
+  6 mm legend gap. Explicit axis and theme settings remain available;
+  circular component updates preserve explicitly chosen legend gaps.
+
+- Ordinary beside tracks now default to 3 chromosome body widths. Gene-model
+  and overlay defaults remain 6 and 1; explicit widths take priority.
+
+- Identity track layers retain missing observations for native path breaks.
+  Occupied windows preserve missing summaries independently of empty-window fill.
+- GFFex counts feature starts with the shared window engine, respecting nonzero
+  source bounds, complete interval validation and mapped chromosome keys.
+  Interval insets validate closed integer coordinates at start - 1 and end.
+- Gene-density examples normalize actual window widths; RNA examples identify
+  the original random annotation sample. Multi-genome REST snapshots reproduce
+  selected alignment records and verify regenerated table checksums.
+- Gallery track-axis sizes and legend spacing remain independently adjustable;
+  grid planning uses the same constructor parameters as the final plot.
+
 - Local bp axes preserve fractional unit offsets. Vertical bp axes receive
   wider default chromosome spacing; explicit spacing remains available.
 - Gene-model tracks default to a wider layout, with measured label margins

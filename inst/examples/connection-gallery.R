@@ -24,7 +24,7 @@ pair_base <- function() ggideogram(k, orientation = 'horizontal',
       range[2], 1e+07), size = 2.7, colour = "black", linewidth = 0.22, tick_length = 1.2) +
   geom_chr(component = "axis", chr = "5", side = "right", units = "Mb", breaks = function(range) seq(0,
       range[2], 1e+07), size = 2.7, colour = "black", linewidth = 0.22, tick_length = 1.2) +
-  gallery_theme(legend.box.spacing = grid::unit(4.5, 'mm'))
+  gallery_theme()
 
 # 1. One actual gene pair at the middle rank of each Chr1–Chr5 block.
 cross <- pairs[pairs$Chr1 != pairs$Chr2, ]
@@ -39,7 +39,9 @@ p <- pair_base() + geom_chrlink(type = "point", data = representatives, aes(chr1
       side = "right", gap = 0, size = 1.3) +
   geom_locus(geom = "point", data = b, aes(chr = Chr, position = Pos, colour = Direction),
       side = "left", gap = 0, size = 1.3) + direction_scale()
-gallery_save(p, output, '01-paired-genes', height = 58)
+p <- p + labs(title = 'Arabidopsis · Chr1–Chr5 gene pairs',
+  caption = 'MCScanX example; one representative pair per block. TAIR10 chromosome lengths.')
+gallery_save(p, output, '01-paired-genes', height = 70)
 
 # 2. All nine actual blocks; coloured intervals show their original endpoints.
 cross_blocks <- blocks[blocks$Chr1 != blocks$Chr2, ]
@@ -54,7 +56,9 @@ p <- pair_base() + geom_chrlink(type = "interval", data = cross_blocks, aes(chr1
       end = End, fill = Direction), key_glyph = gallery_key) +
   geom_chr(component = "body", fill = NA, colour = "#626A73", linewidth = 0.22, cytoband = FALSE) +
   direction_scale('fill')
-gallery_save(p, output, '02-collinear-blocks', height = 58)
+p <- p + labs(title = 'Arabidopsis · Chr1–Chr5 collinear blocks',
+  caption = 'MCScanX example; all nine cross-chromosome blocks. TAIR10 chromosome lengths.')
+gallery_save(p, output, '02-collinear-blocks', height = 70)
 
 # 3. Actual reverse block 15 within Chr1, with all six constituent gene pairs.
 local <- pairs[pairs$Block == 15, ]
@@ -88,7 +92,9 @@ p <- ggideogram(view, orientation = 'horizontal', max_chr_length = 55,
   geom_locus(geom = "point", data = genes[genes$Side == "right", ], aes(chr = Chr, position = Pos),
       side = "right", gap = 0, colour = "#4477AA", size = 1.3) +
   geom_chr(component = "body", fill = NA, colour = "#626A73", linewidth = 0.22, cytoband = FALSE) + gallery_theme()
-gallery_save(p, output, '03-local-reverse-block', height = 58)
+p <- p + labs(title = 'Arabidopsis · Chr1 23.15–23.55 Mb',
+  caption = 'MCScanX block 15; all six gene pairs. TAIR10 chromosome lengths.')
+gallery_save(p, output, '03-local-reverse-block', height = 70)
 writeLines(c(
   '01: Representative gene pairs, one middle-ranked pair per Chr1–Chr5 MCScanX block.',
   '02: All nine Chr1–Chr5 blocks, endpoint spans and explicit relative order.',

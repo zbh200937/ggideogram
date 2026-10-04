@@ -8,6 +8,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(patchwork)
 })
+source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
 
 # These are named output and presentation choices, not renderer constants.
 # Chromosome columns, axis chromosomes, track limits, inset locus and reverse
@@ -17,11 +18,11 @@ gallery <- list(
   dpi = 200,
   base_size = 9,
   focus_chromosomes = 4L,
-  original = list(width_mm = 240, height_mm = 150),
-  tracks = list(width_mm = 240, height_mm = 150),
+  original = list(width_mm = 185, height_mm = 135),
+  tracks = list(width_mm = 185, height_mm = 135),
   insets = list(
-    width_mm = 240,
-    height_mm = 150,
+    width_mm = 185,
+    height_mm = 135,
     child_width_mm = 42,
     child_height_mm = 35
   ),
@@ -41,6 +42,8 @@ data("LTR_density", package = "ggideogram")
 data("Random_RNAs_500", package = "ggideogram")
 
 gene_density$Position <- (gene_density$Start - 1 + gene_density$End) / 2
+gene_density$Width <- gene_density$End - gene_density$Start + 1
+gene_density$Rate <- gene_density$Value / (gene_density$Width / 1e6)
 LTR_density$Position <- (LTR_density$Start - 1 + LTR_density$End) / 2
 Random_RNAs_500$Position <-
   (Random_RNAs_500$Start - 1 + Random_RNAs_500$End) / 2
@@ -63,7 +66,7 @@ gene_colour <- "#277DA1"
 ltr_colour <- "#43AA8B"
 highlight_colour <- "#D55E00"
 context_colour <- "#B8B8B8"
-heatmap_colours <- c("#4575B4", "#FFFFBF", "#D73027")
+heatmap_colours <- c("#F2F5F8", "#9BBACD", "#315A7D")
 
 common_theme <- theme_minimal(base_size = gallery$base_size) +
   theme(
@@ -72,36 +75,6 @@ common_theme <- theme_minimal(base_size = gallery$base_size) +
     plot.title = element_text(face = "bold"),
     plot.title.position = "plot"
   )
-
-choose_ideogram_grid <- function(
-    karyotype, tracks, width_mm, height_mm,
-    orientations = "vertical") {
-  semantic <- as_ideogram_data(karyotype)
-  chromosome_count <- nrow(semantic$karyotype)
-  columns <- seq_len(chromosome_count)
-  columns <- columns[chromosome_count %% columns == 0]
-  candidates <- expand.grid(
-    ncol = columns,
-    orientation = orientations,
-    stringsAsFactors = FALSE
-  )
-  target_aspect <- width_mm / height_mm
-  candidate_aspect <- vapply(seq_len(nrow(candidates)), function(index) {
-    layout <- ideogram_layout(
-      semantic,
-      ncol = candidates$ncol[index],
-      tracks = tracks,
-      orientation = candidates$orientation[index]
-    )
-    diff(layout$bounds$x) / diff(layout$bounds$y)
-  }, numeric(1))
-  best <- which.min(abs(log(candidate_aspect / target_aspect)))
-  list(
-    ncol = candidates$ncol[best],
-    orientation = candidates$orientation[best],
-    aspect = candidate_aspect[best]
-  )
-}
 
 row_axis_chromosomes <- function(karyotype, columns) {
   karyotype$Chr[seq.int(1L, nrow(karyotype), by = columns)]
@@ -139,10 +112,10 @@ add_rna_scales <- function(plot, legend = TRUE) {
 
 classic_tracks <- track_layout(density = geom_track(side = "overlay", width = 0.9, limits = c(0, 1)), markers = geom_track(side = "right",
     width = 0.55, gap = 0.18))
-classic_grid <- choose_ideogram_grid(
+classic_grid <- gallery_grid(
   human_karyotype, classic_tracks,
-  gallery$original$width_mm, gallery$original$height_mm,
-  orientations = "vertical"
+  gallery$original$width_mm - 18, gallery$original$height_mm - 32,
+  orientations = "vertical", row_gap = 5
 )
 classic_columns <- classic_grid$ncol
 classic_axes <- row_axis_chromosomes(human_karyotype, classic_columns)
@@ -153,14 +126,16 @@ classic_repel <- position_chr_repel(
 classic_plot <- ggideogram(
   human_karyotype,
   ncol = classic_columns,
+  row_gap = 5,
   orientation = classic_grid$orientation,
   tracks = classic_tracks,
   axis = classic_axes,
+  axis_breaks = seq(0, max(human_karyotype$End), by = 50e6),
   axis_side = "left",
   base_family = "sans"
 ) +
-  geom_track(data = gene_density, mapping = aes(chr = Chr, x = Position, y = Overlay, width = End -
-      Start, fill = Value), track = "density", geom = ggplot2::geom_tile(height = 1, colour = NA)) +
+  geom_track(data = gene_density, mapping = aes(chr = Chr, x = Position, y = Overlay,
+      width = Width, fill = Rate), track = "density", geom = ggplot2::geom_tile(height = 1, colour = NA)) +
   # The outline is redrawn as a public component after the overlay tiles.
   geom_chr(component = "body", fill = NA, cytoband = FALSE, linewidth = 0.36) +
   geom_locus(geom = "link", data = Random_RNAs_500, mapping = aes(chr = Chr, position = Position),
@@ -171,26 +146,29 @@ classic_plot <- ggideogram(
       stroke = gallery$marker$stroke) +
   scale_fill_gradientn(
     colours = heatmap_colours,
-    limits = range(gene_density$Value, na.rm = TRUE),
-    name = "Gene density\n(per 1 Mb)"
+    limits = range(gene_density$Rate, na.rm = TRUE),
+    name = "Genes / Mb"
   ) +
   labs(
-    title = "Classic RIdeogram data, rebuilt with ggplot2",
-    subtitle = "Human gene-density heatmap and 500 RNA markers"
+    title = "Human chromosomes · original RIdeogram data",
+    subtitle = "Gene density and 500 randomly sampled RNA annotations",
+    caption = "Density uses actual window width; RNA markers are a sample of GENCODE annotations."
   ) +
   guides(
     fill = guide_colourbar(title.position = "top"),
-    shape = guide_legend(title.position = "top", nrow = 1),
+    shape = guide_legend(title.position = "top", nrow = 1, override.aes = list(size = 1.8)),
     colour = guide_legend(title.position = "top", nrow = 1)
   ) +
   theme(
     legend.position = "bottom",
+    legend.box.spacing = gallery_legend_spacing,
     legend.box = "horizontal",
     legend.box.just = "left",
     legend.title = element_text(size = gallery$base_size),
     legend.text = element_text(size = gallery$base_size),
     plot.title = element_text(face = "bold", size = gallery$base_size + 1),
-    plot.subtitle = element_text(size = gallery$base_size)
+    plot.subtitle = element_text(size = gallery$base_size),
+    plot.caption = element_text(size = 8, hjust = 0)
   )
 classic_plot <- add_rna_scales(classic_plot)
 
@@ -212,10 +190,10 @@ inward_tracks <- track_layout(density = geom_track(side = "overlay", width = 0.7
     width = 0.55, gap = 0.18), genes = geom_track(side = "right", width = 1.8, gap = 0.24,
     limits = c(0, max(focus_gene$Value, na.rm = TRUE))), ltr = geom_track(side = "right",
     width = 1.8, gap = 0.24, limits = c(0, max(focus_ltr$Value, na.rm = TRUE))))
-inward_grid <- choose_ideogram_grid(
+inward_grid <- gallery_grid(
   focus_karyotype, inward_tracks,
-  gallery$tracks$width_mm, gallery$tracks$height_mm,
-  orientations = c("vertical", "horizontal")
+  gallery$tracks$width_mm - 18, gallery$tracks$height_mm - 38,
+  orientations = c("vertical", "horizontal"), padding = 1
 )
 inward_columns <- inward_grid$ncol
 inward_axes <- row_axis_chromosomes(focus_karyotype, inward_columns)
@@ -233,13 +211,13 @@ inward_plot <- ggideogram(
   padding = 1,
   base_family = "sans"
 ) +
-  geom_track(data = focus_gene, mapping = aes(chr = Chr, x = Position, y = Overlay, width = End -
-      Start, fill = Value), track = "density", geom = ggplot2::geom_tile(height = 1, colour = NA)) +
+  geom_track(data = focus_gene, mapping = aes(chr = Chr, x = Position, y = Overlay,
+      width = Width, fill = Rate), track = "density", geom = ggplot2::geom_tile(height = 1, colour = NA)) +
   geom_chr(component = "body", fill = NA, cytoband = FALSE, linewidth = 0.38) +
   geom_track(data = focus_gene, mapping = aes(chr = Chr, x = Position, y = Value, group = Chr),
       track = "genes", geom = ggplot2::geom_line(colour = gene_colour, linewidth = 0.32)) +
   geom_track(data = focus_ltr, mapping = aes(chr = Chr, x = Position, y = Value, width = End -
-      Start), track = "ltr", geom = ggplot2::geom_col(position = "identity", fill = ltr_colour,
+      Start + 1), track = "ltr", geom = ggplot2::geom_col(position = "identity", fill = ltr_colour,
       alpha = 0.72)) +
   geom_locus(geom = "link", data = focus_rna, mapping = aes(chr = Chr, position = Position),
       position = inward_repel, track = "markers", colour = "#777777", linewidth = 0.14,
@@ -247,32 +225,35 @@ inward_plot <- ggideogram(
   geom_locus(geom = "point", data = focus_rna, mapping = aes(chr = Chr, position = Position,
       shape = Type, colour = Type), position = inward_repel, track = "markers", size = gallery$marker$size,
       stroke = gallery$marker$stroke) +
-  geom_track(track = "genes", axis = list(chr = focus_chr[1], position = "start", breaks = c(0,
+  geom_track(track = "genes", axis = gallery_axis(chr = focus_chr[1], position = "start", breaks = c(0,
       max(focus_gene$Value, na.rm = TRUE)), labels = scales::label_number(accuracy = 1))) +
-  geom_track(track = "ltr", axis = list(chr = focus_chr[min(2L, length(focus_chr))], position = "start",
+  geom_track(track = "ltr", axis = gallery_axis(chr = focus_chr[min(2L, length(focus_chr))], position = "start",
       breaks = c(0, max(focus_ltr$Value, na.rm = TRUE)), labels = scales::label_number(accuracy = 1))) +
   scale_fill_gradientn(
     colours = heatmap_colours,
-    limits = range(focus_gene$Value, na.rm = TRUE),
-    name = "Gene density"
+    limits = range(focus_gene$Rate, na.rm = TRUE),
+    name = "Genes / Mb"
   ) +
   labs(
     title = "Ordinary ggplot2 geoms as chromosome components",
     subtitle = paste0(
-      "Shared bp axis; blue line = genes, green columns = LTRs (chr ",
+      "Counts/window: blue = genes, green = LTRs (chr ",
       paste(focus_chr, collapse = ", "), ")"
-    )
+    ),
+    caption = "Nominal 1 Mb bins; terminal bins are shorter. RNA markers are randomly sampled annotations."
   ) +
   guides(
     fill = guide_colourbar(title.position = "top"),
-    shape = guide_legend(title.position = "top", nrow = 1),
+    shape = guide_legend(title.position = "top", nrow = 1, override.aes = list(size = 1.8)),
     colour = guide_legend(title.position = "top", nrow = 1)
   ) +
   theme(
     legend.position = "bottom",
+    legend.box.spacing = gallery_legend_spacing,
     legend.box = "horizontal",
     legend.box.just = "left",
     plot.title = element_text(face = "bold", size = gallery$base_size + 1),
+    plot.caption = element_text(size = 8, hjust = 0),
     plot.subtitle = element_text(
       size = gallery$base_size,
       margin = margin(b = 8)
@@ -312,7 +293,7 @@ locus_child <- ggplot(locus_values, aes(Metric, Count, fill = Metric)) +
   scale_fill_manual(values = c(Genes = gene_colour, LTRs = ltr_colour)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
   labs(
-    title = "Selected 1 Mb locus",
+    title = "Selected window",
     subtitle = paste0("chr", selected_chr, "\n",
                       format(selected_window$Start, big.mark = ","), "–",
                       format(selected_window$End, big.mark = ",")),
@@ -350,14 +331,14 @@ host_plot <- ggideogram(
       track = "genes", geom = ggplot2::geom_line(colour = gene_colour, linewidth = 0.38)) +
   geom_locus(geom = "interval", data = selected_window, mapping = aes(chr = Chr, start = Start,
       end = End), colour = highlight_colour, linewidth = 1.2) +
-  geom_track(track = "genes", axis = list(chr = selected_chr, position = "start", breaks = c(0,
+  geom_track(track = "genes", axis = gallery_axis(chr = selected_chr, position = "start", breaks = c(0,
       max(selected_gene$Value, na.rm = TRUE)), labels = scales::label_number(accuracy = 1))) +
   geom_locus_inset(data = locus_inset, mapping = aes(chr = Chr, start = Start, end = End,
       plot = Plot), track = "locus", width = grid::unit(gallery$insets$child_width_mm, "mm"),
       height = grid::unit(gallery$insets$child_height_mm, "mm"), vjust = locus_vjust) +
   labs(
     tag = "A",
-    title = "Complete ggplot anchored to a genomic interval",
+    title = "Complete ggplot at a locus",
     subtitle = "The child keeps its own axes and theme"
   ) +
   theme(
@@ -407,10 +388,11 @@ scatter_plot <- ggplot(windows, aes(Value_gene, Value_ltr)) +
   ) +
   labs(
     tag = "B",
-    title = "Ideogram inserted into a standard ggplot",
+    title = "Ideogram inside a ggplot",
     subtitle = paste0("Blue points = chromosome ", selected_chr),
-    x = "Genes per 1 Mb window",
-    y = "LTRs per 1 Mb window"
+    x = "Genes / window",
+    y = "LTRs / window",
+    caption = "Nominal 1 Mb bins; terminal bins are shorter."
   ) +
   common_theme +
   theme(plot.margin = margin(6, 6, 6, 6))

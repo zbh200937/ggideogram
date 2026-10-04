@@ -1,14 +1,38 @@
 # Shared physical text and legend settings for the example galleries.
+gallery_axis <- function(...) list(...)
+gallery_legend_spacing <- ggideogram::theme_ideogram()$legend.box.spacing
+
+gallery_grid <- function(karyotype, tracks, width_mm, height_mm,
+    orientations = 'vertical', ...) {
+  semantic <- ggideogram::as_ideogram_data(karyotype)
+  n <- nrow(semantic$karyotype)
+  columns <- seq_len(n)
+  candidates <- expand.grid(ncol = columns[n %% columns == 0],
+    orientation = orientations, stringsAsFactors = FALSE)
+  aspects <- vapply(seq_len(nrow(candidates)), function(i) {
+    axes <- semantic$karyotype$.chr[seq.int(1L, n, by = candidates$ncol[i])]
+    plot <- ggideogram::ggideogram(semantic, ncol = candidates$ncol[i],
+      orientation = candidates$orientation[i], tracks = tracks, axis = axes, ...)
+    diff(plot$coordinates$limits$x) / diff(plot$coordinates$limits$y)
+  }, numeric(1))
+  best <- which.min(abs(log(aspects / (width_mm / height_mm))))
+  list(ncol = candidates$ncol[best], orientation = candidates$orientation[best],
+    aspect = aspects[best])
+}
+
 gallery_theme <- function(...) {
   ggplot2::theme(
     text = ggplot2::element_text(size = 8.25, colour = 'black'),
+    plot.title = ggplot2::element_text(size = 10, face = 'plain', hjust = 0),
+    plot.subtitle = ggplot2::element_text(size = 8.25),
+    plot.caption = ggplot2::element_text(size = 7.5, hjust = 0),
     legend.position = 'bottom',
     legend.title = ggplot2::element_text(size = 8.25),
     legend.text = ggplot2::element_text(size = 8.25),
     legend.key.height = grid::unit(2.2, 'mm'),
     legend.key.width = grid::unit(4.2, 'mm'),
     legend.spacing.x = grid::unit(2.5, 'mm'),
-    legend.box.spacing = grid::unit(1.3, 'mm'),
+    legend.box.spacing = gallery_legend_spacing,
     legend.margin = ggplot2::margin(0, 0, 0, 0),
     plot.margin = ggplot2::margin(8, 16, 6, 24)
   ) + ggplot2::theme(...)

@@ -45,7 +45,7 @@ test_that("UCSC cytobands are read, selected and converted to a karyotype", {
   karyotype <- cytoband_karyotype(bands)
   expect_equal(karyotype$Chr, c("chr2", "chr1"))
   expect_equal(karyotype$End, c(50, 200))
-  expect_equal(karyotype$CE_start, c(0, 101))
+  expect_equal(karyotype$CE_start, c(0, 100))
   expect_equal(karyotype$CE_end, c(0, 200))
   expect_no_error(as_ideogram_data(karyotype))
   expect_error(read_cytoband(ucsc, chr = "chrZ"), "Not in")

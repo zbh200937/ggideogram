@@ -37,14 +37,15 @@ local_plot <- function(chr, from, to) {
         colour = "Genes"), geom = ggplot2::geom_line(linewidth = 0.35)) +
     geom_track(data = ltr, track = "ltr", mapping = aes(chr = Chr, x = Position, y = Value,
         colour = "LTR elements"), geom = ggplot2::geom_line(linewidth = 0.35)) +
-    geom_track(track = "genes", axis = list(position = "start", breaks = c(0, 75, 150), size = 2.9,
+    geom_track(track = "genes", axis = gallery_axis(position = "start", breaks = c(0, 75, 150),
         colour = "#000000", linewidth = 0.22, tick_length = 1.2)) +
-    geom_track(track = "ltr", axis = list(position = "start", breaks = c(0, 300, 600), size = 2.9,
+    geom_track(track = "ltr", axis = gallery_axis(position = "start", breaks = c(0, 300, 600),
         colour = "#000000", linewidth = 0.22, tick_length = 1.2)) +
     scale_colour_manual(values = colours, name = "Count / 1 Mb window") +
     gallery_theme(legend.direction = "horizontal",
       plot.margin = margin(8, 16, 6, 24))
-  p
+  p + labs(title = sprintf("Human · Chr%s %g–%g Mb", chr, from / 1e6, to / 1e6),
+    caption = "GRCh38. Source gene and LTR counts per 1 Mb window.")
 }
 
 # 1. A local region spanning the annotated Chr1 centromere.
@@ -62,6 +63,7 @@ overview <- ggideogram(selected, ncol = 6,
       aes(chr = Chr, start = Start, end = End, colour = "110–140 Mb"), linewidth = 2) +
   scale_colour_manual(values = c(`110–140 Mb` = "#228833"), name = "Chr1 window") +
   gallery_theme(legend.position = "right", plot.margin = margin(8, 16, 6, 24))
+overview <- overview + labs(title = "Human · Chr1–6 overview", caption = "GRCh38. Green interval locates the detailed Chr1 view.")
 combined <- (overview / local) + plot_layout(heights = c(2, 1))
 gallery_save(combined, output, "02-overview", height = 160)
 

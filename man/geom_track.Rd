@@ -10,7 +10,7 @@ geom_track(
   geom = NULL,
   track = NULL,
   side = c("right", "left", "overlay", "outer", "inner"),
-  width = 2,
+  width = 3,
   gap = NULL,
   value_scale = c("per_track", "global", "per_chr"),
   limits = NULL,
@@ -41,7 +41,7 @@ list name supplies the identifier.}
 inside the chromosome body.}
 
 \item{width, gap}{Track width and gap in chromosome-body-width units. The
-default width is 6 for gene-model tracks, 2 for other beside tracks,
+default width is 6 for gene-model tracks, 3 for other beside tracks,
 and 1 inside the body; gap is 0.2 beside
 and 0 inside. Native geom widths
 belong to the layer, e.g. geom = ggplot2::geom_col(width = 1e6).}
@@ -69,7 +69,9 @@ in linear layouts and inside the closing gap in circular layouts.}
 \code{position} accepts \code{"auto"} (default), \code{"start"}, \code{"end"}, or \code{"gap"}.
 Auto places shared circular value axes in the closing gap; linear and
 explicitly chromosome-specific axes keep their end placement. A gap
-axis with per-chromosome ranges must select one chromosome with \code{chr}.}
+axis with per-chromosome ranges must select one chromosome with \code{chr}.
+Tick text defaults to 2.2 mm; \code{size}, \code{family}, \code{colour}, \code{tick_length}
+(mm) and \code{label_gap} (em) can be set independently of track width.}
 
 \item{chr}{Optional chromosome identifiers to select from the source data.}
 

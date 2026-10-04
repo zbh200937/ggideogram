@@ -30,7 +30,9 @@ p <- label_base(view, track_layout(labels = geom_track(side = "right", width = 9
       label = Label)) +
   geom_locus(geom = "point", data = sparse, aes(chr = Chr, position = Position), gap = 0,
       side = "right", size = 1.3, colour = "#4477AA")
-gallery_save(p, output, '01-sparse-names', height = 65)
+p <- p + labs(title = 'Arabidopsis · Chr1 2.5–15 kb',
+  caption = 'TAIR10 / Araport11. Three gene names at their source midpoints.')
+gallery_save(p, output, '01-sparse-names', height = 55)
 
 # 2. A real 100 kb gene cluster, with all label edges on one straight baseline.
 view <- chr_view(k, '1', 0, 100000)
@@ -40,6 +42,8 @@ dense <- label_base(view, tracks, 'vertical', seq(0, 100000, 25000)) +
       position = Position, label = Label)) +
   geom_locus(geom = "point", data = g, aes(chr = Chr, position = Position), gap = 0, side = "right",
       size = 1.3, colour = "#4477AA")
+dense <- dense + labs(title = 'Arabidopsis · Chr1 0–100 kb',
+  caption = 'TAIR10 / Araport11; 24 source genes.')
 gallery_save(dense, output, '02-gene-cluster-wide', width = 125, height = 135)
 
 # 3. The identical input and plot in a narrower, shorter publication slot.

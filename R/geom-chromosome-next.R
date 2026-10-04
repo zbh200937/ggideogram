@@ -110,6 +110,7 @@ cytoband_polygon_data <- function(layout, curve_points = 32,
   if (is.null(bands) || !nrow(bands)) return(NULL)
   bands <- bands[bands$.chr %in% layout$chrom$.chr, , drop = FALSE]
   if (!nrow(bands)) return(NULL)
+  bands$.start <- bands$.start - 1
   if (!is.null(layout$data$view)) {
     window <- layout$data$view
     bands$.start <- pmax(bands$.start, window$start)
@@ -142,28 +143,29 @@ cytoband_polygon_data <- function(layout, curve_points = 32,
 
 chromosome_body_layers <- function(layout, fill, colour, linewidth,
                                    curve_points, cytoband_scheme,
-                                   cytoband_palette, cytoband_bleach) {
-  layers <- list(chromosome_fill_layer(layout, fill, curve_points))
+                                   cytoband_palette, cytoband_bleach,
+                                   alpha = NA, linetype = 1) {
+  layers <- list(chromosome_fill_layer(layout, fill, curve_points, alpha))
   bands <- chromosome_cytoband_layer(
     layout, curve_points, cytoband_scheme,
-    cytoband_palette, cytoband_bleach)
+    cytoband_palette, cytoband_bleach, alpha)
   if (!is.null(bands)) layers <- c(layers, list(bands))
   c(layers, list(chromosome_outline_layer(
-    layout, colour, linewidth, curve_points)))
+    layout, colour, linewidth, curve_points, alpha, linetype)))
 }
 
-chromosome_fill_layer <- function(layout, fill, curve_points) {
+chromosome_fill_layer <- function(layout, fill, curve_points, alpha = NA) {
   body <- chromosome_polygon_data(layout, curve_points)
   ggplot2::geom_polygon(
     data = body,
     mapping = ggplot2::aes(x = .data$x, y = .data$y,
                            group = .data$.group),
-    fill = fill, colour = NA, inherit.aes = FALSE
+    fill = fill, colour = NA, alpha = alpha, inherit.aes = FALSE
   )
 }
 
 chromosome_cytoband_layer <- function(
-    layout, curve_points, scheme, palette, bleach) {
+    layout, curve_points, scheme, palette, bleach, alpha = NA) {
   bands <- cytoband_polygon_data(
     layout, curve_points, scheme, palette, bleach)
   if (is.null(bands)) return(NULL)
@@ -173,18 +175,18 @@ chromosome_cytoband_layer <- function(
       x = .data$x, y = .data$y, group = .data$.band,
       fill = I(.data$.fill), colour = I(.data$.fill)
     ),
-    linewidth = 0, inherit.aes = FALSE, show.legend = FALSE
+    linewidth = 0, alpha = alpha, inherit.aes = FALSE, show.legend = FALSE
   )
 }
 
 chromosome_outline_layer <- function(
-    layout, colour, linewidth, curve_points) {
+    layout, colour, linewidth, curve_points, alpha = NA, linetype = 1) {
   body <- chromosome_polygon_data(layout, curve_points)
   ggplot2::geom_path(
     data = body,
     mapping = ggplot2::aes(x = .data$x, y = .data$y,
                            group = .data$.group),
-    colour = colour, linewidth = linewidth,
+    colour = colour, linewidth = linewidth, alpha = alpha, linetype = linetype,
     linejoin = "round", lineend = "round", inherit.aes = FALSE
   )
 }

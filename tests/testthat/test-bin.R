@@ -31,9 +31,37 @@ test_that("a value column is summarised, and empty windows come back as NA", {
   # The fill for an empty window is settable, and extra arguments reach FUN.
   d$Q[1] <- NA
   expect_equal(bin_genome(d, kar, window = 1000, value = "Q", empty = 0)$Value,
-               c(0, 99, 0, 0))
+               c(NA, 99, 0, 0))
   expect_equal(bin_genome(d, kar, window = 1000, value = "Q", FUN = mean,
                           na.rm = TRUE)$Value, c(50, 99, NA, NA))
+})
+
+test_that("empty fill does not replace a missing summary from observed rows", {
+  d <- data.frame(Chr = "A", Start = c(10, 1500), Q = c(NA_real_, 0))
+  expect_equal(bin_genome(d, kar, window = 1000, value = "Q", empty = -1)$Value,
+    c(NA, 0, -1, -1))
+  expect_equal(bin_genome(d, kar, window = 1000, value = "Q", empty = 0,
+    na.rm = TRUE)$Value, c(NaN, 0, 0, 0))
+})
+
+test_that("summary metadata preserves lazy unused arguments and exact na.rm names", {
+  d <- data.frame(Chr = "A", Start = c(10, 1500), Q = c(NA_real_, 0))
+  lazy_sum <- function(x, ...) sum(x)
+  out <- bin_genome(d, kar, window = 1000, value = "Q", FUN = lazy_sum,
+    ignored = stop("unused argument was evaluated"))
+  expect_equal(out$Value, c(NA, 0, NA, NA))
+  expect_null(attr(out, "window_summary")$na.rm)
+  similar <- bin_genome(d, kar, window = 1000, value = "Q", FUN = lazy_sum,
+    na.rm_extra = TRUE)
+  expect_equal(similar$Value, out$Value)
+  expect_null(attr(similar, "window_summary")$na.rm)
+  means <- bin_genome(d, kar, window = 1000, value = "Q", na.rm = TRUE,
+    ignored = stop("unused argument was evaluated"))
+  expect_equal(means$Value, c(NaN, 0, NA, NA))
+  expect_true(attr(means, "window_summary")$na.rm)
+  empty <- bin_genome(d[FALSE, ], kar, window = 1000, value = "Q", FUN = lazy_sum,
+    ignored = stop("unused argument was evaluated"))
+  expect_true(all(is.na(empty$Value)))
 })
 
 test_that("an interval is binned once, by its midpoint", {
@@ -48,6 +76,62 @@ test_that("an interval is binned once, by its midpoint", {
   # the half-open-on-the-left rule the rest of the binning uses.
   expect_equal(bin_genome(data.frame(Chr = "A", Start = 900, End = 1100), kar,
                           window = 1000)$Value, c(1, 0, 0, 0))
+})
+
+test_that("count and FUN summaries use the same selectable representative positions", {
+  d <- data.frame(Chr = "A", Start = c(950, 100), End = c(1150, 1100), Q = c(2, 8))
+  expected <- list(midpoint = c(1, 1, 0, 0), start = c(2, 0, 0, 0), end = c(0, 2, 0, 0))
+  for (position in names(expected)) {
+    out <- bin_genome(d, kar, window = 1000, count_position = position)
+    explicit <- bin_genome(d, kar, window = 1000, method = "count", count_position = position)
+    expect_equal(out$Value, expected[[position]])
+    expect_equal(explicit$Value, out$Value)
+    expect_equal(attr(out, "window_summary")$count_position, position)
+    expect_equal(attr(explicit, "window_summary")$count_position, position)
+  }
+  means <- bin_genome(d, kar, window = 1000, value = "Q", count_position = "start")
+  expect_equal(means$Value, c(5, NA, NA, NA))
+  expect_equal(attr(means, "window_summary")$summary, "mean")
+  sums <- bin_genome(d, kar, window = 1000, value = "Q", FUN = sum, count_position = "end")
+  expect_equal(sums$Value, c(NA, 10, NA, NA))
+  expect_equal(attr(sums, "window_summary")$summary, "sum")
+  # Preserve the mean of base indices, including an even-length interval.
+  even <- data.frame(Chr = "A", Start = 1, End = 2000)
+  expect_equal(bin_genome(even, kar, window = 1000)$Value, c(0, 1, 0, 0))
+  for (method in c("coverage", "weighted_mean")) {
+    expect_error(bin_genome(d, kar, method = method, count_position = "start"),
+      "applies only to count or FUN")
+  }
+})
+
+test_that("all window results record the same metadata fields without guessing value units", {
+  d <- data.frame(Chr = "A", Start = c(10, 1500), End = c(20, 1600), Q = c(NA, 0))
+  results <- list(
+    bin_genome(d, kar, window = 1000),
+    bin_genome(d, kar, window = 1000, value = "Q", empty = -1, na.rm = TRUE),
+    bin_genome(d, kar, window = 1000, method = "count"),
+    bin_genome(d, kar, window = 1000, method = "coverage"),
+    bin_genome(d, kar, window = 1000, method = "weighted_mean", value = "Q"))
+  metadata <- lapply(results, attr, "window_summary")
+  for (m in metadata) {
+    expect_named(m, c("method", "group", "coordinates", "unit", "value", "window",
+      "count_position", "na.rm", "overlap", "empty", "summary"))
+    expect_identical(m$coordinates, "1-based closed")
+    expect_equal(m$window, 1000)
+  }
+  expect_equal(vapply(metadata, `[[`, character(1), "method"),
+    c("count", "summary", "count", "coverage", "weighted_mean"))
+  expect_identical(metadata[[1]]$unit, "features")
+  expect_identical(metadata[[4]]$unit, "fraction")
+  expect_null(metadata[[2]]$unit)
+  expect_null(metadata[[5]]$unit)
+  expect_identical(metadata[[2]]$value, "Q")
+  expect_identical(metadata[[5]]$value, "Q")
+  expect_true(metadata[[2]]$na.rm)
+  expect_equal(metadata[[2]]$empty, -1)
+  expect_equal(results[[2]]$Value, c(NaN, 0, -1, -1))
+  points <- bin_genome(d[c("Chr", "Start")], kar, window = 1000, count_position = "end")
+  expect_identical(attr(points, "window_summary")$count_position, "start")
 })
 
 test_that("empty chromosomes remain and invalid source intervals are rejected", {

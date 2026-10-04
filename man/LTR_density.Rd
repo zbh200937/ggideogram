@@ -3,7 +3,7 @@
 \docType{data}
 \name{LTR_density}
 \alias{LTR_density}
-\title{Human LTR retrotransposon density}
+\title{Human LTR retrotransposon counts by window}
 \format{
 A data frame with 3102 rows and 4 columns: \code{Chr}, \code{Start}, \code{End},
 \code{Value}.
@@ -17,5 +17,7 @@ LTR_density
 \description{
 LTR counts in the same 1 Mb windows as \link{gene_density}, so the two can be
 drawn as two tracks of the same figure.
+\code{Value} is the count in the actual closed window; terminal windows can be
+shorter than 1 Mb. Divide by \code{(End - Start + 1) / 1e6} for counts per Mb.
 }
 \keyword{datasets}

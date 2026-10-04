@@ -68,9 +68,9 @@ test_that("inset intervals validate both genomic endpoints", {
   for (ends in list(c(-50, 150), c(-10, 50), c(50, 110))) {
     data <- data.frame(Chr = "A", Start = ends[1], End = ends[2])
     data$Plot <- list(grid::rectGrob())
-    p <- ggideogram(kar) + geom_chr_inset(
+    expect_error(ggplot2::ggplotGrob(ggideogram(kar) + geom_chr_inset(
       ggplot2::aes(chr = Chr, start = Start, end = End, plot = Plot), data,
-      width = grid::unit(0.1, "npc"), height = grid::unit(0.1, "npc"))
-    expect_error(ggplot2::ggplotGrob(p), "outside|range")
+      width = grid::unit(0.1, "npc"), height = grid::unit(0.1, "npc"))),
+      "outside|range|closed integer")
   }
 })

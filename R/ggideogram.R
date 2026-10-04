@@ -26,7 +26,7 @@
 #'   opening independently of the other chromosome gaps. `NULL` uses the closing
 #'   value from `gap_angle`, or 20 degrees when both are `NULL`.
 #' @param tracks `NULL` or a named list of [geom_track()] declarations.
-#' @param fill,colour,linewidth Chromosome body style. Sizes use ordinary
+#' @param fill,colour,linewidth,alpha,linetype Chromosome body style. Sizes use ordinary
 #'   ggplot2 units.
 #' @param curve_points Number of samples for chromosome boundaries, including
 #'   rounded caps in linear layouts and arcs in circular layouts.
@@ -91,6 +91,8 @@ ggideogram <- function(
     fill = ideogram_colour("body"),
     colour = ideogram_colour("outline"),
     linewidth = ideogram_linewidth("body"),
+    alpha = NA,
+    linetype = 1,
     curve_points = 32,
     show_names = TRUE,
     name_size = ideogram_text_size("chromosome"),
@@ -196,7 +198,7 @@ ggideogram <- function(
     curve_points = curve_points,
     cytoband_scheme = cytoband_scheme,
     cytoband_palette = cytoband_palette,
-    cytoband_bleach = cytoband_bleach
+    cytoband_bleach = cytoband_bleach, alpha = alpha, linetype = linetype
   )
   if (isTRUE(show_names)) {
     layers <- c(layers, list(chromosome_name_layer(

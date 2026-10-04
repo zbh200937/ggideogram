@@ -63,6 +63,10 @@ test_that("track text inherits font family and rebuilt axes keep their margins",
       text <- Filter(function(x) inherits(x$geom, "GeomText") &&
         !is.null(x$ideogram_scope), plot$layers)
       expect_true(all(vapply(text, function(x) identical(x$aes_params$family, "serif"), logical(1))))
+      axes <- Filter(function(x) grepl("^axis:", x$ideogram_scope_slot %||% ""), text)
+      expect_gt(length(axes), 0)
+      expect_true(all(vapply(axes, function(x) identical(x$aes_params$size, 2.2), logical(1))))
+      expect_gte(grid::convertUnit(plot$theme$legend.box.spacing, "mm", valueOnly = TRUE), 6)
       if (orientation == "horizontal") {
         axis <- Filter(function(x) inherits(x$stat, "StatTrackAxis"), text)[[1]]
         glyph <- grid::textGrob(axis$data$label[1], gp = grid::gpar(fontfamily = "serif",
@@ -74,9 +78,33 @@ test_that("track text inherits font family and rebuilt axes keep their margins",
       }
     }
     override <- p + geom_track(track = "signal", label = list(family = "mono"),
-      axis = list(family = "mono"))
+      axis = list(family = "mono", size = 3.1)) +
+      ggplot2::theme(legend.box.spacing = grid::unit(9, "mm"))
     text <- Filter(function(x) inherits(x$geom, "GeomText") &&
       !is.null(x$ideogram_scope), override$layers)
     expect_true(all(vapply(text, function(x) identical(x$aes_params$family, "mono"), logical(1))))
+    axes <- Filter(function(x) grepl("^axis:", x$ideogram_scope_slot %||% ""), text)
+    expect_true(all(vapply(axes, function(x) identical(x$aes_params$size, 3.1), logical(1))))
+    expect_equal(grid::convertUnit(override$theme$legend.box.spacing, "mm", valueOnly = TRUE), 9)
+  }
+})
+
+test_that("circular text reservation keeps explicit legend gaps during component updates", {
+  k <- data.frame(Chr = "A", Start = 0, End = 100)
+  d <- data.frame(Chr = "A", Pos = c(20, 80), Value = c(0, 1), Group = c("a", "b"))
+  automatic <- ggideogram(k, orientation = "circular", axis = TRUE,
+    axis_size = 5, name_size = 4)
+  expect_gt(grid::convertUnit(automatic$theme$legend.box.spacing, "mm", valueOnly = TRUE), 6)
+  themes <- list(ggplot2::theme(legend.box.spacing = grid::unit(1, "mm")),
+    theme_ideogram(legend.box.spacing = grid::unit(1, "mm")))
+  for (settings in themes) {
+    p <- automatic + settings
+    q <- p + geom_track(track = "signal", data = d,
+      ggplot2::aes(chr = Chr, x = Pos, y = Value, colour = Group),
+      geom = ggplot2::geom_point(), axis = TRUE, label = "Signal")
+    r <- q + geom_chr_axis(chr = "A", size = 4)
+    expect_equal(grid::convertUnit(q$theme$legend.box.spacing, "mm", valueOnly = TRUE), 1)
+    expect_equal(grid::convertUnit(r$theme$legend.box.spacing, "mm", valueOnly = TRUE), 1)
+    expect_no_warning(ggplot2::ggplotGrob(r))
   }
 })

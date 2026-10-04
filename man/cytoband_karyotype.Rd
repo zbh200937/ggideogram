@@ -7,7 +7,7 @@
 cytoband_karyotype(cytoband, chr = NULL)
 }
 \arguments{
-\item{cytoband}{A cytoband data frame.}
+\item{cytoband}{A cytoband data frame with 1-based closed intervals.}
 
 \item{chr}{Optional chromosome selection and order.}
 }

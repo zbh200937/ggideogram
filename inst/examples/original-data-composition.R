@@ -8,14 +8,15 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(patchwork)
 })
+source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
 
 # Device and typography are output choices, not geometry constants. Change
 # these named values without changing any chromosome or track calculation.
 figure <- list(
-  width_mm = 280,
-  height_mm = 190,
+  width_mm = 240,
+  height_mm = 185,
   dpi = 200,
-  panel_widths = c(1.2, 1),
+  panel_widths = c(2.2, 1),
   base_size = 9,
   row_gap = 5,
   marker_size = 0.65,
@@ -32,6 +33,8 @@ data("LTR_density", package = "ggideogram")
 data("Random_RNAs_500", package = "ggideogram")
 
 gene_density$Position <- (gene_density$Start - 1 + gene_density$End) / 2
+gene_density$Width <- gene_density$End - gene_density$Start + 1
+gene_density$Rate <- gene_density$Value / (gene_density$Width / 1e6)
 LTR_density$Position <- (LTR_density$Start - 1 + LTR_density$End) / 2
 Random_RNAs_500$Position <-
   (Random_RNAs_500$Start - 1 + Random_RNAs_500$End) / 2
@@ -49,30 +52,17 @@ rna_shapes <- stats::setNames(shape_lookup[rna_key$Shape], rna_key$Type)
 rna_colours <- stats::setNames(paste0("#", rna_key$color), rna_key$Type)
 
 tracks <- track_layout(markers = geom_track(side = "right", width = 0.65, gap = 0.2), genes = geom_track(side = "right",
-    width = 1.15, gap = 0.25, limits = range(gene_density$Value, na.rm = TRUE)), ltr = geom_track(side = "right",
-    width = 1.15, gap = 0.25, limits = range(LTR_density$Value, na.rm = TRUE)))
+    width = 3, gap = 0.5, limits = range(gene_density$Value, na.rm = TRUE)), ltr = geom_track(side = "right",
+    width = 3, gap = 0.5, limits = range(LTR_density$Value, na.rm = TRUE)))
 
 # Choose the chromosome grid from the data, declared tracks and actual slot
 # aspect. Restricting candidates to exact divisors avoids anonymous empty cells
 # in the final row for this complete-genome example.
 semantic <- as_ideogram_data(human_karyotype)
 chromosome_count <- nrow(semantic$karyotype)
-column_candidates <- seq_len(chromosome_count)
-column_candidates <- column_candidates[
-  chromosome_count %% column_candidates == 0
-]
-target_aspect <-
-  figure$width_mm * figure$panel_widths[1] / sum(figure$panel_widths) /
-  figure$height_mm
-candidate_aspect <- vapply(column_candidates, function(columns) {
-  candidate_layout <- ideogram_layout(
-    semantic, ncol = columns, tracks = tracks, row_gap = figure$row_gap
-  )
-  diff(candidate_layout$bounds$x) / diff(candidate_layout$bounds$y)
-}, numeric(1))
-ideogram_columns <- column_candidates[
-  which.min(abs(log(candidate_aspect / target_aspect)))
-]
+ideogram_columns <- gallery_grid(semantic, tracks,
+  figure$width_mm * figure$panel_widths[1] / sum(figure$panel_widths) - 20,
+  figure$height_mm - 42, row_gap = figure$row_gap)$ncol
 
 # One visible bp ruler per chromosome row documents the longitudinal alignment
 # shared by both side tracks. Their common value ranges are stated below panel A.
@@ -89,14 +79,14 @@ panel_a <- ggideogram(
   row_gap = figure$row_gap,
   tracks = tracks,
   axis = row_axis_chromosomes,
-  axis_breaks = seq(0, 250e6, 50e6),
+  axis_breaks = seq(0, 250e6, 100e6),
   axis_side = "left",
   base_family = "sans"
 ) +
   geom_track(data = gene_density, mapping = aes(chr = Chr, x = Position, y = Value, group = Chr),
       track = "genes", geom = ggplot2::geom_line(colour = "#277DA1", linewidth = 0.25)) +
   geom_track(data = LTR_density, mapping = aes(chr = Chr, x = Position, y = Value, width = End -
-      Start), track = "ltr", geom = ggplot2::geom_col(position = "identity", fill = "#43AA8B",
+      Start + 1), track = "ltr", geom = ggplot2::geom_col(position = "identity", fill = "#43AA8B",
       alpha = 0.7)) +
   geom_locus(geom = "link", data = Random_RNAs_500, mapping = aes(chr = Chr, position = Position),
       position = repel, track = "markers", colour = "#777777", linewidth = 0.12, alpha = 0.45) +
@@ -106,21 +96,23 @@ panel_a <- ggideogram(
   scale_shape_manual(values = rna_shapes) +
   scale_fill_manual(values = rna_colours) +
   labs(
-    title = "Human chromosome ideogram",
-    subtitle = "Gene and LTR counts with RNA loci",
-    caption = sprintf(paste0("1 Mb windows; terminal windows may be shorter.\n",
-      "Blue: genes (%g-%g); green: LTRs (%g-%g)."),
+    title = "Human chromosomes · GRCh38",
+    subtitle = "Genes, LTRs and sampled RNAs",
+    caption = sprintf(paste0("Counts/window; nominal 1 Mb bins.\n",
+      "Blue: genes (%g-%g); green: LTRs (%g-%g).\n",
+      "Terminal windows are shorter."),
       min(gene_density$Value), max(gene_density$Value),
       min(LTR_density$Value), max(LTR_density$Value)),
     shape = "RNA type",
     fill = "RNA type"
   ) +
   guides(
-    shape = guide_legend(title.position = "top", nrow = 1),
+    shape = guide_legend(title.position = "top", nrow = 1, override.aes = list(size = 1.8)),
     fill = guide_legend(title.position = "top", nrow = 1)
   ) +
   theme(
     legend.position = "bottom",
+    legend.box.spacing = gallery_legend_spacing,
     legend.box = "horizontal",
     legend.title = element_text(size = figure$base_size),
     legend.text = element_text(size = figure$base_size),
@@ -147,16 +139,16 @@ common_theme <- theme_minimal(base_size = figure$base_size) +
   )
 
 panel_b <- ggplot(rna_counts, aes(Type, Count, fill = Type)) +
-  geom_col(show.legend = FALSE) +
+  geom_col(width = 0.65, alpha = 0.65, show.legend = FALSE) +
   scale_fill_manual(values = rna_colours) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
-  labs(title = "RNA marker counts", x = NULL, y = "Records") +
+  labs(title = "Sampled RNA records", x = NULL, y = "Records") +
   common_theme
 
 gene_density$Chr <- factor(
   gene_density$Chr, levels = rev(human_karyotype$Chr)
 )
-panel_c <- ggplot(gene_density, aes(Value, Chr)) +
+panel_c <- ggplot(gene_density, aes(Rate, Chr)) +
   geom_boxplot(
     width = 0.62,
     outlier.size = 0.35,
@@ -165,13 +157,13 @@ panel_c <- ggplot(gene_density, aes(Value, Chr)) +
     colour = "#315A7D"
   ) +
   labs(
-    title = "Gene density by chromosome",
-    x = "Genes per 1 Mb window",
+    title = "Gene density",
+    x = "Genes / Mb",
     y = NULL
   ) +
   common_theme
 
-right_column <- panel_b / panel_c + plot_layout(heights = c(0.65, 1.35))
+right_column <- panel_b / panel_c + plot_layout(heights = c(0.4, 1.6))
 composition <- panel_a | right_column
 composition <- composition +
   plot_layout(widths = figure$panel_widths) +

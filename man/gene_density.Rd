@@ -3,13 +3,14 @@
 \docType{data}
 \name{gene_density}
 \alias{gene_density}
-\title{Human gene density}
+\title{Human gene counts by window}
 \format{
 A data frame with 3102 rows and 4 columns: \code{Chr}, \code{Start}, \code{End},
 \code{Value}.
 }
 \source{
-RIdeogram: \url{https://github.com/TickingClock1992/RIdeogram}
+GENCODE annotations, distributed with RIdeogram:
+\url{https://github.com/TickingClock1992/RIdeogram}.
 }
 \usage{
 gene_density
@@ -18,5 +19,8 @@ gene_density
 Gene counts in 1 Mb windows across \link{human_karyotype}. Suitable for a
 \code{\link[=geom_track]{geom_track()}} with native ggplot2::geom_line() or ggplot2::geom_col() after
 mapping each window midpoint to x and its count to y.
+Terminal windows can be shorter than 1 Mb. \code{Value} is a count, not a
+width-normalized density; genes per Mb are \code{Value / ((End - Start + 1) / 1e6)}.
+The original annotation release is not recorded by the upstream dataset.
 }
 \keyword{datasets}

@@ -69,7 +69,7 @@ test_that("locus adapters retain native prototypes and circular interval endpoin
 })
 
 test_that("default track space and font roles are coherent", {
-  expect_equal(geom_track()$width, 2)
+  expect_equal(geom_track()$width, 3)
   expect_equal(geom_track(side = "overlay")$width, 1)
   expect_equal(geom_track(side = "inner")$side, "left")
   k <- data.frame(Chr = c("A", "B"), Start = 0, End = 100)

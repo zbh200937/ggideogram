@@ -59,7 +59,7 @@ test_that("cut ends are flat while real termini stay rounded", {
 })
 
 test_that("cytobands are clipped to the selected source interval", {
-  bands <- data.frame(Chr = c("A", "A", "B"), Start = c(0, 300, 0),
+  bands <- data.frame(Chr = c("A", "A", "B"), Start = c(1, 301, 1),
     End = c(300, 700, 800), Stain = c("gneg", "gpos50", "gneg"))
   source <- as_ideogram_data(view_kar, cytoband = bands)
   view <- chr_view(source, "A", 200, 500)

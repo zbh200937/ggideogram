@@ -39,7 +39,8 @@ Annotation layers use \code{\link[=chr_key]{chr_key()}} to match those composite
 \item{centromere}{Optional mapping containing \code{start} and \code{end}.  When it is
 \code{NULL}, columns \code{CE_start} and \code{CE_end} are used together when present.}
 
-\item{cytoband}{Optional cytoband/interval table.}
+\item{cytoband}{Optional cytoband table with 1-based closed intervals.
+Use \code{\link[=read_cytoband]{read_cytoband()}} to convert UCSC 0-based half-open coordinates.}
 
 \item{cytoband_mapping}{Mapping containing \code{chr}, \code{start} and \code{end} for
 \code{cytoband}.  \code{NULL} uses columns \code{Chr}, \code{Start} and \code{End}.}

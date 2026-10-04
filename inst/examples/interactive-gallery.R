@@ -92,9 +92,9 @@ for (category in c('Genes', 'LTR')) {
       mapping = aes(chr = Chr, x = Mid, y = Rate, fill = Category, data_id = ID, tooltip = Tip),
       geom = ggiraph::geom_col_interactive(width = 7e+05, colour = NA, key_glyph = gallery_key))
 }
-p <- p + geom_track(track = "genes", axis = list(breaks = c(0, 75, 150), size = 2.9, colour = "black",
+p <- p + geom_track(track = "genes", axis = gallery_axis(breaks = c(0, 75, 150), colour = "black",
     linewidth = 0.22, tick_length = 1.2)) +
-  geom_track(track = "ltr", axis = list(breaks = c(0, 325, 650), size = 2.9, colour = "black",
+  geom_track(track = "ltr", axis = gallery_axis(breaks = c(0, 325, 650), colour = "black",
       linewidth = 0.22, tick_length = 1.2)) +
   scale_fill_manual(values = c(Genes = '#4477AA', LTR = '#CC6677'), name = 'Feature') +
   gallery_theme(plot.margin = margin(8, 34, 6, 24))

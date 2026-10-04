@@ -27,7 +27,8 @@ as_ideogram_data <- function(x, ...) {
 #'   Annotation layers use [chr_key()] to match those composite identifiers.
 #' @param centromere Optional mapping containing `start` and `end`.  When it is
 #'   `NULL`, columns `CE_start` and `CE_end` are used together when present.
-#' @param cytoband Optional cytoband/interval table.
+#' @param cytoband Optional cytoband table with 1-based closed intervals.
+#'   Use [read_cytoband()] to convert UCSC 0-based half-open coordinates.
 #' @param cytoband_mapping Mapping containing `chr`, `start` and `end` for
 #'   `cytoband`.  `NULL` uses columns `Chr`, `Start` and `End`.
 #' @rdname as_ideogram_data
@@ -217,13 +218,13 @@ canonical_cytoband <- function(cytoband, mapping, karyotype) {
           format_chr_rows(unknown))
   }
   index <- match(bands$.chr, karyotype$.chr)
-  bad <- bands$.start < karyotype$.start[index] |
-    bands$.end <= bands$.start |
+  bad <- bands$.start - 1 < karyotype$.start[index] |
+    bands$.end < bands$.start |
     bands$.end > karyotype$.end[index]
   if (any(bad)) {
     stopf(paste0(
       "Cytoband coordinates are invalid for %s.\n",
-      "  Require chromosome start <= band start < band end <= chromosome end."),
+      "  Require chromosome start < band start <= band end <= chromosome end (1-based closed)."),
       format_chr_rows(unique(bands$.chr[bad])))
   }
   bands

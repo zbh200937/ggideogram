@@ -39,6 +39,8 @@ heatmap <- ggideogram(k, ncol = 4, max_chr_length = 22, chromosome_width = 2.4,
   geom_track(data = transform(k, Pos = End, Lane = 0.5), track = "ltr", mapping = aes(chr = Chr,
       x = Pos, y = Lane), geom = ggplot2::geom_text(label = "L", size = 2.5, vjust = 1.7)) +
   fill_scale() + gallery_theme()
+heatmap <- heatmap + labs(title = 'Human · Chr1–4',
+  caption = 'GRCh38. G = genes; L = LTR elements. Counts per Mb in nominal 1 Mb windows.')
 gallery_save(heatmap, output, '01-internal-heatmap', height = 130)
 
 # 2. TAIR10 / Araport11 gene spans and explicitly annotated mRNA starts.
@@ -70,7 +72,9 @@ bands <- ggideogram(chr_view(ar, '1', 2500, 15000), orientation = 'horizontal',
   scale_fill_manual(values = c('+' = '#AACCEE', '-' = '#F4CBD2'), name = 'Strand') +
   scale_shape_manual(values = c('Transcript start' = 21), name = NULL) +
   gallery_theme(plot.margin = margin(8, 14, 6, 28))
-gallery_save(bands, output, '02-regions-and-starts', height = 48)
+bands <- bands + labs(title = 'Arabidopsis · Chr1 2.5–15 kb',
+  caption = 'TAIR10 / Araport11. Gene spans and distinct annotated mRNA starts.')
+gallery_save(bands, output, '02-regions-and-starts', height = 60)
 
 # 3. The two internal variables plus a native external gene-density line track.
 view <- chr_view(human_karyotype, '1', 110e6, 140e6)
@@ -92,8 +96,8 @@ combined <- ggideogram(view, orientation = 'horizontal', max_chr_length = 40,
   geom_chr(component = "body", fill = NA, colour = "#626A73", linewidth = 0.22, cytoband = FALSE) +
   geom_track(data = line, track = "density", mapping = aes(chr = Chr, x = Position, y = Rate),
       geom = ggplot2::geom_line(colour = "#4477AA", linewidth = 0.35)) +
-  geom_track(track = "density", axis = list(position = "start", breaks = c(0, 75, 150),
-      size = 2.5, colour = "black", linewidth = 0.22, tick_length = 1.2)) +
+  geom_track(track = "density", axis = gallery_axis(position = "start", breaks = c(0, 75, 150),
+      colour = "black", linewidth = 0.22, tick_length = 1.2)) +
   geom_track(data = data.frame(Chr = "1", Pos = 1.11e+08, Rate = 140), track = "density",
       mapping = aes(chr = Chr, x = Pos, y = Rate), geom = ggplot2::geom_text(label = "Genes / Mb",
           size = 2.5, hjust = 0)) +
@@ -102,6 +106,8 @@ combined <- ggideogram(view, orientation = 'horizontal', max_chr_length = 40,
   geom_track(data = data.frame(Chr = "1", Pos = 1.4e+08, Lane = 0.5), track = "ltr", mapping = aes(chr = Chr,
       x = Pos, y = Lane), geom = ggplot2::geom_text(label = "L", size = 2.5, hjust = -0.3)) +
   fill_scale() + gallery_theme(plot.margin = margin(8, 18, 6, 28))
+combined <- combined + labs(title = 'Human · Chr1 110–140 Mb',
+  caption = 'GRCh38. G = genes; L = LTR elements. External track: genes per Mb.')
 gallery_save(combined, output, '03-internal-and-external', height = 75)
 writeLines(c(
   '01: Human Chr1–4; G = genes, L = LTR elements. Shared count-per-Mb fill scale.',

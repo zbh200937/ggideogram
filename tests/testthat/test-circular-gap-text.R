@@ -84,7 +84,7 @@ test_that('small openings report capacity without moving titles across tracks', 
   expect_match(r$warnings, 'exceed the closing gap')
   expect_false(r$state$cache$fits)
   expect_equal(z$label, c('Count', '0', '1', 'Cover', '0', '1'))
-  expect_equal(z$size, c(2.8, 2.6, 2.6, 2.8, 2.6, 2.6))
+  expect_equal(z$size, c(2.8, 2.2, 2.2, 2.8, 2.2, 2.2))
   expect_equal((z$x - z$original_x) * -z$ny + (z$y - z$original_y) * z$nx,
     rep(0, nrow(z)), tolerance = 1e-10)
   expect_true(all(z$shift <= 2 * z$size))

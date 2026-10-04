@@ -4,6 +4,7 @@
 
 library(ggideogram)
 library(ggplot2)
+source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
 
 output <- Sys.getenv('GGIDEOGRAM_EXAMPLE_OUTPUT', 'work/combined-review')
 dir.create(output, recursive = TRUE, showWarnings = FALSE)
@@ -18,6 +19,7 @@ style <- function() theme(text = element_text(size = 9),
   legend.position = 'bottom', legend.key = element_blank(),
   legend.text = element_text(size = 8), legend.title = element_text(size = 8),
   legend.key.size = grid::unit(4, 'mm'), legend.margin = margin(0, 0, 0, 0),
+  legend.box.spacing = gallery_legend_spacing,
   plot.title = element_text(size = 11, margin = margin(b = 5, unit = 'mm')))
 palette <- c(rice = '#4477AA', wild = '#CC6677')
 genome_colour <- function() scale_colour_manual(values = palette, limits = names(palette),
@@ -65,6 +67,11 @@ rice_labels <- anchors[!duplicated(anchors$Chr), ]
 rice_labels$Rate <- rice_bins$Rate[vapply(seq_len(nrow(rice_labels)), function(i)
   which(rice_bins$Chr == rice_labels$Chr[i] & rice_labels$Pos[i] >= rice_bins$Start - 1 &
     rice_labels$Pos[i] <= rice_bins$End), integer(1))]
+label_chr <- match(rice_labels$Chr, k$Key)
+label_fraction <- (rice_labels$Pos - k$Start[label_chr]) /
+  (k$End[label_chr] - k$Start[label_chr])
+label_fraction[rice_labels$Genome == 'wild'] <- 1 - label_fraction[rice_labels$Genome == 'wild']
+rice_labels$Hjust <- as.numeric(label_fraction > .5)
 
 # Each genome owns its outward tracks. Rate is genes per Mb; Count is the
 # actual number per window, including the shorter final window. Coverage is
@@ -74,30 +81,30 @@ wild_chr <- k$Key[k$Genome == 'wild']
 rate_limits <- c(0, ceiling(max(rice_bins$Rate) / 50) * 50)
 count_limits <- c(0, ceiling(max(rice_bins$Value) / 50) * 50)
 rate_track <- function(chr, side, axis_position) geom_track(chr = chr, side = side,
-  width = 4, gap = 1, data = rice_bins,
+  width = 4, gap = 1.6, data = rice_bins,
   mapping = aes(chr = Chr, x = Pos, y = Rate, colour = Genome),
   limits = rate_limits, label = 'Rate (genes/Mb)',
-  axis = list(position = axis_position, breaks = rate_limits),
+  axis = gallery_axis(position = axis_position, breaks = rate_limits),
   layers = list(geom_col(width = 5e5, fill = 'grey85', colour = NA,
     show.legend = FALSE), geom_line(linewidth = .24, show.legend = FALSE),
     geom_point(size = 1.6, stroke = .22)))
 coverage_track <- function(chr, side, axis_position) geom_track(chr = chr, side = side,
-  width = 4, gap = 1, data = rice_coverage,
+  width = 4, gap = 1.6, data = rice_coverage,
   mapping = aes(chr = Chr, x = Pos, y = Value, colour = Genome),
   limits = c(0, 1), label = 'Cover (fraction)',
-  axis = list(position = axis_position, breaks = c(0, 1)),
+  axis = gallery_axis(position = axis_position, breaks = c(0, 1)),
   layers = list(geom_line(linewidth = .24, show.legend = FALSE)))
 label_track <- function(chr, side) geom_track(chr = chr, side = side,
-  width = 3.5, gap = 1, data = rice_labels, limits = rate_limits,
+  width = 3.5, gap = 1.6, data = rice_labels, limits = rate_limits,
   mapping = aes(chr = Chr, x = Pos, y = Rate, label = Gene, colour = Genome,
-    hjust = as.numeric(Genome == 'rice')),
+    hjust = Hjust),
   layers = list(geom_text(size = 2.5, show.legend = FALSE)))
 count_track <- function(chr, side, axis_position, track = NULL) geom_track(
   track = track, chr = chr, side = side,
-  width = 4, gap = 1, data = rice_bins,
+  width = 4, gap = 1.6, data = rice_bins,
   mapping = aes(chr = Chr, x = Pos, y = Value, fill = Genome),
   limits = count_limits, label = 'Count (genes/window)',
-  axis = list(position = axis_position, breaks = count_limits),
+  axis = gallery_axis(position = axis_position, breaks = count_limits),
   layers = list(geom_col(width = 5e5, alpha = .7, show.legend = FALSE)))
 
 # Ordinary columns, line and point reuse the same raw bp/value scope; domain
@@ -115,7 +122,7 @@ rice_tracks <- list(
 rice_plot <- ggideogram(rice_model, orientation = 'horizontal',
   order_by = 'homolog', genome_order = c('wild', 'rice'),
   reverse_chr = wild_chr, ncol = 2, chromosome_gap = 4,
-  tracks = rice_tracks, max_chr_length = 72, fill = '#9ABCB7', linewidth = .24,
+  tracks = rice_tracks, max_chr_length = 90, fill = '#9ABCB7', linewidth = .24,
   axis = FALSE,
   name_size = 3.2, name_gap = 1.8) +
   geom_chr(chr = wild_chr, component = 'axis',
@@ -125,7 +132,11 @@ rice_plot <- ggideogram(rice_model, orientation = 'horizontal',
   geom_chrlink(data = blocks, type = 'interval',
     aes(chr1 = Key1, start1 = Start1, end1 = End1, chr2 = Key2,
       start2 = Start2, end2 = End2, orientation = Orientation),
-    side1 = 'left', side2 = 'right', gap = 0, fill = '#AAB2BD', alpha = .18) +
+    side1 = 'left', side2 = 'right', gap = 0, fill = '#AAB2BD', alpha = .4) +
+  geom_chrlink(data = blocks,
+    aes(chr1 = Key1, position1 = Mid1, chr2 = Key2, position2 = Mid2),
+    side1 = 'left', side2 = 'right', gap = 0, colour = '#687889',
+    linewidth = .24, alpha = .8) +
   geom_locus(data = anchors[anchors$Genome == 'wild', ],
     aes(chr = Chr, position = Pos, colour = Genome),
     side = 'right', gap = 0, size = 1.6, stroke = .22, show.legend = FALSE) +
@@ -135,13 +146,14 @@ rice_plot <- ggideogram(rice_model, orientation = 'horizontal',
   genome_colour() + genome_fill() + guide_style() + style() +
   labs(title = 'Rice and wild rice · Chr1 annotations',
     caption = paste('Eight selected LASTZ_NET blocks: two longest from each of four query regions.',
-      'Markers show genes nearest block midpoints; summaries use 1 Mb windows.', sep = '\n'))
+      'Lines connect block midpoints; markers show nearest annotated genes.',
+      'Nominal 1 Mb bins: counts/window, width-normalized genes/Mb and gene-union coverage.', sep = '\n'))
 
 # A later track joins the same layout as all existing links and markers.
 rice_plot <- rice_plot +
   count_track(wild_chr, 'left', 'start', track = 'wild_counts') +
   count_track(rice_chr, 'right', 'end', track = 'rice_counts')
-save_pair(rice_plot, 'rice-scope-comprehensive', 240, 240)
+save_pair(rice_plot, 'rice-scope-comprehensive', 185, 185)
 
 # 2. Arabidopsis: keep the complete source GFF and chromosome extent, and let
 # chr_view select the visible 7–9 kb window for the circular host and its tracks.
@@ -154,10 +166,8 @@ regions <- read.table(text = sub('^##sequence-region[[:space:]]+', '', regions),
 regions$Start <- regions$Start - 1
 arab_karyotype <- regions[regions$Chr == '1', ]
 arab_view <- chr_view(arab_karyotype, '1', 7000, 9000)
-transcripts <- features[features$Type == 'mRNA', ]
-features$Transcript <- ifelse(features$Type == 'mRNA', features$ID, features$Parent)
-models <- features[features$Transcript %in% transcripts$ID, ]
-models$Gene <- transcripts$Parent[match(models$Transcript, transcripts$ID)]
+source(system.file('examples', 'gene-model-data.R', package = 'ggideogram'))
+models <- gene_model_data(features)
 arab_counts <- bin_genome(features[features$Type == 'gene', ],
   arab_karyotype, window = 250, method = 'count')
 arab_counts$Pos <- (arab_counts$Start - 1 + arab_counts$End) / 2
@@ -186,12 +196,12 @@ arab_tracks <- list(
     layers = list(geom_chr(component = 'fill'))),
   count = geom_track(side = 'inner', width = 2.2, gap = 1.7, data = arab_counts,
     mapping = aes(chr = Chr, x = Pos, y = Value), label = 'Genes',
-    axis = list(breaks = c(0, 1), labels = as.character),
+    axis = gallery_axis(breaks = c(0, 1), labels = as.character),
     layers = list(geom_col(width = 180, fill = '#B6C7DF'),
       geom_point(size = 1.6, stroke = .22, colour = '#4477AA'))),
   coverage = geom_track(side = 'inner', width = 2.2, gap = 1.7, limits = c(0, 1), data = arab_coverage,
     mapping = aes(chr = Chr, x = Pos, y = Value), label = 'Cover',
-    axis = list(breaks = c(0, 1), labels = as.character),
+    axis = gallery_axis(breaks = c(0, 1), labels = as.character),
     layers = list(geom_line(linewidth = .24, colour = '#438776'))))
 arab_plot <- ggideogram(arab_view, orientation = 'circular',
   radius = 28, opening_angle = 60, reverse_chr = '1', tracks = arab_tracks, axis = TRUE,

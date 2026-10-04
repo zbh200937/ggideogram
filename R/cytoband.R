@@ -92,6 +92,7 @@ cytoband_colours <- function(
 #' @param chr Optional chromosome selection and order.
 #'
 #' @return A data frame with `Chr`, `Start`, `End`, `Name`, and `Stain`.
+#'   UCSC 0-based half-open intervals are converted to 1-based closed intervals.
 #' @export
 read_cytoband <- function(file, chr = NULL) {
   bands <- if (is.data.frame(file)) {
@@ -142,7 +143,7 @@ is_cytoband <- function(x) {
 #'
 #' Chromosome ends come from the final band and centromeres from `acen` bands.
 #'
-#' @param cytoband A cytoband data frame.
+#' @param cytoband A cytoband data frame with 1-based closed intervals.
 #' @param chr Optional chromosome selection and order.
 #'
 #' @return A karyotype data frame accepted by [ggideogram()].
@@ -182,7 +183,7 @@ cytoband_karyotype <- function(cytoband, chr = NULL) {
   if (nrow(centromere)) {
     result$CE_start <- vapply(keep, function(id) {
       value <- centromere$Start[centromere$Chr == id]
-      if (length(value)) min(value) else 0
+      if (length(value)) min(value) - 1 else 0
     }, numeric(1))
     result$CE_end <- vapply(keep, function(id) {
       value <- centromere$End[centromere$Chr == id]

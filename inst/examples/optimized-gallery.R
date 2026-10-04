@@ -2,6 +2,7 @@
 # Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/optimized-gallery.R")'
 library(ggideogram)
 library(ggplot2)
+source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
 output <- Sys.getenv('GGIDEOGRAM_EXAMPLE_OUTPUT', 'work/optimized-review')
 dir.create(output, recursive = TRUE, showWarnings = FALSE)
 extdata <- function(file) system.file('extdata', file, package = 'ggideogram')
@@ -13,58 +14,90 @@ save_pair <- function(plot, name, width = 185, height = width) {
 }
 style <- function() theme(legend.position = 'bottom', legend.key = element_blank(),
   legend.key.width = grid::unit(4, 'mm'), legend.key.height = grid::unit(3, 'mm'),
+  legend.box.spacing = gallery_legend_spacing,
   plot.title = element_text(size = 11, face = 'plain', margin = margin(b = 5, unit = 'mm')),
   plot.caption = element_text(size = 8, hjust = 0))
 strand <- c('+' = '#4477AA', '-' = '#CC6677')
 strand_scales <- function() list(scale_fill_manual(values = strand, name = 'Strand'),
   scale_colour_manual(values = strand, name = 'Strand'), guides(colour = 'none'))
 
-# 1. Full source models and annotation summaries share one local circular axis.
+# 1. Full source models and annotation summaries share one local bp axis.
 # The exon coverage is a union fraction, not read depth or expression.
 f <- read_chr_features(extdata('arabidopsis-first-genes.gff3'))
 genes <- f[f$Type == 'gene', ]
 genes$Mid <- (genes$Start - 1 + genes$End) / 2
-tx <- f[f$Type == 'mRNA', ]
-f$Transcript <- ifelse(f$Type == 'mRNA', f$ID, f$Parent)
-models <- f[f$Transcript %in% tx$ID, ]
-models$Gene <- sub('gene:', '', tx$Parent[match(models$Transcript, tx$ID)])
+source(system.file('examples', 'gene-model-data.R', package = 'ggideogram'))
+models <- gene_model_data(f)
+models$Gene <- sub('gene:', '', models$Gene)
 k <- data.frame(Chr = '1', Start = 0, End = 30427671, Label = 'Chr1')
 semantic <- as_ideogram_data(k, aes(chr = Chr, start = Start, end = End, label = Label))
+local_view <- chr_view(semantic, '1', 4500, 14500)
 count <- bin_genome(genes, k, window = 1000, method = 'count')
 coverage <- bin_genome(f[f$Type == 'exon', ], k, window = 1000, method = 'coverage')
 count$Mid <- (count$Start - 1 + count$End) / 2
+coverage <- view_chr_data(coverage, local_view)
 coverage$Mid <- (coverage$Start - 1 + coverage$End) / 2
 local_tracks <- list(
-  models = geom_track(side = 'inner', width = 4, gap = .8, data = models,
+  models = geom_track(side = 'inner', gap = .8, data = models,
     aes(chr = Chr, start = Start, end = End, gene = Gene, type = Type,
-      strand = Strand, fill = Strand), label = 'Genes',
+      strand = Strand, fill = Strand), label = 'Gene models',
     layers = list(geom_genemodel(mode = 'gene', labels = FALSE, block_height = .55))),
-  count = geom_track(side = 'inner', width = 2.8, gap = .8, data = count,
+  count = geom_track(side = 'inner', gap = .8, data = count,
     aes(chr = Chr, x = Mid, y = Value), limits = c(0, 1),
-    geom = geom_col(width = 800, fill = '#9BBACD', colour = NA), label = 'Count',
-    axis = list(breaks = c(0, 1))),
-  coverage = geom_track(side = 'inner', width = 2.3, gap = 2, data = coverage,
-    aes(chr = Chr, x = Mid, y = Value), limits = c(0, 1),
-    layers = list(geom_line(linewidth = .32, colour = '#526C76')), label = 'Cover',
-    axis = list(breaks = c(0, 1)))
+    geom = geom_col(width = 800, fill = '#9BBACD', colour = NA), label = 'Genes / 1 kb',
+    axis = gallery_axis(breaks = c(0, 1))),
+  coverage = geom_track(side = 'inner', gap = 2, data = coverage,
+    aes(chr = Chr, x = Mid, y = Value, xmin = Start - 1, xmax = End,
+      ymin = 0, ymax = Value), limits = c(0, 1),
+    geom = geom_rect(fill = '#526C76', colour = NA), label = 'Exon coverage',
+    axis = gallery_axis(breaks = c(0, 1)))
 )
-local_base <- function(opening_angle = 65) ggideogram(chr_view(semantic, '1', 4500, 14500),
-  orientation = 'circular', radius = 22, opening_angle = opening_angle,
+local_base <- function(opening_angle = 85) ggideogram(local_view,
+  orientation = 'circular', radius = 27, show_names = FALSE, opening_angle = opening_angle,
   tracks = local_tracks, axis = TRUE, axis_side = 'inner', axis_units = 'kb',
   axis_breaks = c(5000, 8000, 11000, 14000), axis_gap = .8,
   fill = '#EEF0F2', colour = '#626A73', linewidth = .22) +
   geom_locus(data = genes, aes(chr = Chr, position = Mid, colour = Strand),
     side = 'outer', gap = 0, size = 1.7, show.legend = FALSE) +
   strand_scales() + style() +
-  labs(title = 'Arabidopsis · Chr1 4.5–14.5 kb')
-local_labels <- function(width, opening_angle = 65) local_base(opening_angle) +
+  labs(title = 'Arabidopsis · Chr1 4.5–14.5 kb',
+    caption = 'TAIR10 / Araport11. Gene counts and exon-union fractions use 1 kb windows.')
+local_labels <- function(width, opening_angle = 85) local_base(opening_angle) +
   geom_locus(geom = "text", position = "spread", data = genes, aes(chr = Chr, position = Mid, label = Name),
     side = 'outer', label_width = width, gap = .35)
 # Declare label space for each output slot; physical text stays at 3 mm.
-p_local <- local_labels(10)
+p_local <- local_labels(14)
+p_local <- p_local + labs(caption = paste(
+  'Counts: gene midpoints per 1 kb window. Coverage: exon-union fraction (0–1).',
+  'TAIR10 / Araport11; gene-level structures and strand retain source annotations.', sep = '\n'))
 save_pair(p_local, '01-local-shared-circle', 155)
-save_pair(local_labels(18, opening_angle = 65), '01-local-shared-circle-120', 120)
+save_pair(local_labels(18, opening_angle = 85), '01-local-shared-circle-120', 120)
 save_pair(local_labels(8), '01-local-shared-circle-200', 200)
+
+# The linear overview uses the same source window, structures and summaries.
+linear_tracks <- local_tracks
+for (id in names(linear_tracks)) linear_tracks[[id]]$side <- 'right'
+linear_models <- models
+linear_models$Label <- genes$Name[match(linear_models$Gene, sub('gene:', '', genes$ID))]
+linear_tracks$models$data <- linear_models
+linear_tracks$models$mapping$label <- aes(label = Label)$label
+linear_tracks$models$label <- NULL
+linear_tracks$models$layers <- list(geom_genemodel(mode = 'gene', labels = TRUE,
+  block_height = .55))
+linear_tracks$count$label <- 'Genes / 1 kb'
+linear_tracks$coverage$label <- 'Exon coverage'
+linear_tracks$count$reverse <- TRUE
+linear_tracks$coverage$reverse <- TRUE
+p_linear <- ggideogram(local_view,
+  orientation = 'horizontal', max_chr_length = 65, tracks = linear_tracks,
+  show_names = FALSE,
+  axis = TRUE, axis_side = 'right', axis_units = 'kb',
+  axis_breaks = c(5000, 8000, 11000, 14000), axis_gap = .8,
+  fill = '#EEF0F2', colour = '#626A73', linewidth = .22) +
+  strand_scales() + style() +
+  labs(title = 'Arabidopsis · Chr1 4.5–14.5 kb',
+    caption = 'TAIR10 / Araport11. Gene counts use midpoints; exon coverage is a union fraction (0–1).')
+save_pair(p_linear, '01-local-shared-linear', 185, 85)
 
 # 2. Two genomes with identical chromosome names, outer annotation tracks and
 # source-coordinate interval relations. Native line + point share one track.
@@ -92,21 +125,25 @@ p_rice <- ggideogram(dr, ncol = 2, chromosome_gap = 10,
       chr2 = Key2, start2 = Start2, end2 = End2,
       orientation = Orientation, fill = Orientation), alpha = .5, colour = NA) +
   geom_track(track = 'rice_count', side = 'left', width = 3, data = rice,
-    aes(chr = Chr, x = Mid, y = Value), label = 'Genes / window', limits = c(0, count_limit),
+    aes(chr = Chr, x = Mid, y = Value), label = 'Genes / 1 Mb', limits = c(0, count_limit),
     layers = list(geom_line(colour = '#4477AA', linewidth = .3),
                   geom_point(colour = '#4477AA', size = .75)),
-    axis = list(chr = rice$Chr[1], breaks = c(0, count_limit), position = 'end')) +
+    axis = gallery_axis(chr = rice$Chr[1], breaks = c(0, count_limit), position = 'end')) +
   geom_track(track = 'wild_count', side = 'right', width = 3, data = wild,
     aes(chr = Chr, x = Mid, y = Value), label = NULL, limits = c(0, count_limit),
     geom = geom_col(width = 8e5, fill = '#CC6677', alpha = .8),
-    axis = list(chr = wild$Chr[1], breaks = c(0, count_limit), position = 'start')) +
+    axis = gallery_axis(chr = wild$Chr[1], breaks = c(0, count_limit), position = 'start')) +
   geom_chr(chr = rice$Chr[1], component = 'axis', side = 'left',
     units = 'Mb', breaks = c(0, 2e7, 4e7)) +
   geom_chr(chr = wild$Chr[1], component = 'axis', side = 'right',
     units = 'Mb', breaks = c(0, 2e7)) +
   scale_fill_manual(values = c('+' = '#86A5BC', '-' = '#CC6677'),
-    name = 'Block order', labels = c('Same', 'Reversed')) + style()
-save_pair(p_rice, '02-rice-outer-tracks', 185, 155)
+    name = 'Block order', labels = c('Same', 'Reversed')) + style() +
+  labs(title = 'Rice and wild rice · Chr1',
+    caption = 'IRGSP-1.0 / OR_W1943. Genes per 1 Mb window;\neight sampled LASTZ_NET alignment blocks.') +
+  theme(plot.title.position = 'plot', plot.caption.position = 'plot',
+    plot.title = element_text(margin = margin(b = 10, unit = 'mm')))
+save_pair(p_rice, '02-rice-outer-tracks', 145, 155)
 
 # 3. A real 12-gene annotation cluster, with radial text edges on one arc.
 cluster <- read_chr_features(extdata('arabidopsis-gene-cluster.gff3'))
@@ -116,12 +153,14 @@ cluster$Mid <- (cluster$Start - 1 + cluster$End) / 2
 cluster$Label <- ifelse(is.na(cluster$Name) | !nzchar(cluster$Name),
   sub('gene:', '', cluster$ID), cluster$Name)
 cluster_view <- semantic
-p_dense_base <- ggideogram(cluster_view, orientation = 'circular', radius = 25,
+p_dense_base <- ggideogram(cluster_view, orientation = 'circular', radius = 25, show_names = FALSE,
   opening_angle = 32, axis = TRUE, axis_side = 'inner', axis_units = 'Mb', axis_n = 4,
   fill = '#EEF0F2', colour = '#626A73', linewidth = .22) +
   geom_locus(data = cluster, aes(chr = Chr, position = Mid, colour = Strand),
     side = 'outer', gap = 0, size = 1.5, show.legend = FALSE) +
-  scale_colour_manual(values = strand, name = 'Strand') + style()
+  scale_colour_manual(values = strand, name = 'Strand') + style() +
+  labs(title = 'Arabidopsis · Chr1 gene cluster',
+    caption = 'TAIR10 / Araport11. Twelve source genes shown on the full chromosome.')
 dense_labels <- function(width) p_dense_base +
   geom_locus(geom = "text", position = "spread", data = cluster, aes(chr = Chr, position = Mid, label = Label),
     side = 'outer', label_width = width, gap = .4)
@@ -151,8 +190,10 @@ p_nodes <- ggideogram(chr_view(semantic, '1', 23150000, 23540000),
   geom_chrlink(data = pairs, nodes = nodes, aes(from = Gene1, to = Gene2),
     colour = '#4477AA', linewidth = .23, alpha = .9) +
   geom_locus(data = node_source, aes(chr = Chr, position = Mid),
-    side = 'right', gap = 0, size = 1.4, colour = '#4477AA') + style()
-save_pair(p_nodes, '04-local-node-arcs', 185, 55)
+    side = 'right', gap = 0, size = 1.4, colour = '#4477AA') + style() +
+  labs(title = 'Arabidopsis · Chr1 23.15–23.54 Mb',
+    caption = 'TAIR10 chromosome; six reversed gene pairs from MCScanX block 15.')
+save_pair(p_nodes, '04-local-node-arcs', 185, 70)
 
 # 5. Ordinary independent panels use patchwork; the ideogram remains a native
 # ggplot component; the summary preserves its own categorical coordinates.
@@ -168,7 +209,7 @@ if (requireNamespace('patchwork', quietly = TRUE)) {
 }
 
 writeLines(c(
-  '01: Arabidopsis TAIR10 / Araport11 Chr1 4.5–14.5 kb. From the chromosome inward: gene-level exon/CDS/UTR structures, midpoint gene counts per 1 kb bin, exon-union coverage fraction and original-bp axis. Outer radial labels start on one arc; leaders and points keep their source gene anchors.',
+  '01: Arabidopsis TAIR10 / Araport11 Chr1 4.5–14.5 kb, in linear and circular views. The same gene-level exon/CDS/UTR structures, midpoint gene counts per 1 kb bin, exon-union coverage fractions and original bp are used in both layouts. Leaders keep their source gene anchors.',
   '02: O. sativa IRGSP-1.0 and O. rufipogon OR_W1943 Chr1, complete bundled gene annotations summarized per 1 Mb. Wild-rice display is reversed. The eight LASTZ_NET alignment blocks are the two longest from each of four queried regions; the source block boundaries are retained.',
   '03: First 12 genes ordered by source position in the bundled Arabidopsis gene-cluster annotation, displayed on the full Chr1 coordinate range. Near text edges and leader ends share one circular baseline; radial text faces upright. Native points retain the source anchors. Label track widths are declared for each output slot; physical label size stays at 3 mm.',
   '04: Arabidopsis MCScanX block 15, six real reversed gene pairs in Chr1. ID-based node connections and the interval band use the same original-bp projection and default arcs.',

@@ -13,6 +13,8 @@ geom_chromosome <- function(
     fill = ideogram_colour("body"),
     colour = ideogram_colour("outline"),
     linewidth = ideogram_linewidth("body"),
+    alpha = NA,
+    linetype = 1,
     curve_points = 32,
     cytoband = TRUE,
     cytoband_scheme = c("circos", "biovizbase", "only.centromeres"),
@@ -27,6 +29,8 @@ geom_chromosome <- function(
     fill = fill,
     colour = colour,
     linewidth = linewidth,
+    alpha = alpha,
+    linetype = linetype,
     curve_points = curve_points,
     cytoband = cytoband,
     scheme = match.arg(cytoband_scheme),
@@ -131,16 +135,16 @@ ggplot_add.ggideogram_chromosome_component <- function(
     object$kind,
     body = {
       result <- list(chromosome_fill_layer(
-        layout, parameters$fill, parameters$curve_points))
+        layout, parameters$fill, parameters$curve_points, parameters$alpha))
       if (parameters$cytoband) {
         bands <- chromosome_cytoband_layer(
           layout, parameters$curve_points, parameters$scheme,
-          parameters$palette, parameters$bleach)
+          parameters$palette, parameters$bleach, parameters$alpha)
         if (!is.null(bands)) result <- c(result, list(bands))
       }
       c(result, list(chromosome_outline_layer(
         layout, parameters$colour, parameters$linewidth,
-        parameters$curve_points)))
+        parameters$curve_points, parameters$alpha, parameters$linetype)))
     },
     cytoband = {
       layer <- chromosome_cytoband_layer(

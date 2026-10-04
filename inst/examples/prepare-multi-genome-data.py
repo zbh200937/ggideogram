@@ -3,11 +3,14 @@
 Python 3.9+, standard library only. Run from the repository root.
 FASTA is streamed to retain only chromosome headers. Ensembl gene coordinates
 are 1-based closed; LASTZ_NET records retain the two returned genomic intervals.
-Downloaded records are cached in work/multi-genome-source.
+Versioned downloads are cached in work/multi-genome-source. REST assembly
+records and selected alignment endpoints are replayed from the bundled snapshot.
 """
 import concurrent.futures
 import csv
 import gzip
+import hashlib
+import io
 import json
 import pathlib
 import re
@@ -17,6 +20,7 @@ work = pathlib.Path('work/multi-genome-source')
 work.mkdir(parents=True, exist_ok=True)
 out = pathlib.Path('inst/extdata')
 out.mkdir(parents=True, exist_ok=True)
+snapshot = json.loads((out / 'multi-genome-rest-snapshot.json').read_text())
 
 
 def download(name, url):
@@ -28,10 +32,14 @@ def download(name, url):
 
 
 def table(name, fields, rows):
-    with (out / name).open('w') as handle:
-        writer = csv.writer(handle, delimiter='\t', lineterminator='\n')
-        writer.writerow(fields)
-        writer.writerows(rows)
+    handle = io.StringIO()
+    writer = csv.writer(handle, delimiter='\t', lineterminator='\n')
+    writer.writerow(fields)
+    writer.writerows(rows)
+    content = handle.getvalue().encode('utf-8')
+    if hashlib.sha256(content).hexdigest() != snapshot['tables_sha256'][name]:
+        raise ValueError(f'Regenerated {name} differs from the documented source snapshot')
+    (out / name).write_bytes(content)
 
 
 # Populus trichocarpa, two haplotype assemblies from Gao et al. (2025).
@@ -74,8 +82,10 @@ table('wheat-subgenomes.tsv', ['Genome', 'Assembly', 'Chr', 'Start', 'End',
 
 
 def rest(name, path):
-    url = 'https://rest.ensembl.org' + path + ('&' if '?' in path else '?') + 'content-type=application/json'
-    return json.loads(download(name + '.json', url).read_bytes())
+    record = snapshot['responses'][name]
+    if record['request'] != path:
+        raise ValueError(f'Request for {name} differs from the bundled REST snapshot')
+    return record['data']
 
 
 species = [('rice', 'oryza_sativa', 'IRGSP-1.0'),

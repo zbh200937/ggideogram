@@ -1,8 +1,4 @@
-# Binning arbitrary genomic data into fixed windows.
-#
-# GFFex() does this for one specific case -- counting one feature type out of a
-# GFF -- and every other kind of genomic data has to arrive pre-binned. This is
-# the general form: any table with positions, any summary function.
+# Fixed chromosome windows shared by genomic summaries and GFF feature counts.
 
 #' Window edges for one chromosome
 #'
@@ -27,8 +23,10 @@ window_edges <- function(end, window) {
 #' each chromosome, giving the `Chr` / `Start` / `End` / `Value` frame consumed
 #' by chromosome track layers.
 #'
-#' A row is assigned to the window containing its midpoint when it has an `End`,
-#' and its `Start` otherwise, so an interval is counted once however long it is.
+#' Count and `FUN` summaries assign each row to one window. By default the
+#' representative position is `(Start + End) / 2` when `End` is present, and
+#' `Start` otherwise. A position exactly at a window's end belongs to that
+#' window. Coverage and weighted means use complete interval overlaps.
 #'
 #' @param data Data frame with `Chr` and `Start`, and optionally `End`.
 #'   Coordinates are positive integers using 1-based closed intervals. Unknown
@@ -43,10 +41,11 @@ window_edges <- function(end, window) {
 #' @param FUN Summary function applied to each window's values. Defaults to
 #'   [length()] when `value` is `NULL` and [mean()] otherwise.
 #' @param empty Value for a window with no rows in it. Defaults to `0` for
-#'   counts and `NA` for a summary of nothing.
+#'   counts and `NA` for a summary of nothing. Missing results from occupied
+#'   windows remain missing; they are not replaced by `empty`.
 #' @param ... Passed to `FUN`.
 #' @param method Explicit `"count"`, `"coverage"`, or `"weighted_mean"`.
-#'   Count assigns each feature once by its midpoint. Coverage is the union of
+#'   Count assigns each feature once by `count_position`. Coverage is the union of
 #'   covered bases divided by actual window width. Weighted mean uses each
 #'   interval's overlap length; overlapping observations contribute separately.
 #'   `NULL` retains the original `FUN` behavior.
@@ -54,21 +53,44 @@ window_edges <- function(end, window) {
 #'   explicit `method`. Every observed group receives every karyotype window.
 #'   For weighted means, `na.rm = TRUE` in `...` excludes missing values and
 #'   their weights; otherwise a missing overlapping value produces `NA`.
+#' @param count_position Representative position for count and `FUN` summaries:
+#'   `"midpoint"` (default), `"start"`, or `"end"`. With no `End` column all
+#'   three use `Start`. Coverage and weighted means do not accept an explicit
+#'   setting because they use the complete interval.
 #' @return A data frame with `Chr`, `Start`, `End`, `Value`, in karyotype order.
 #'   Window coordinates are 1-based closed intervals.
 #'   Explicit methods additionally return `Width`, `N` and `N_valid`; counts
-#'   include `Rate` per Mb. Method and unit are stored in `window_summary`.
+#'   include `Rate` per Mb. All results carry a `window_summary` attribute with
+#'   `method`, `group`, `coordinates`, `unit`, `value`, `window`, `count_position`,
+#'   `na.rm`, `overlap`, `empty` and `summary`. Default row counts use method
+#'   `"count"`; other `FUN` calls use `"summary"` and record the function
+#'   expression. Count units are `"features"`, coverage units are `"fraction"`.
+#'   For weighted means and `FUN` summaries, `unit` is `NULL` and `value` names
+#'   the input column; units are not inferred from column names. `window` is
+#'   the requested width in bp; actual widths follow each row's boundaries.
+#'   For `FUN`, `na.rm` records only an explicitly forwarded argument.
 #' @examples
 #' kar <- data.frame(Chr = "A", Start = 0, End = 2500)
 #' snps <- data.frame(Chr = "A", Start = c(10, 20, 1500), Qual = c(30, 50, 99))
 #' bin_genome(snps, kar, window = 1000)
 #' bin_genome(snps, kar, window = 1000, value = "Qual", FUN = max)
+#' intervals <- data.frame(Chr = "A", Start = 950, End = 1150)
+#' counts <- bin_genome(intervals, kar, window = 1000, method = "count",
+#'   count_position = "start")
+#' attr(counts, "window_summary")
 #' @export
 bin_genome <- function(data, karyotype, window = 1e6, value = NULL, FUN = NULL,
-                       empty = NULL, ..., method = NULL, group = NULL) {
+                       empty = NULL, ..., method = NULL, group = NULL,
+                       count_position = c("midpoint", "start", "end")) {
+  position_supplied <- !missing(count_position)
+  count_position <- match.arg(count_position)
   if (!is.null(method)) {
+    method <- match.arg(method, c('count', 'coverage', 'weighted_mean'))
+    if (method != 'count' && position_supplied) {
+      stopf('`count_position` applies only to count or FUN summaries.')
+    }
     return(bin_interval_windows(data, karyotype, window, value, FUN, empty,
-      match.arg(method, c('count', 'coverage', 'weighted_mean')), group, ...))
+      method, group, count_position, ...))
   }
   if (!is.null(group)) stopf('Grouped windows require an explicit `method`.')
   input <- window_input(data, karyotype, window)
@@ -77,9 +99,13 @@ bin_genome <- function(data, karyotype, window = 1e6, value = NULL, FUN = NULL,
     stopf("`value` names column `%s`, which is not in `data`.\n  Columns present: %s",
           value, paste0("`", names(data), "`", collapse = ", "))
   }
+  method <- if (is.null(value) && is.null(FUN)) "count" else "summary"
+  summary <- if (method == "count") NULL else if (is.null(FUN)) "mean" else
+    paste(deparse(substitute(FUN)), collapse = " ")
   FUN <- FUN %||% if (is.null(value)) length else mean
   empty <- empty %||% if (is.null(value)) 0 else NA
-  at <- (input$start + input$end) / 2
+  if (!"End" %in% names(data)) count_position <- "start"
+  at <- window_position(input$start, input$end, count_position)
   v <- if (is.null(value)) rep(1, nrow(data)) else data[[value]]
 
   parts <- lapply(seq_len(nrow(k)), function(i) {
@@ -90,17 +116,36 @@ bin_genome <- function(data, karyotype, window = 1e6, value = NULL, FUN = NULL,
     out <- rep(empty, length(e$upper))
     if (any(keep)) {
       bin <- findInterval(at[keep], e$upper, left.open = TRUE) + 1L
-      agg <- vapply(split(v[keep], factor(bin, levels = seq_along(e$upper))),
-                    function(x) if (length(x)) as.numeric(FUN(x, ...)) else NA_real_,
-                    numeric(1))
-      out[!is.na(agg)] <- agg[!is.na(agg)]
+      groups <- split(v[keep], factor(bin, levels = seq_along(e$upper)))
+      occupied <- lengths(groups) > 0L
+      out[occupied] <- vapply(groups[occupied],
+        function(x) as.numeric(FUN(x, ...)), numeric(1))
     }
     data.frame(Chr = k$.chr[i], Start = e$lower + 1, End = e$upper, Value = out,
                stringsAsFactors = FALSE)
   })
   out <- do.call(rbind, parts)
   rownames(out) <- NULL
+  na_argument <- match("na.rm", ...names())
+  attr(out, "window_summary") <- window_metadata(method, window,
+    value = value, count_position = count_position,
+    na.rm = if (is.na(na_argument)) NULL else ...elt(na_argument),
+    empty = empty, summary = summary)
   out
+}
+
+window_position <- function(start, end, position) {
+  switch(position, midpoint = (start + end) / 2, start = start, end = end)
+}
+
+window_metadata <- function(method, window, group = NULL, value = NULL,
+    count_position = NULL, na.rm = NULL, empty = NULL, summary = NULL) {
+  list(method = method, group = group, coordinates = "1-based closed",
+    unit = switch(method, count = "features", coverage = "fraction", NULL),
+    value = value, window = window, count_position = count_position,
+    na.rm = na.rm, overlap = switch(method, coverage = "union",
+      weighted_mean = "independent observations", count_position),
+    empty = empty, summary = summary)
 }
 
 window_input <- function(data, karyotype, window) {

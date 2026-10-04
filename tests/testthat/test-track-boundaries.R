@@ -1,3 +1,29 @@
+test_that('native path geoms retain missing observations as breaks', {
+  k <- data.frame(Chr = c('A', 'B'), Start = 0, End = 100)
+  observations <- data.frame(Chr = rep(c('A', 'B'), each = 3),
+    Pos = rep(c(20, 50, 80), 2), Value = c(2, NA_real_, 8, 6, NA_real_, 3))
+  source <- observations
+  for (orientation in c('vertical', 'horizontal', 'circular')) {
+    for (geom in list(ggplot2::geom_line(), ggplot2::geom_path(), ggplot2::geom_step())) {
+      p <- ggideogram(k, orientation = orientation, reverse_chr = 'B') +
+        geom_track(track = 'signal', data = observations,
+          mapping = ggplot2::aes(chr = Chr, x = Pos, y = Value), geom = geom)
+      built <- ggplot2::ggplot_build(p)
+      actual <- utils::tail(built$data, 1)[[1]]
+      expect_equal(actual$position, observations$Pos)
+      expect_equal(actual$value, observations$Value)
+      expect_equal(length(unique(actual$group)), 2L)
+      layer <- utils::tail(p$layers, 1)[[1]]
+      retained <- layer$geom$handle_na(actual, layer$geom_params)
+      expect_equal(nrow(retained), 6L)
+      projected <- built$layout$coord$transform(retained, built$layout$panel_params[[1]])
+      expect_equal(which(is.na(projected$x) | is.na(projected$y)), c(2L, 5L))
+      expect_no_warning(ggplot2::ggplotGrob(p))
+    }
+  }
+  expect_identical(observations, source)
+})
+
 test_that('native rectangle geometry can cross local boundaries without changing source observations', {
   features <- read_chr_features(system.file('extdata', 'arabidopsis-first-genes.gff3',
     package = 'ggideogram'))

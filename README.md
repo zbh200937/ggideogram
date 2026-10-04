@@ -7,7 +7,9 @@
 
 `ggideogram()` returns an ordinary **ggplot object**. Chromosomes and tracks share source bp coordinates, while colours, points, lines, text and legends follow ggplot2. Add native geom layers, anchor complete ggplot/grob insets, or combine ideograms with patchwork and cowplot.
 
-![Local Arabidopsis circular view with gene models, quantitative tracks and locus links](inst/examples/optimized-local-circle.png)
+The host plot owns chromosome coordinates and layout. Named tracks own space and value ranges; their layers own data mappings and visual parameters. Complete insets own their coordinates, themes and guides. Horizontal, vertical and circular layouts use the same source data and projection contract. Data summaries record their scientific definitions, while style defaults remain independently adjustable.
+
+![Local Arabidopsis linear view with gene models, gene counts and exon coverage](inst/examples/optimized-local-linear.png)
 
 [Quick start](#quick-start) · [Public functions](#public-functions) · [Example gallery](#example-gallery)
 
@@ -34,13 +36,14 @@ data(human_karyotype, package = "ggideogram")
 data(gene_density, package = "ggideogram")
 
 # Closed intervals have plotting boundaries at Start - 1 and End.
-density <- transform(gene_density, Mid = (Start - 1 + End) / 2)
+density <- transform(gene_density, Mid = (Start - 1 + End) / 2,
+  Rate = Value / ((End - Start + 1) / 1e6))
 
 p <- ggideogram(human_karyotype, chr = c("1", "2"),
   orientation = "horizontal", axis = TRUE) +
   geom_track(track = "density", side = "right", width = 3,
-    data = density, mapping = aes(chr = Chr, x = Mid, y = Value),
-    label = "Genes / window", axis = list(breaks = c(0, 50)),
+    data = density, mapping = aes(chr = Chr, x = Mid, y = Rate),
+    label = "Genes / Mb", axis = list(breaks = c(0, 50)),
     layers = list(
       geom_line(colour = "#4477AA", linewidth = 0.4),
       geom_point(colour = "#4477AA", size = 0.7)
@@ -49,6 +52,8 @@ p <- ggideogram(human_karyotype, chr = c("1", "2"),
   theme(plot.margin = margin(5, 12, 5, 30, unit = "mm"))
 p
 ```
+
+The bundled `gene_density$Value` contains counts in nominal 1 Mb windows, including shorter terminal windows. `Rate` above divides each count by its actual window width in Mb. The bundled RNA markers are a random sample of 500 GENCODE annotations; their counts describe sampled records.
 
 In track mappings, **`x` always means source bp and `y` always means the raw observation value**, regardless of the display orientation. Layers in the same named track share space and value ranges; individual layers can override data, mappings and styles.
 
@@ -59,7 +64,7 @@ Use the same data and track definitions in all three layouts. `reverse_chr` chan
 ```r
 tracks <- list(
   density = geom_track(side = "right", width = 3,
-    data = density, mapping = aes(chr = Chr, x = Mid, y = Value),
+    data = density, mapping = aes(chr = Chr, x = Mid, y = Rate),
     geom = geom_line(colour = "#4477AA", linewidth = 0.4))
 )
 
@@ -78,23 +83,37 @@ p_circular
 
 Reuse the same `track` name to update a track. Omitted settings stay unchanged; new layers are appended unless `replace = TRUE` is set.
 
+Ordinary beside tracks default to a width of 3 chromosome body widths; gene-model tracks default to 6, and overlay tracks to 1. Explicit widths take priority.
+
 For example, `p + geom_track(track = "density", width = 4, gap = 0.5)` adjusts space, `label = list(size = 2.8)` changes the title size, and `axis = list(n = 2)` adjusts the number of value-axis ticks.
+
+Track tick text defaults to 2.2 mm, and `theme_ideogram()` provides a 6 mm
+legend gap. Circular plots may reserve more space for outward text. Both
+settings can be adjusted independently of track geometry:
+
+```r
+p + geom_track(track = "density", axis = list(size = 2.2, label_gap = 0.35)) +
+  theme(legend.position = "bottom", legend.box.spacing = grid::unit(6, "mm"))
+```
 
 `limits`, `value_scale`, `transform` and `reverse` control the track's value scale. Set `label = NULL` to remove its title or `axis = FALSE` to hide its value axis. Native point, line, col, area, ribbon, tile, text, boxplot and violin layers enter through `geom` or `layers`. Boxplot and violin statistics run on raw values, with widths specified in bp. Compatible third-party identity geoms can use the same interface; see the [interactive track examples](inst/examples/interactive-gallery.R).
 
 ## Local views and gene models
 
-This example uses bundled Arabidopsis TAIR10 / Araport11 annotations. It resolves GFF3 Parent relationships between transcripts and genes, then draws a local view of Chr1.
+This example uses bundled Arabidopsis TAIR10 / Araport11 annotations. It resolves GFF3 Parent relationships between transcripts and genes, expands shared features with multiple parents, then draws a local view of Chr1.
 
 ```r
 features <- read_chr_features(system.file("extdata",
   "arabidopsis-first-genes.gff3", package = "ggideogram"))
 tx <- features[features$Type == "mRNA", ]
-features$Transcript <- ifelse(features$Type == "mRNA",
-  features$ID, features$Parent)
-models <- features[features$Transcript %in% tx$ID, ]
-models$Gene <- sub("gene:", "",
-  tx$Parent[match(models$Transcript, tx$ID)])
+parents <- strsplit(ifelse(features$Type == "mRNA",
+  features$ID, features$Parent), ",", fixed = TRUE)
+models <- features[rep(seq_len(nrow(features)), lengths(parents)), ]
+models$Transcript <- unlist(parents, use.names = FALSE)
+models <- models[models$Transcript %in% tx$ID, ]
+parents <- strsplit(tx$Parent[match(models$Transcript, tx$ID)], ",", fixed = TRUE)
+models <- models[rep(seq_len(nrow(models)), lengths(parents)), ]
+models$Gene <- sub("gene:", "", unlist(parents, use.names = FALSE))
 
 arabidopsis <- data.frame(Chr = c("1", "5"), Start = 0,
   End = c(30427671, 26975502))
@@ -115,7 +134,11 @@ Exon outlines show complete exon intervals, CDS and explicitly annotated UTRs us
 
 `read_karyotype()` reads chrom.sizes / FAI files. `read_chr_features()` reads BED / GFF3 / GTF, and `as_chr_features()` accepts data frames or GRanges. **The BED reader converts coordinates to 1-based closed intervals; GFF3, GTF and GRanges retain their annotation coordinates.** Chromosome names and assembly versions should match the karyotype.
 
-For window summaries, `bin_genome()` provides interval midpoint counts (`count`), union coverage fractions (`coverage`), and means weighted by overlap length (`weighted_mean`). Map the results directly to quantitative tracks.
+For window summaries, `bin_genome()` provides feature counts (`count`), union coverage fractions (`coverage`), and means weighted by overlap length (`weighted_mean`). Map the results directly to quantitative tracks.
+
+Counts and `FUN` summaries accept `count_position = "midpoint"`, `"start"` or `"end"`. The default midpoint is `(Start + End) / 2`; a row without `End` uses `Start`. `GFFex()` selects one GFF feature type and uses the same engine with `count_position = "start"`, retaining its feature-start definition. Coverage and weighted means use complete interval overlaps.
+
+All summary results carry `attr(result, "window_summary")` with the method, source value column, coordinate convention, nominal window width, representative position, missing-value argument, overlap rule and empty fill. Count units are features and coverage units are fractions; numerical summaries record their source value column with unspecified units. The `FUN` entry retains the four columns `Chr`, `Start`, `End`, `Value`. Explicit methods also return actual `Width`, `N` and `N_valid`; counts include `Rate` per Mb using each window's actual width.
 
 ## Locus annotations and links
 
@@ -176,11 +199,13 @@ Chromosomes can also form the native discrete x/y axis of an ordinary ggplot, al
 p_axis <- ggplot(subset(gene_density, Chr %in% c("1", "2", "3")),
   aes(Chr, Value)) +
   geom_boxplot(fill = "#AACCEE") +
-  scale_x_chromosome(human_karyotype) +
+  scale_x_chromosome(human_karyotype, limits = NULL) +
   labs(x = NULL, y = "Genes / window") +
   theme_minimal()
 p_axis
 ```
+
+`limits = NULL` trains the axis on the plotted chromosomes. The default keeps every chromosome in the supplied karyotype; `drop` applies when limits are trained.
 
 ## Public functions
 
@@ -203,7 +228,7 @@ See individual R help pages, such as `?geom_track`, for parameters and examples.
 
 | Content | Runnable scripts / figures |
 | --- | --- |
-| Local circular views, shared tracks, gene models and ID links | [Script](inst/examples/optimized-gallery.R) · [PNG](inst/examples/optimized-local-circle.png) · [PDF](inst/examples/optimized-local-circle.pdf) |
+| Local linear and circular views, shared tracks and gene models | [Script](inst/examples/optimized-gallery.R) · [Linear PNG](inst/examples/optimized-local-linear.png) · [Linear PDF](inst/examples/optimized-local-linear.pdf) · [Circular PNG](inst/examples/optimized-local-circle.png) |
 | Ideograms combined with ordinary bar charts and boxplots | [Script](inst/examples/original-data-composition.R) · [PNG](inst/examples/original-data-composition.png) |
 | Complete plots inside ideograms, and ideograms inside other plots | [Script](inst/examples/original-data-gallery.R) · [PNG](inst/examples/gallery-bidirectional-insets.png) |
 | Native chromosome x/y axes | [Script](inst/examples/original-data-axis-integration.R) · [x-axis figure](inst/examples/original-data-chromosome-x-axis.png) · [y-axis figure](inst/examples/original-data-chromosome-y-axis.png) |

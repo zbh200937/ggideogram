@@ -41,7 +41,7 @@ test_that("chromosome polygons follow caps, body width and centromere waist", {
 
 test_that("cytobands are clipped to the same chromosome silhouette", {
   bands <- data.frame(
-    Chr = rep("A", 3), Start = c(0, 400, 600), End = c(400, 600, 1000),
+    Chr = rep("A", 3), Start = c(1, 401, 601), End = c(400, 600, 1000),
     Stain = c("gneg", "acen", "gpos50")
   )
   semantic <- as_ideogram_data(renderer_kar[1, ], cytoband = bands)

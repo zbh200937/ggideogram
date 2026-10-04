@@ -32,7 +32,7 @@ ggideogram_track_spec <- function(...) track(...)
 #' @param side Track side: right/left, outer/inner for circles, or overlay
 #'   inside the chromosome body.
 #' @param width,gap Track width and gap in chromosome-body-width units. The
-#'   default width is 6 for gene-model tracks, 2 for other beside tracks,
+#'   default width is 6 for gene-model tracks, 3 for other beside tracks,
 #'   and 1 inside the body; gap is 0.2 beside
 #'   and 0 inside. Native geom widths
 #'   belong to the layer, e.g. geom = ggplot2::geom_col(width = 1e6).
@@ -56,6 +56,8 @@ ggideogram_track_spec <- function(...) track(...)
 #'   Auto places shared circular value axes in the closing gap; linear and
 #'   explicitly chromosome-specific axes keep their end placement. A gap
 #'   axis with per-chromosome ranges must select one chromosome with `chr`.
+#'   Tick text defaults to 2.2 mm; `size`, `family`, `colour`, `tick_length`
+#'   (mm) and `label_gap` (em) can be set independently of track width.
 #' @param chr Optional chromosome identifiers to select from the source data.
 #' @param clip Tile clipping: `"auto"` clips overlay tiles to the chromosome
 #'   silhouette, `"on"` requires an overlay track, `"off"` leaves tiles intact.
@@ -71,7 +73,7 @@ ggideogram_track_spec <- function(...) track(...)
 #'     layers = list(ggplot2::geom_line(), ggplot2::geom_point(size = 1)))
 #' @export
 geom_track <- function(mapping = NULL, data = NULL, geom = NULL, track = NULL,
-    side = c("right", "left", "overlay", "outer", "inner"), width = 2,
+    side = c("right", "left", "overlay", "outer", "inner"), width = 3,
     gap = NULL, value_scale = c("per_track", "global", "per_chr"),
     limits = NULL, transform = "identity", reverse = FALSE, offset = 0,
     layers = NULL, label = NULL, axis = FALSE, chr = NULL,

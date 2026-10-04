@@ -42,7 +42,10 @@ and 14 for inner circular text. An explicit track owns its width.}
 padding = 0.6 mm, label_gap = 0 em, connection_height = 5 mm,
 segment_colour = "#626A73", and segment_linewidth = 0.22 mm. Its default
 gap is 0.2 body widths. Text defaults to size = 3 mm. Free repulsion
-accepts columns, seed, max.iter, box.padding and overflow.}
+accepts columns, seed, max.iter, box.padding and overflow.
+Explicit arguments override an existing layer's styling and position;
+omitted arguments retain the layer's settings. Native layers must use
+\code{stat = "identity"}; summarise the source data before adding loci.}
 }
 \value{
 An additive locus component using native point/text/segment geoms

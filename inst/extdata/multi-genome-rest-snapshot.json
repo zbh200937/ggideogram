@@ -1,0 +1,663 @@
+{
+  "compara_release": null,
+  "gene_annotation_release": 62,
+  "responses": {
+    "rice-alignment-1000000": {
+      "chr1_pair_count": 190,
+      "data": [
+        {
+          "alignments": [
+            {
+              "description": "",
+              "end": 1042825,
+              "seq_region": "1",
+              "species": "oryza_sativa",
+              "start": 1000000,
+              "strand": 1
+            },
+            {
+              "description": "",
+              "end": 930304,
+              "seq_region": "1",
+              "species": "oryza_rufipogon",
+              "start": 887445,
+              "strand": 1
+            }
+          ],
+          "tree": "(oryza_sativa:0,oryza_rufipogon:0);"
+        },
+        {
+          "alignments": [
+            {
+              "description": "",
+              "end": 1098949,
+              "seq_region": "1",
+              "species": "oryza_sativa",
+              "start": 1062460,
+              "strand": 1
+            },
+            {
+              "description": "",
+              "end": 985917,
+              "seq_region": "1",
+              "species": "oryza_rufipogon",
+              "start": 949425,
+              "strand": 1
+            }
+          ],
+          "tree": "(oryza_sativa:0,oryza_rufipogon:0);"
+        }
+      ],
+      "request": "/alignment/region/oryza_sativa/1:1000000-1999999?compara=plants;method=LASTZ_NET;species_set=oryza_sativa;species_set=oryza_rufipogon",
+      "response_sha256": "1eaee1893cec49b8b15d68f0d50708442e65944c25bca8260b089b648f22fa69",
+      "source_record_count": 260
+    },
+    "rice-alignment-14000000-14000000-14199999": {
+      "chr1_pair_count": 31,
+      "data": [
+        {
+          "alignments": [
+            {
+              "description": "",
+              "end": 14064188,
+              "seq_region": "1",
+              "species": "oryza_sativa",
+              "start": 14045460,
+              "strand": 1
+            },
+            {
+              "description": "",
+              "end": 12988554,
+              "seq_region": "1",
+              "species": "oryza_rufipogon",
+              "start": 12969851,
+              "strand": 1
+            }
+          ],
+          "tree": "(oryza_sativa:0,oryza_rufipogon:0);"
+        },
+        {
+          "alignments": [
+            {
+              "description": "",
+              "end": 14014994,
+              "seq_region": "1",
+              "species": "oryza_sativa",
+              "start": 14000000,
+              "strand": 1
+            },
+            {
+              "description": "",
+              "end": 12937770,
+              "seq_region": "1",
+              "species": "oryza_rufipogon",
+              "start": 12922813,
+              "strand": 1
+            }
+          ],
+          "tree": "(oryza_sativa:0,oryza_rufipogon:0);"
+        }
+      ],
+      "request": "/alignment/region/oryza_sativa/1:14000000-14199999?compara=plants;method=LASTZ_NET;species_set=oryza_sativa;species_set=oryza_rufipogon",
+      "response_sha256": "01c8ae0a2a41dd703f528421c07faa9cc11677335d5f73cac419bbf6f8a2ad5a",
+      "source_record_count": 143
+    },
+    "rice-alignment-22000000-22200000-22399999": {
+      "chr1_pair_count": 28,
+      "data": [
+        {
+          "alignments": [
+            {
+              "description": "",
+              "end": 22264041,
+              "seq_region": "1",
+              "species": "oryza_sativa",
+              "start": 22240074,
+              "strand": 1
+            },
+            {
+              "description": "",
+              "end": 20136062,
+              "seq_region": "1",
+              "species": "oryza_rufipogon",
+              "start": 20112125,
+              "strand": 1
+            }
+          ],
+          "tree": "(oryza_sativa:0,oryza_rufipogon:0);"
+        },
+        {
+          "alignments": [
+            {
+              "description": "",
+              "end": 22287626,
+              "seq_region": "1",
+              "species": "oryza_sativa",
+              "start": 22266900,
+              "strand": 1
+            },
+            {
+              "description": "",
+              "end": 20162109,
+              "seq_region": "1",
+              "species": "oryza_rufipogon",
+              "start": 20141371,
+              "strand": 1
+            }
+          ],
+          "tree": "(oryza_sativa:0,oryza_rufipogon:0);"
+        }
+      ],
+      "request": "/alignment/region/oryza_sativa/1:22200000-22399999?compara=plants;method=LASTZ_NET;species_set=oryza_sativa;species_set=oryza_rufipogon",
+      "response_sha256": "c98e4022b68dba879bfbdbfc8300b3a24f5e2ac2c6d78c2fd0bb3b3dccbc810f",
+      "source_record_count": 34
+    },
+    "rice-alignment-7000000": {
+      "chr1_pair_count": 179,
+      "data": [
+        {
+          "alignments": [
+            {
+              "description": "",
+              "end": 7697719,
+              "seq_region": "1",
+              "species": "oryza_sativa",
+              "start": 7658955,
+              "strand": 1
+            },
+            {
+              "description": "",
+              "end": 7193294,
+              "seq_region": "1",
+              "species": "oryza_rufipogon",
+              "start": 7154429,
+              "strand": 1
+            }
+          ],
+          "tree": "(oryza_sativa:0,oryza_rufipogon:0);"
+        },
+        {
+          "alignments": [
+            {
+              "description": "",
+              "end": 7493941,
+              "seq_region": "1",
+              "species": "oryza_sativa",
+              "start": 7458550,
+              "strand": 1
+            },
+            {
+              "description": "",
+              "end": 6988608,
+              "seq_region": "1",
+              "species": "oryza_rufipogon",
+              "start": 6953255,
+              "strand": 1
+            }
+          ],
+          "tree": "(oryza_sativa:0,oryza_rufipogon:0);"
+        }
+      ],
+      "request": "/alignment/region/oryza_sativa/1:7000000-7999999?compara=plants;method=LASTZ_NET;species_set=oryza_sativa;species_set=oryza_rufipogon",
+      "response_sha256": "12e62c53821e1d8b38e71bc09a2b2bb7af186df8cda7bdf3be5d8c620682813d",
+      "source_record_count": 260
+    },
+    "rice-assembly": {
+      "data": {
+        "assembly_accession": "GCA_001433935.1",
+        "assembly_date": "2015-10",
+        "assembly_name": "IRGSP-1.0",
+        "coord_system_versions": [
+          "IRGSP-1.0",
+          "MSU6"
+        ],
+        "default_coord_system_version": "IRGSP-1.0",
+        "genebuild_initial_release_date": null,
+        "genebuild_last_geneset_update": "2019-06",
+        "genebuild_method": "import",
+        "genebuild_start_date": "2022-09-RAPDB",
+        "golden_path": 375049285,
+        "karyotype": [
+          "1",
+          "Mt",
+          "Pt",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12"
+        ],
+        "top_level_region": [
+          {
+            "coord_system": "chromosome",
+            "length": 43270923,
+            "name": "1"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 35937250,
+            "name": "2"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 36413819,
+            "name": "3"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 35502694,
+            "name": "4"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 29958434,
+            "name": "5"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 31248787,
+            "name": "6"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 29697621,
+            "name": "7"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 28443022,
+            "name": "8"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 23012720,
+            "name": "9"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 23207287,
+            "name": "10"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 29021106,
+            "name": "11"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 27531856,
+            "name": "12"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 15493,
+            "name": "Syng_TIGR_010"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10296,
+            "name": "Syng_TIGR_009"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 16676,
+            "name": "Syng_TIGR_008"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 7820,
+            "name": "Syng_TIGR_007"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 21787,
+            "name": "Syng_TIGR_005"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 19457,
+            "name": "Syng_TIGR_004"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 14476,
+            "name": "Syng_TIGR_002"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 15426,
+            "name": "AC174930"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 157458,
+            "name": "AP008247"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 206004,
+            "name": "AP008246"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 128256,
+            "name": "AC160949"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 88500,
+            "name": "AC156495"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 32941,
+            "name": "AC155918"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10901,
+            "name": "Syng_TIGR_011"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 16417,
+            "name": "Syng_TIGR_012"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10512,
+            "name": "Syng_TIGR_013"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 21421,
+            "name": "Syng_TIGR_014"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10595,
+            "name": "Syng_TIGR_015"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 12792,
+            "name": "Syng_TIGR_016"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10422,
+            "name": "Syng_TIGR_019"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10699,
+            "name": "Syng_TIGR_020"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 17477,
+            "name": "Syng_TIGR_021"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 9889,
+            "name": "Syng_TIGR_022"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 24772,
+            "name": "Syng_TIGR_023"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10060,
+            "name": "Syng_TIGR_024"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 19971,
+            "name": "Syng_TIGR_026"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 11522,
+            "name": "Syng_TIGR_027"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 31094,
+            "name": "Syng_TIGR_028"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 12884,
+            "name": "Syng_TIGR_029"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10794,
+            "name": "Syng_TIGR_030"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 9548,
+            "name": "Syng_TIGR_031"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 9603,
+            "name": "Syng_TIGR_032"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 11093,
+            "name": "Syng_TIGR_033"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10311,
+            "name": "Syng_TIGR_034"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10686,
+            "name": "Syng_TIGR_035"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10434,
+            "name": "Syng_TIGR_036"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 13061,
+            "name": "Syng_TIGR_037"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 8197,
+            "name": "Syng_TIGR_038"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 6269,
+            "name": "Syng_TIGR_039"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 10210,
+            "name": "Syng_TIGR_041"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 5510,
+            "name": "Syng_TIGR_042"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 4236,
+            "name": "Syng_TIGR_043"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 6000,
+            "name": "Syng_TIGR_044"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 22545,
+            "name": "Syng_TIGR_045"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 11447,
+            "name": "Syng_TIGR_046"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 20829,
+            "name": "Syng_TIGR_047"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 7140,
+            "name": "Syng_TIGR_048"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 6261,
+            "name": "Syng_TIGR_049"
+          },
+          {
+            "coord_system": "scaffold",
+            "length": 8529,
+            "name": "Syng_TIGR_050"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 490520,
+            "name": "Mt"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 134525,
+            "name": "Pt"
+          }
+        ]
+      },
+      "request": "/info/assembly/oryza_sativa",
+      "response_sha256": "c83a81a2da6c70337061e92b3300f8382ee6f03644482abec74365213df3a5c5"
+    },
+    "wild-assembly": {
+      "data": {
+        "assembly_accession": "GCA_000817225.1",
+        "assembly_date": "2015-01",
+        "assembly_name": "OR_W1943",
+        "coord_system_versions": [
+          "OR_W1943"
+        ],
+        "default_coord_system_version": "OR_W1943",
+        "genebuild_initial_release_date": null,
+        "genebuild_last_geneset_update": null,
+        "genebuild_method": "import",
+        "genebuild_start_date": "2013-09-OGE",
+        "golden_path": 338040714,
+        "karyotype": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12"
+        ],
+        "top_level_region": [
+          {
+            "coord_system": "chromosome",
+            "length": 23561512,
+            "name": "12"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 27785585,
+            "name": "11"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 20731201,
+            "name": "10"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 20482102,
+            "name": "9"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 25958679,
+            "name": "8"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 26200591,
+            "name": "7"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 27870862,
+            "name": "6"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 26652778,
+            "name": "5"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 30521686,
+            "name": "4"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 34446443,
+            "name": "3"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 33962743,
+            "name": "2"
+          },
+          {
+            "coord_system": "chromosome",
+            "length": 39866532,
+            "name": "1"
+          }
+        ]
+      },
+      "request": "/info/assembly/oryza_rufipogon",
+      "response_sha256": "f51f657992d104a5d95b10228da7ce6b67145ff492fce3b6506ec7d67021ebfd"
+    }
+  },
+  "rest_base_url": "https://rest.ensembl.org",
+  "retrieved_on": "2026-10-01",
+  "schema_version": 1,
+  "selection": "Two longest Chr1-Chr1 LASTZ_NET blocks per query, ranked by rice end minus start. Alignment sequence strings are omitted; returned endpoints and strand are preserved.",
+  "tables_sha256": {
+    "poplar-haplotypes.tsv": "6805bfdc4b4f25b4551e78e358cf374db077706152439c3011384d452f2083d4",
+    "rice-comparison-blocks.tsv": "5b9594ab386bd919d1f468ea1c121328cc54aad9cab7b14a56b16a1c4c06d78f",
+    "rice-comparison-genes.tsv": "5b10cbf5b42b96c0bffdd0458a5b205fc25fe5a18da1ccdb373f7f0f5dc952bb",
+    "rice-comparison-karyotype.tsv": "e8ac280d88d17eae87c63b8a1b743ede6d539f4e31344a6d5e090908dd2d7142",
+    "wheat-subgenomes.tsv": "31020c2468d221d60b248409e91405c84ce39e3cd88a524476ad66adc56a9789"
+  }
+}

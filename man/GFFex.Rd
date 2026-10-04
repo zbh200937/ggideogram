@@ -9,20 +9,27 @@ GFFex(input, karyotype, feature = "gene", window = 1e+06)
 \arguments{
 \item{input}{Path to a GFF file, or a data frame of one already read (columns
 are used positionally, as in GFF: 1 = sequence name, 3 = feature type,
-4 = start).}
+4 = start, 5 = end when present). Selected features must have positive
+integer, 1-based closed coordinates inside the source chromosome bounds.
+Unknown chromosomes and invalid coordinates are errors.}
 
 \item{karyotype}{Path to a tab-separated karyotype file with a header, or a
-data frame with \code{Chr} and \code{End}.}
+data frame with \code{Chr} and \code{End}, or an \code{\link[=as_ideogram_data]{as_ideogram_data()}} result.
+Optional \code{Start} is the 0-based left
+boundary and defaults to zero.}
 
 \item{feature}{Feature type to count, matched against column 3 of the GFF.}
 
-\item{window}{Window size in base pairs.}
+\item{window}{Positive integer window size in base pairs.}
 }
 \value{
 A data frame with columns \code{Chr}, \code{Start}, \code{End}, \code{Value}, in
-karyotype order. Windows are half-open on the left: a feature at position
-\code{p} falls in the window with \verb{Start <= p <= End}. The last window of each
-chromosome is truncated to the chromosome's \code{End}.
+karyotype order. Output intervals are 1-based closed. Each feature is
+counted once by its start position, in the window with \verb{Start <= p <= End}.
+Windows begin at each chromosome's \code{Start + 1}; the last window is
+truncated to its \code{End}. Chromosomes without selected features retain
+zero counts. The \code{window_summary} attribute follows \code{\link[=bin_genome]{bin_genome()}} and
+records method \code{"count"} and \code{count_position = "start"}.
 }
 \description{
 Produces a \code{Chr} / \code{Start} / \code{End} / \code{Value} data frame suitable for

@@ -498,10 +498,11 @@ test_that("one track can be resized restyled and switched off without duplicatin
       reverse_chr = f$keys[2], tracks = list(signal = geom_track(side = "left",
         data = f$data, ggplot2::aes(chr = Chr, x = Pos, y = Value),
         layers = list(ggplot2::geom_line(linewidth = .37), ggplot2::geom_point(size = 1.6)),
-        label = "Signal", axis = list(breaks = c(1, 6)))))
-    q <- p + geom_track(track = "signal", width = 3, gap = .7,
+        label = "Signal", axis = list(breaks = c(1, 6))))) +
+      ggplot2::theme(legend.position = "bottom", legend.box.spacing = grid::unit(6, "mm"))
+    q <- p + geom_track(track = "signal", width = 4, gap = .7,
       reverse = TRUE, limits = c(0, 10), label = list(size = 3.1, fontface = "bold", gap = .5),
-      axis = list(size = 2.4))
+      axis = list(size = 2.2))
     expect_length(track_scope_indices(q, "GeomLine"), 1)
     expect_length(track_scope_indices(q, "GeomPoint"), 1)
     point <- track_scope_indices(q, "GeomPoint")
@@ -519,13 +520,18 @@ test_that("one track can be resized restyled and switched off without duplicatin
     expect_equal(title$aes_params$fontface, "bold")
     axes <- Filter(function(layer) inherits(layer$stat, "StatTrackAxis"), q$layers)
     expect_equal(axes[[1]]$stat_params$axis_spec$breaks, c(1, 6))
-    expect_equal(axes[[1]]$stat_params$axis_spec$size, 2.4)
+    expect_equal(axes[[1]]$stat_params$axis_spec$size, 2.2)
+    text_axes <- which(vapply(q$layers, function(layer)
+      inherits(layer$stat, "StatTrackAxis") && layer$stat_params$axis_part == 3L, logical(1)))
+    expect_true(length(text_axes) > 0)
+    for (i in text_axes) expect_true(all(build$data[[i]]$size == 2.2))
+    expect_identical(q$theme$legend.box.spacing, p$theme$legend.box.spacing)
     expect_no_warning(ggplot2::ggplotGrob(q))
     hidden <- q + geom_track(track = "signal", axis = FALSE, label = NULL)
     expect_false(any(vapply(hidden$layers, function(layer)
       inherits(layer$stat, "StatTrackAxis") || !is.null(layer$ideogram_track_title), logical(1))))
     expect_length(track_scope_indices(hidden, "GeomPoint"), 1)
-    expect_equal(p$coordinates$layout$tracks$width, 2)
+    expect_equal(p$coordinates$layout$tracks$width, 3)
     expect_no_warning(ggplot2::ggplotGrob(hidden))
     edited <- q + geom_track(track = "signal", replace = TRUE,
       layers = list(ggplot2::geom_line(colour = "#4477AA", linewidth = .6),
@@ -533,7 +539,7 @@ test_that("one track can be resized restyled and switched off without duplicatin
     expect_length(track_scope_indices(edited, "GeomLine"), 1)
     expect_length(track_scope_indices(edited, "GeomPoint"), 1)
     expect_equal(edited$layers[[track_scope_indices(edited, "GeomPoint")]]$aes_params$size, 2.2)
-    expect_equal(edited$coordinates$layout$tracks$width, 3)
+    expect_equal(edited$coordinates$layout$tracks$width, 4)
     expect_no_warning(ggplot2::ggplotGrob(edited))
   }
 })

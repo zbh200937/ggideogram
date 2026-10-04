@@ -1,7 +1,7 @@
 # Shared visual defaults for chromosome components.
 
 ideogram_text_size <- function(role) {
-  unname(c(chromosome = 3.2, label = 3, track = 2.8, bp = 2.8, value = 2.6)[role])
+  unname(c(chromosome = 3.2, label = 3, track = 2.8, bp = 2.8, value = 2.2)[role])
 }
 
 ideogram_colour <- function(role) {

@@ -8,11 +8,9 @@ source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
 
 features <- read_chr_features(system.file('extdata', 'arabidopsis-first-genes.gff3',
   package = 'ggideogram'))
-transcripts <- features[features$Type == 'mRNA', ]
-# Resolve the explicit GFF Parent links; no identifier is inferred from position.
-features$Transcript <- ifelse(features$Type == 'mRNA', features$ID, features$Parent)
-models <- features[features$Transcript %in% transcripts$ID, ]
-models$Gene <- sub('gene:', '', transcripts$Parent[match(models$Transcript, transcripts$ID)])
+source(system.file('examples', 'gene-model-data.R', package = 'ggideogram'))
+models <- gene_model_data(features)
+models$Gene <- sub('gene:', '', models$Gene)
 models$Transcript <- sub('transcript:', '', models$Transcript)
 models$Part <- ifelse(models$Type == 'CDS', 'CDS',
   ifelse(models$Type %in% c('UTR', 'five_prime_UTR', 'three_prime_UTR'), 'UTR', NA))
@@ -52,6 +50,8 @@ genes <- base_plot(2500, 15000,
       arrow_margin_bp = 180, arrow_min_bp = 360, label_size = 2.9, key_glyph = structure_key,
       lane_order = c("AT1G01010", "AT1G01020", "AT1G01030")) +
   scale_fill_manual(values = c('+' = '#4477AA', '-' = '#EE6677'), name = 'Strand')
+genes <- genes + labs(title = 'Arabidopsis · Chr1 2.5–15 kb',
+  caption = 'TAIR10 / Araport11. Gene-level exon, CDS and UTR unions.')
 save_figure(genes, '01-neighbouring-genes', 64)
 
 # 2. The six annotated ARV1 transcript structures, in stable identifier order.
@@ -64,6 +64,8 @@ isoforms <- base_plot(6500, 9500,
       lane_order = tx_order, arrow_spacing_bp = 125, arrow_margin_bp = 45, arrow_min_bp = 90,
       label_size = 2.9, key_glyph = structure_key) +
   part_scales()
+isoforms <- isoforms + labs(title = 'Arabidopsis · ARV1 transcript structures',
+  caption = 'TAIR10 / Araport11. Chr1 6.5–9.5 kb; six annotated isoforms.')
 save_figure(isoforms, '02-arv1-transcripts', 68)
 
 # 3. A clipped window, plus the number of transcript exon unions overlapping
@@ -86,9 +88,11 @@ window <- base_plot(7000, 8900,
   geom_track(data = data.frame(Chr = "1", Pos = 7000, N = 3), track = "count", mapping = aes(chr = Chr,
       x = Pos, y = N), geom = ggplot2::geom_text(label = "Transcripts\nwith exon", hjust = 1.2,
       size = 2.7, colour = "black")) +
-  geom_track(track = "count", axis = list(breaks = c(0, 3, 6), size = 2.7, colour = "black",
+  geom_track(track = "count", axis = gallery_axis(breaks = c(0, 3, 6), colour = "black",
       linewidth = 0.25)) +
   part_scales()
+window <- window + labs(title = 'Arabidopsis · ARV1 local view',
+  caption = 'TAIR10 / Araport11. Chr1 7–8.9 kb; exon-bearing transcripts per 100 bp.')
 save_figure(window, '03-window-and-exon-count', 88)
 writeLines(c(
   '01: Chr1 2.5–15 kb; gene-level union of annotated exon/CDS/UTR blocks.',
