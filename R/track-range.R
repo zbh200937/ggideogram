@@ -7,19 +7,31 @@ register_dynamic_track_range <- function(object, layout) {
   validate_track_semantics(layout, fields$chr, fields$position, fields$value)
   chr <- as.character(fields$chr)
   value <- as.numeric(fields$value)
-  tile_range <- track_tile_value_range(object, value)
-  if (!is.null(tile_range)) {
-    chr <- rep(chr, 3L)
-    value <- c(value, tile_range$lower, tile_range$upper)
+  native_range <- !is.null(object$native_layer) &&
+    ((inherits(object$native_geom, "GeomTile") &&
+        inherits(object$position, "PositionIdentity")) ||
+      inherits(object$position, c("PositionStack", "PositionNudge")))
+  if (!is.null(object$range_prototype)) {
+    computed <- native_range_track_values(object$range_prototype, object$data, object$mapping)
+    chr <- computed$chr
+    value <- computed$value
+  } else if (native_range) {
+    computed <- native_identity_track_values(object, layout, fields)
+    chr <- computed$chr
+    value <- computed$value
+  } else {
+    tile_range <- track_tile_value_range(object, value)
+    if (!is.null(tile_range)) {
+      chr <- rep(chr, 3L)
+      value <- c(value, tile_range$lower, tile_range$upper)
+    }
+    stacked <- track_position_value_range(object$position, chr, fields$position, value)
+    if (!is.null(stacked)) {
+      chr <- c(chr, stacked$chr)
+      value <- c(value, stacked$value)
+    }
   }
-  stack_range <- if (!is.null(object$range_prototype)) {
-    native_range_track_values(object$range_prototype, object$data, object$mapping)
-  } else track_position_value_range(object$position, chr, fields$position, value)
-  if (!is.null(stack_range)) {
-    chr <- c(chr, stack_range$chr)
-    value <- c(value, stack_range$value)
-  }
-  if (isTRUE(object$include_zero)) {
+  if (isTRUE(object$include_zero) && !native_range) {
     present_chr <- unique(chr)
     chr <- c(chr, present_chr)
     value <- c(value, rep(0, length(present_chr)))
@@ -36,8 +48,10 @@ register_dynamic_track_range <- function(object, layout) {
   }
   for (aesthetic in intersect(c("yend", "ymin", "ymax"), coordinate_names)) {
     validate_track_semantics(layout, fields$chr, fields$position, coordinates[[aesthetic]])
-    chr <- c(chr, as.character(fields$chr))
-    value <- c(value, coordinates[[aesthetic]])
+    if (!native_range) {
+      chr <- c(chr, as.character(fields$chr))
+      value <- c(value, coordinates[[aesthetic]])
+    }
   }
   layout <- register_track_values(layout, object$track, chr, value)
   list(layout = layout, coordinates = coordinates, coordinate_names = coordinate_names)
@@ -52,13 +66,43 @@ track_tile_value_range <- function(object, value) {
   } else if (!is.null(object$params$height)) {
     rep(object$params$height, nrow(object$data))
   } else {
-    rep(ggplot2::resolution(value, zero = FALSE) * 0.9, length(value))
+    rep(ggplot2::resolution(value, zero = FALSE), length(value))
   }
   if (!is.numeric(height) || anyNA(height) || any(!is.finite(height)) ||
       any(height < 0)) {
     stopf("Tile `height` must contain finite non-negative numbers.")
   }
   list(lower = value - height / 2, upper = value + height / 2)
+}
+
+# Use the native Geom and Position to train their finished value geometry.
+# The same bp separation as StatChrTrack keeps native widths and positions
+# independent across chromosomes without changing the source observations.
+native_identity_track_values <- function(object, layout, fields) {
+  data <- object$data
+  chr <- as.character(fields$chr)
+  shift <- (match(chr, unique(chr)) - as.integer(!is_circular_layout(layout))) *
+    track_chromosome_separation(layout, data, object$mapping, object$params)
+  mapping <- track_mapping_without(object$mapping, c("position", "value"))
+  mapping$x <- fields$position + shift
+  mapping$y <- fields$value
+  for (field in intersect(c("xend", "xmin", "xmax"),
+      union(names(mapping), names(object$params)))) {
+    value <- object$params[[field]] %||%
+      rlang::eval_tidy(mapping[[field]], data = data)
+    mapping[[field]] <- recycle_semantic(value, nrow(data), field) + shift
+  }
+  prototype <- object$native_layer
+  layer <- ggplot2::ggproto(NULL, prototype, data = data,
+    mapping = mapping, inherit.aes = FALSE)
+  layer$aes_params <- prototype$aes_params
+  layer$aes_params[c("xend", "xmin", "xmax")] <- NULL
+  layer$stat <- ggplot2::ggproto(NULL, prototype$stat,
+    required_aes = union(prototype$stat$required_aes, "chr"))
+  computed <- ggplot2::ggplot_build(ggplot2::ggplot() + layer)$data[[1]]
+  columns <- intersect(c("y", "ymin", "ymax", "yend"), names(computed))
+  list(chr = rep(as.character(computed$chr), length(columns)),
+    value = unlist(computed[columns], use.names = FALSE))
 }
 
 track_chromosome_separation <- function(layout, data, mapping, params) {

@@ -18,11 +18,11 @@ figure <- list(
   dpi = 200,
   panel_widths = c(2.2, 1),
   base_size = 9,
-  row_gap = 5,
+  row_gap = 10,
   marker_size = 0.65,
   marker_stroke = 0.18,
   marker_separation = 0.18,
-  ideogram_margin_pt = c(top = 5.5, right = 5.5, bottom = 5.5, left = 18),
+  ideogram_margin_pt = c(top = 20, right = 5.5, bottom = 5.5, left = 18),
   output_dir = file.path("work", "api-optimization", "examples", "original-data-composition"),
   output_stem = "original-data-composition"
 )
@@ -35,6 +35,7 @@ data("Random_RNAs_500", package = "ggideogram")
 gene_density$Position <- (gene_density$Start - 1 + gene_density$End) / 2
 gene_density$Width <- gene_density$End - gene_density$Start + 1
 gene_density$Rate <- gene_density$Value / (gene_density$Width / 1e6)
+LTR_density$Rate <- LTR_density$Value / ((LTR_density$End - LTR_density$Start + 1) / 1e6)
 LTR_density$Position <- (LTR_density$Start - 1 + LTR_density$End) / 2
 Random_RNAs_500$Position <-
   (Random_RNAs_500$Start - 1 + Random_RNAs_500$End) / 2
@@ -52,8 +53,8 @@ rna_shapes <- stats::setNames(shape_lookup[rna_key$Shape], rna_key$Type)
 rna_colours <- stats::setNames(paste0("#", rna_key$color), rna_key$Type)
 
 tracks <- track_layout(markers = geom_track(side = "right", width = 0.65, gap = 0.2), genes = geom_track(side = "right",
-    width = 3, gap = 0.5, limits = range(gene_density$Value, na.rm = TRUE)), ltr = geom_track(side = "right",
-    width = 3, gap = 0.5, limits = range(LTR_density$Value, na.rm = TRUE)))
+    width = 5, gap = 0.5, limits = c(0, max(gene_density$Rate, na.rm = TRUE))), ltr = geom_track(side = "right",
+    width = 5, gap = 0.5, limits = c(0, max(LTR_density$Rate, na.rm = TRUE))))
 
 # Choose the chromosome grid from the data, declared tracks and actual slot
 # aspect. Restricting candidates to exact divisors avoids anonymous empty cells
@@ -81,28 +82,26 @@ panel_a <- ggideogram(
   axis = row_axis_chromosomes,
   axis_breaks = seq(0, 250e6, 100e6),
   axis_side = "left",
+  axis_colour = "black", axis_linewidth = 0.22,
   base_family = "sans"
 ) +
-  geom_track(data = gene_density, mapping = aes(chr = Chr, x = Position, y = Value, group = Chr),
-      track = "genes", geom = ggplot2::geom_line(colour = "#277DA1", linewidth = 0.25)) +
-  geom_track(data = LTR_density, mapping = aes(chr = Chr, x = Position, y = Value, width = End -
-      Start + 1), track = "ltr", geom = ggplot2::geom_col(position = "identity", fill = "#43AA8B",
+  geom_track(data = gene_density, mapping = aes(chr = Chr, x = Position, y = Rate, group = Chr),
+      track = "genes", geom = ggplot2::geom_line(colour = "#4477AA", linewidth = 0.25)) +
+  geom_track(data = LTR_density, mapping = aes(chr = Chr, x = Position, y = Rate, width = End -
+      Start + 1), track = "ltr", geom = ggplot2::geom_col(position = "identity", fill = "#CC6677",
       alpha = 0.7)) +
   geom_locus(geom = "link", data = Random_RNAs_500, mapping = aes(chr = Chr, position = Position),
       position = repel, track = "markers", colour = "#777777", linewidth = 0.12, alpha = 0.45) +
   geom_locus(geom = "point", data = Random_RNAs_500, mapping = aes(chr = Chr, position = Position,
       shape = Type, fill = Type), position = repel, track = "markers", size = figure$marker_size,
       stroke = figure$marker_stroke, colour = "#303030") +
+  geom_track(track = "genes", axis = gallery_axis(chr = human_karyotype$Chr[1], position = "start",
+    breaks = c(0, max(gene_density$Rate)), labels = scales::label_number(accuracy = 1))) +
+  geom_track(track = "ltr", axis = gallery_axis(chr = human_karyotype$Chr[2], position = "start",
+    breaks = c(0, max(LTR_density$Rate)), labels = scales::label_number(accuracy = 1))) +
   scale_shape_manual(values = rna_shapes) +
   scale_fill_manual(values = rna_colours) +
   labs(
-    title = "Human chromosomes · GRCh38",
-    subtitle = "Genes, LTRs and sampled RNAs",
-    caption = sprintf(paste0("Counts/window; nominal 1 Mb bins.\n",
-      "Blue: genes (%g-%g); green: LTRs (%g-%g).\n",
-      "Terminal windows are shorter."),
-      min(gene_density$Value), max(gene_density$Value),
-      min(LTR_density$Value), max(LTR_density$Value)),
     shape = "RNA type",
     fill = "RNA type"
   ) +
@@ -130,11 +129,13 @@ rna_counts <- as.data.frame(table(factor(
 )))
 names(rna_counts) <- c("Type", "Count")
 
-common_theme <- theme_minimal(base_size = figure$base_size) +
+common_theme <- theme_classic(base_size = figure$base_size) +
   theme(
     panel.grid.minor = element_blank(),
     panel.grid.major.y = element_blank(),
-    plot.title = element_text(face = "bold"),
+    axis.text = element_text(colour = "black"),
+    axis.line = element_line(linewidth = 0.25),
+    axis.ticks = element_line(linewidth = 0.25),
     plot.title.position = "plot"
   )
 
@@ -142,7 +143,7 @@ panel_b <- ggplot(rna_counts, aes(Type, Count, fill = Type)) +
   geom_col(width = 0.65, alpha = 0.65, show.legend = FALSE) +
   scale_fill_manual(values = rna_colours) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
-  labs(title = "Sampled RNA records", x = NULL, y = "Records") +
+  labs(x = NULL, y = "Sampled RNA records") +
   common_theme
 
 gene_density$Chr <- factor(
@@ -157,7 +158,6 @@ panel_c <- ggplot(gene_density, aes(Rate, Chr)) +
     colour = "#315A7D"
   ) +
   labs(
-    title = "Gene density",
     x = "Genes / Mb",
     y = NULL
   ) +
@@ -180,13 +180,18 @@ pdf_file <- file.path(
 ggsave(
   png_file, composition,
   width = figure$width_mm, height = figure$height_mm,
-  units = "mm", dpi = figure$dpi, bg = "white"
+  units = "mm", dpi = figure$dpi, device = ragg::agg_png, bg = "white"
 )
 ggsave(
   pdf_file, composition,
   width = figure$width_mm, height = figure$height_mm,
-  units = "mm", bg = "white"
+  units = "mm", device = grDevices::cairo_pdf, bg = "white"
 )
 
 message("Wrote ", normalizePath(png_file))
 message("Wrote ", normalizePath(pdf_file))
+
+writeLines(c(
+  "Human chromosomes, GRCh38. A: source chromosomes with blue gene-density lines and rose LTR-density columns; both tracks use counts per Mb, normalized by actual window width. Track endpoints show their shared ranges. RNA symbols represent 500 randomly sampled GENCODE annotations.",
+  "B: numbers of sampled RNA records by type. C: distributions of gene density across all bundled windows, with median, quartiles, 1.5 IQR whiskers and individual outliers."
+), file.path(figure$output_dir, "captions.txt"))

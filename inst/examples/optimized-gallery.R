@@ -12,7 +12,9 @@ save_pair <- function(plot, name, width = 185, height = width) {
   ggsave(file.path(output, paste0(name, '.pdf')), plot, width = width, height = height,
     units = 'mm', bg = 'white', device = grDevices::cairo_pdf)
 }
-style <- function() theme(legend.position = 'bottom', legend.key = element_blank(),
+style <- function() theme(text = element_text(size = 9, colour = 'black'),
+  legend.title = element_text(size = 9), legend.text = element_text(size = 9),
+  legend.position = 'bottom', legend.key = element_blank(),
   legend.key.width = grid::unit(4, 'mm'), legend.key.height = grid::unit(3, 'mm'),
   legend.box.spacing = gallery_legend_spacing,
   plot.title = element_text(size = 11, face = 'plain', margin = margin(b = 5, unit = 'mm')),
@@ -21,7 +23,7 @@ strand <- c('+' = '#4477AA', '-' = '#CC6677')
 strand_scales <- function() list(scale_fill_manual(values = strand, name = 'Strand'),
   scale_colour_manual(values = strand, name = 'Strand'), guides(colour = 'none'))
 
-# 1. Full source models and annotation summaries share one local bp axis.
+# 1. Protein-coding models and annotation summaries share one local bp axis.
 # The exon coverage is a union fraction, not read depth or expression.
 f <- read_chr_features(extdata('arabidopsis-first-genes.gff3'))
 genes <- f[f$Type == 'gene', ]
@@ -33,7 +35,7 @@ k <- data.frame(Chr = '1', Start = 0, End = 30427671, Label = 'Chr1')
 semantic <- as_ideogram_data(k, aes(chr = Chr, start = Start, end = End, label = Label))
 local_view <- chr_view(semantic, '1', 4500, 14500)
 count <- bin_genome(genes, k, window = 1000, method = 'count')
-coverage <- bin_genome(f[f$Type == 'exon', ], k, window = 1000, method = 'coverage')
+coverage <- bin_genome(models[models$Type == 'exon', ], k, window = 1000, method = 'coverage')
 count$Mid <- (count$Start - 1 + count$End) / 2
 coverage <- view_chr_data(coverage, local_view)
 coverage$Mid <- (coverage$Start - 1 + coverage$End) / 2
@@ -55,21 +57,17 @@ local_tracks <- list(
 local_base <- function(opening_angle = 85) ggideogram(local_view,
   orientation = 'circular', radius = 27, show_names = FALSE, opening_angle = opening_angle,
   tracks = local_tracks, axis = TRUE, axis_side = 'inner', axis_units = 'kb',
-  axis_breaks = c(5000, 8000, 11000, 14000), axis_gap = .8,
+  axis_breaks = c(5000, 8000, 11000, 14000), axis_gap = .8, axis_colour = 'black', axis_linewidth = .22,
   fill = '#EEF0F2', colour = '#626A73', linewidth = .22) +
   geom_locus(data = genes, aes(chr = Chr, position = Mid, colour = Strand),
     side = 'outer', gap = 0, size = 1.7, show.legend = FALSE) +
   strand_scales() + style() +
-  labs(title = 'Arabidopsis · Chr1 4.5–14.5 kb',
-    caption = 'TAIR10 / Araport11. Gene counts and exon-union fractions use 1 kb windows.')
+  labs(title = NULL, caption = NULL)
 local_labels <- function(width, opening_angle = 85) local_base(opening_angle) +
   geom_locus(geom = "text", position = "spread", data = genes, aes(chr = Chr, position = Mid, label = Name),
-    side = 'outer', label_width = width, gap = .35)
+    side = 'outer', label_width = width, gap = .35, fontface = 'italic')
 # Declare label space for each output slot; physical text stays at 3 mm.
-p_local <- local_labels(14)
-p_local <- p_local + labs(caption = paste(
-  'Counts: gene midpoints per 1 kb window. Coverage: exon-union fraction (0–1).',
-  'TAIR10 / Araport11; gene-level structures and strand retain source annotations.', sep = '\n'))
+p_local <- local_labels(10)
 save_pair(p_local, '01-local-shared-circle', 155)
 save_pair(local_labels(18, opening_angle = 85), '01-local-shared-circle-120', 120)
 save_pair(local_labels(8), '01-local-shared-circle-200', 200)
@@ -83,7 +81,7 @@ linear_tracks$models$data <- linear_models
 linear_tracks$models$mapping$label <- aes(label = Label)$label
 linear_tracks$models$label <- NULL
 linear_tracks$models$layers <- list(geom_genemodel(mode = 'gene', labels = TRUE,
-  block_height = .55))
+  block_height = .55, label_fontface = 'italic'))
 linear_tracks$count$label <- 'Genes / 1 kb'
 linear_tracks$coverage$label <- 'Exon coverage'
 linear_tracks$count$reverse <- TRUE
@@ -92,12 +90,11 @@ p_linear <- ggideogram(local_view,
   orientation = 'horizontal', max_chr_length = 65, tracks = linear_tracks,
   show_names = FALSE,
   axis = TRUE, axis_side = 'right', axis_units = 'kb',
-  axis_breaks = c(5000, 8000, 11000, 14000), axis_gap = .8,
+  axis_breaks = c(5000, 8000, 11000, 14000), axis_gap = .8, axis_colour = 'black', axis_linewidth = .22,
   fill = '#EEF0F2', colour = '#626A73', linewidth = .22) +
   strand_scales() + style() +
-  labs(title = 'Arabidopsis · Chr1 4.5–14.5 kb',
-    caption = 'TAIR10 / Araport11. Gene counts use midpoints; exon coverage is a union fraction (0–1).')
-save_pair(p_linear, '01-local-shared-linear', 185, 85)
+  labs(title = NULL, caption = NULL)
+save_pair(p_linear, '01-local-shared-linear', 185, 72)
 
 # 2. Two genomes with identical chromosome names, outer annotation tracks and
 # source-coordinate interval relations. Native line + point share one track.
@@ -209,7 +206,7 @@ if (requireNamespace('patchwork', quietly = TRUE)) {
 }
 
 writeLines(c(
-  '01: Arabidopsis TAIR10 / Araport11 Chr1 4.5–14.5 kb, in linear and circular views. The same gene-level exon/CDS/UTR structures, midpoint gene counts per 1 kb bin, exon-union coverage fractions and original bp are used in both layouts. Leaders keep their source gene anchors.',
+  '01: Arabidopsis TAIR10 / Araport11 Chr1 4.5–14.5 kb, in linear and circular views. The same protein-coding gene-level exon/CDS/UTR structures, midpoint gene counts per 1 kb bin, and union coverage of the model-linked exons and original bp are used in both layouts. Leaders keep their source gene anchors.',
   '02: O. sativa IRGSP-1.0 and O. rufipogon OR_W1943 Chr1, complete bundled gene annotations summarized per 1 Mb. Wild-rice display is reversed. The eight LASTZ_NET alignment blocks are the two longest from each of four queried regions; the source block boundaries are retained.',
   '03: First 12 genes ordered by source position in the bundled Arabidopsis gene-cluster annotation, displayed on the full Chr1 coordinate range. Near text edges and leader ends share one circular baseline; radial text faces upright. Native points retain the source anchors. Label track widths are declared for each output slot; physical label size stays at 3 mm.',
   '04: Arabidopsis MCScanX block 15, six real reversed gene pairs in Chr1. ID-based node connections and the interval band use the same original-bp projection and default arcs.',

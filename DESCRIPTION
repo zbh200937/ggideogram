@@ -43,7 +43,7 @@ Encoding: UTF-8
 LazyData: true
 Depends: R (>= 4.1.0)
 Imports: ggplot2 (>= 3.5.0), grDevices, grid, rlang, scales, stats, tools, utils
-Suggests: cowplot, GenomicRanges, ggiraph (>= 0.9.0), ggnewscale, ggrepel (>= 0.9.5), htmlwidgets, patchwork, ragg, Seqinfo, svglite, testthat (>= 3.0.0)
+Suggests: cowplot, GenomicRanges, ggiraph (>= 0.9.0), ggnewscale, ggrepel (>= 0.9.6), htmlwidgets, patchwork, ragg, Seqinfo, svglite, testthat (>= 3.0.0)
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
 Roxygen: list(markdown = TRUE)

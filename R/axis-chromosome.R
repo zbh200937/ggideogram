@@ -295,9 +295,15 @@ chromosome_axis_strip <- function(key, text_element, params) {
   }
   karyotype <- karyotype[index, , drop = FALSE]
   position <- key[[params$aes]]
-  labels <- as.character(key$.label %||% character())
+  labels <- key$.label %||% character()
+  if (is.list(labels)) {
+    labels <- if (any(vapply(labels, is.language, logical(1)))) {
+      as.expression(labels)
+    } else unlist(labels, use.names = FALSE)
+  }
+  label_text <- as.character(labels)
   has_labels <- params$show_labels && length(labels) == length(position) &&
-    any(!is.na(labels) & nzchar(labels))
+    any(!is.na(label_text) & nzchar(label_text))
   max_length_mm <- axis_unit_mm(params$axis_length, "axis_length")
   body_width_mm <- axis_unit_mm(params$body_width, "body_width")
   length_ratio <- (karyotype$.end - karyotype$.start) /

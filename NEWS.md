@@ -1,5 +1,20 @@
 # ggideogram 0.5.0
 
+- Native tile footprints and nudge/stack/fill results train automatic track
+  ranges. Completely missing layers can use explicit or shared finite limits.
+- Chromosome-axis labels preserve plotmath expressions. Gene-model labels
+  expose independent colour, family and font face, including measured italic
+  text clearance after track updates.
+- Circular coordinate distances retain missing path separators produced by
+  native area layers on ggplot2 3.5.0.
+- Track rebuilding is isolated from public geometry constructors. Compatibility
+  checks cover minimum and current ggplot2 versions with matching extensions.
+- Repelled labels require ggrepel 0.9.6 or newer to retain valid circular labels
+  through the native coordinate transformation.
+- Gallery figures use compact typography and separate captions; the composition
+  example compares gene and LTR density per Mb using actual window widths.
+  Local gene models, counts and exon coverage share the protein-coding scope.
+
 - Cytoband tables consistently use 1-based closed intervals; UCSC imports,
   centromere boundaries and single-base bands share the same bp projection.
 - Locus layers reject unsupported statistics and honor explicit native style

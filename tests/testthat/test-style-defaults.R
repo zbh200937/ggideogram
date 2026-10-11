@@ -89,6 +89,28 @@ test_that("track text inherits font family and rebuilt axes keep their margins",
   }
 })
 
+test_that("gene label style is independent of blocks and survives relayout", {
+  k <- data.frame(Chr = "A", Start = 0, End = 100)
+  d <- data.frame(Chr = "A", Start = 10, End = 90, Gene = "NAC001",
+    Type = "exon", Strand = "+")
+  for (orientation in c("horizontal", "vertical", "circular")) {
+    p <- ggideogram(k, orientation = orientation) +
+      geom_track(track = "genes", data = d,
+        ggplot2::aes(chr = Chr, start = Start, end = End, gene = Gene,
+          type = Type, strand = Strand),
+        layers = geom_genemodel(fill = "steelblue", label_fontface = "italic",
+          label_family = "serif", label_colour = "navy"))
+    q <- p + geom_track(track = "genes", width = 8)
+    for (plot in list(p, q)) {
+      label <- Filter(function(x) isTRUE(x$ideogram_gene_label), plot$layers)[[1]]
+      expect_identical(label$aes_params$fontface, "italic")
+      expect_identical(label$aes_params$family, "serif")
+      expect_identical(label$aes_params$colour, "navy")
+      expect_no_warning(ggplot2::ggplotGrob(plot))
+    }
+  }
+})
+
 test_that("circular text reservation keeps explicit legend gaps during component updates", {
   k <- data.frame(Chr = "A", Start = 0, End = 100)
   d <- data.frame(Chr = "A", Pos = c(20, 80), Value = c(0, 1), Group = c("a", "b"))

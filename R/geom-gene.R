@@ -6,6 +6,7 @@ geom_chr_transcript <- function(
     arrow = grid::arrow(length = grid::unit(0.65, "mm"), type = "open"),
     arrow_min_bp = 0, arrow_spacing_bp = NULL, arrow_margin_bp = 0,
     labels = TRUE, label_size = ideogram_text_size("label"), label_gap = 0.3,
+    label_colour = ideogram_colour("text"), label_family = NULL, label_fontface = "plain",
     na.rm = FALSE, show.legend = NA, inherit.aes = FALSE) {
   if (!identical(stat, "identity")) stopf("Gene structures require stat = 'identity'.")
   if (length(block_height) != 1L || !is.finite(block_height) ||
@@ -24,6 +25,7 @@ geom_chr_transcript <- function(
     arrow_min_bp = arrow_min_bp, arrow_spacing_bp = arrow_spacing_bp,
     arrow_margin_bp = arrow_margin_bp,
     labels = labels, label_size = label_size, label_gap = label_gap,
+    label_colour = label_colour, label_family = label_family, label_fontface = label_fontface,
     na.rm = na.rm, show.legend = show.legend, inherit.aes = inherit.aes),
     class = "ggideogram_gene_component")
 }
@@ -36,6 +38,7 @@ geom_chr_gene <- function(
     arrow = grid::arrow(length = grid::unit(0.65, "mm"), type = "open"),
     arrow_min_bp = 0, arrow_spacing_bp = NULL, arrow_margin_bp = 0,
     labels = TRUE, label_size = ideogram_text_size("label"), label_gap = 0.3,
+    label_colour = ideogram_colour("text"), label_family = NULL, label_fontface = "plain",
     na.rm = FALSE, show.legend = NA, inherit.aes = FALSE) {
   object <- geom_chr_transcript(mapping, data, track, stat, position, ...,
     lane_order = lane_order, block_height = block_height,
@@ -43,6 +46,7 @@ geom_chr_gene <- function(
     arrow_min_bp = arrow_min_bp, arrow_spacing_bp = arrow_spacing_bp,
     arrow_margin_bp = arrow_margin_bp,
     labels = labels, label_size = label_size, label_gap = label_gap,
+    label_colour = label_colour, label_family = label_family, label_fontface = label_fontface,
     na.rm = na.rm, show.legend = show.legend, inherit.aes = inherit.aes)
   object$id <- "gene"
   object
@@ -259,8 +263,9 @@ ggplot_add.ggideogram_gene_component <- function(object, plot, ...) {
       mapping = ggplot2::aes(x = .data$.lx, y = .data$.ly, label = .data$.model_label),
       angle = angle, hjust = hjust,
       vjust = if (vertical) -object$label_gap else 0.5,
-      size = object$label_size, family = layout$base_spec$base_family %||% "",
-      colour = "black", inherit.aes = FALSE)
+      size = object$label_size,
+      family = object$label_family %||% layout$base_spec$base_family %||% "",
+      fontface = object$label_fontface, colour = object$label_colour, inherit.aes = FALSE)
     label$ideogram_gene_label <- TRUE
     plot <- reserve_chromosome_axis_space(plot + label, list())
   }

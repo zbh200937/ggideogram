@@ -303,6 +303,7 @@ native_track_component <- function(layer, spec, id, layout) {
     id, layer$position, params, layer$geom_params$na.rm %||% FALSE,
     layer$show.legend, FALSE, include_zero = inherits(layer$geom, "GeomCol") || area)
   object$native_geom <- layer$geom
+  object$native_layer <- layer
   if (range_layer) object$range_prototype <- layer
   object
 }

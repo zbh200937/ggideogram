@@ -1,5 +1,6 @@
 # Shared physical text and legend settings for the example galleries.
-gallery_axis <- function(...) list(...)
+gallery_axis <- function(...) utils::modifyList(
+  list(colour = 'black', linewidth = 0.22), list(...))
 gallery_legend_spacing <- ggideogram::theme_ideogram()$legend.box.spacing
 
 gallery_grid <- function(karyotype, tracks, width_mm, height_mm,

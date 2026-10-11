@@ -118,3 +118,70 @@ test_that('identity geom constructors without a stat argument retain native colu
     expect_no_warning(ggplot2::ggplotGrob(p))
   }
 })
+
+test_that('automatic tile ranges contain native default and mapped heights', {
+  k <- data.frame(Chr = c('A', 'B'), Start = 0, End = 100)
+  d <- data.frame(Chr = rep(c('A', 'B'), each = 3),
+    Pos = rep(c(20, 50, 80), 2), Value = c(1, 2, 3, 2, 4, 6),
+    Height = c(1, 2, 1, 2, 3, 2))
+  for (geom in list(ggplot2::geom_tile(),
+      ggplot2::geom_tile(ggplot2::aes(height = Height)))) {
+    reference <- ggplot2::ggplot_build(ggplot2::ggplot(d,
+      ggplot2::aes(x = Pos, y = Value)) + geom)$data[[1]]
+    for (orientation in c('vertical', 'horizontal', 'circular')) {
+      p <- ggideogram(k, orientation = orientation) +
+        geom_track(track = 'tiles', data = d,
+          ggplot2::aes(chr = Chr, x = Pos, y = Value), geom = geom)
+      expect_equal(p$coordinates$layout$track_ranges[['track:tiles']]$limits,
+        range(reference$ymin, reference$ymax))
+      expect_no_warning(ggplot2::ggplotGrob(p))
+    }
+  }
+})
+
+test_that('native nudge and fill positions train their finished value ranges', {
+  k <- data.frame(Chr = c('A', 'B'), Start = 0, End = 100)
+  d <- data.frame(Chr = rep(c('A', 'B'), each = 4), Pos = 50,
+    Value = c(2, 3, 4, 1, 5, 6, 2, 7), Group = rep(letters[1:4], 2))
+  for (geom in list(ggplot2::geom_point(position = ggplot2::position_nudge(y = 2)),
+      ggplot2::geom_col(width = 10, position = 'fill'),
+      ggplot2::geom_area(position = 'fill'))) {
+    # Area requires several bp observations per group for native StatAlign.
+    source <- if (inherits(geom$geom, 'GeomArea')) rbind(
+      transform(d, Pos = 20), transform(d, Pos = 80)) else d
+    reference <- ggplot2::ggplot_build(ggplot2::ggplot(source,
+      ggplot2::aes(x = Pos, y = Value, fill = Group)) + geom +
+      ggplot2::facet_wrap(~Chr))$data[[1]]
+    columns <- intersect(c('y', 'ymin', 'ymax'), names(reference))
+    for (orientation in c('vertical', 'horizontal', 'circular')) {
+      p <- ggideogram(k, orientation = orientation) +
+        geom_track(track = 'values', data = source,
+          ggplot2::aes(chr = Chr, x = Pos, y = Value, fill = Group), geom = geom)
+      expect_equal(p$coordinates$layout$track_ranges[['track:values']]$limits,
+        range(unlist(reference[columns]), na.rm = TRUE))
+      expect_no_warning(ggplot2::ggplotGrob(p))
+      index <- which(vapply(p$layers, function(layer)
+        identical(layer$ideogram_scope_slot, 'content:1:1'), logical(1)))
+      expect_identical(p$layers[[index]]$data, source)
+    }
+  }
+})
+
+test_that('missing layers preserve known ranges and do not become zero', {
+  k <- data.frame(Chr = 'A', Start = 0, End = 100)
+  d <- data.frame(Chr = 'A', Pos = c(20, 50, 80), Value = c(1, 2, 3))
+  missing <- transform(d, Value = NA_real_)
+  p <- ggideogram(k) + geom_track(track = 'signal', data = missing,
+    ggplot2::aes(chr = Chr, x = Pos, y = Value), limits = c(0, 3),
+    geom = ggplot2::geom_line(na.rm = TRUE), axis = TRUE)
+  expect_no_warning(ggplot2::ggplotGrob(p))
+  expect_true(all(is.na(p$layers[[4]]$data$Value)))
+  for (layers in list(
+      list(ggplot2::geom_line(data = missing, na.rm = TRUE), ggplot2::geom_line()),
+      list(ggplot2::geom_line(), ggplot2::geom_line(data = missing, na.rm = TRUE)))) {
+    p <- ggideogram(k) + geom_track(track = 'signal', data = d,
+      ggplot2::aes(chr = Chr, x = Pos, y = Value), layers = layers, axis = TRUE)
+    expect_equal(p$coordinates$layout$track_ranges[['track:signal']]$limits, c(1, 3))
+    expect_no_warning(ggplot2::ggplotGrob(p))
+  }
+})

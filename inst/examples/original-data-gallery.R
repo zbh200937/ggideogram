@@ -68,11 +68,13 @@ highlight_colour <- "#D55E00"
 context_colour <- "#B8B8B8"
 heatmap_colours <- c("#F2F5F8", "#9BBACD", "#315A7D")
 
-common_theme <- theme_minimal(base_size = gallery$base_size) +
+common_theme <- theme_classic(base_size = gallery$base_size) +
   theme(
     panel.grid.minor = element_blank(),
     panel.grid.major.y = element_blank(),
-    plot.title = element_text(face = "bold"),
+    axis.text = element_text(colour = "black"),
+    axis.line = element_line(linewidth = 0.25),
+    axis.ticks = element_line(linewidth = 0.25),
     plot.title.position = "plot"
   )
 
@@ -87,7 +89,7 @@ save_gallery_plot <- function(plot, stem, dimensions) {
   ggsave(
     png_file, plot,
     width = dimensions$width_mm, height = dimensions$height_mm,
-    units = "mm", dpi = gallery$dpi, bg = "white"
+    units = "mm", dpi = gallery$dpi, device = ragg::agg_png, bg = "white"
   )
   ggsave(
     pdf_file, plot,
@@ -132,6 +134,7 @@ classic_plot <- ggideogram(
   axis = classic_axes,
   axis_breaks = seq(0, max(human_karyotype$End), by = 50e6),
   axis_side = "left",
+  axis_colour = "black", axis_linewidth = 0.22,
   base_family = "sans"
 ) +
   geom_track(data = gene_density, mapping = aes(chr = Chr, x = Position, y = Overlay,
@@ -148,11 +151,6 @@ classic_plot <- ggideogram(
     colours = heatmap_colours,
     limits = range(gene_density$Rate, na.rm = TRUE),
     name = "Genes / Mb"
-  ) +
-  labs(
-    title = "Human chromosomes · original RIdeogram data",
-    subtitle = "Gene density and 500 randomly sampled RNA annotations",
-    caption = "Density uses actual window width; RNA markers are a sample of GENCODE annotations."
   ) +
   guides(
     fill = guide_colourbar(title.position = "top"),
@@ -208,6 +206,7 @@ inward_plot <- ggideogram(
   tracks = inward_tracks,
   axis = inward_axes,
   axis_side = "left",
+  axis_colour = "black", axis_linewidth = 0.22,
   padding = 1,
   base_family = "sans"
 ) +
@@ -233,14 +232,6 @@ inward_plot <- ggideogram(
     colours = heatmap_colours,
     limits = range(focus_gene$Rate, na.rm = TRUE),
     name = "Genes / Mb"
-  ) +
-  labs(
-    title = "Ordinary ggplot2 geoms as chromosome components",
-    subtitle = paste0(
-      "Counts/window: blue = genes, green = LTRs (chr ",
-      paste(focus_chr, collapse = ", "), ")"
-    ),
-    caption = "Nominal 1 Mb bins; terminal bins are shorter. RNA markers are randomly sampled annotations."
   ) +
   guides(
     fill = guide_colourbar(title.position = "top"),
@@ -304,7 +295,9 @@ locus_child <- ggplot(locus_values, aes(Metric, Count, fill = Metric)) +
   theme(
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),
-    plot.title = element_text(face = "bold"),
+    axis.text = element_text(colour = "black"),
+    axis.line = element_line(linewidth = 0.25),
+    axis.ticks = element_line(linewidth = 0.25),
     plot.title.position = "plot",
     plot.margin = margin(4, 5, 4, 5)
   )
@@ -325,6 +318,7 @@ host_plot <- ggideogram(
   tracks = locus_tracks,
   axis = selected_chr,
   axis_side = "left",
+  axis_colour = "black", axis_linewidth = 0.22,
   base_family = "sans"
 ) +
   geom_track(data = selected_gene, mapping = aes(chr = Chr, x = Position, y = Value, group = Chr),
@@ -337,9 +331,7 @@ host_plot <- ggideogram(
       plot = Plot), track = "locus", width = grid::unit(gallery$insets$child_width_mm, "mm"),
       height = grid::unit(gallery$insets$child_height_mm, "mm"), vjust = locus_vjust) +
   labs(
-    tag = "A",
-    title = "Complete ggplot at a locus",
-    subtitle = "The child keeps its own axes and theme"
+    tag = "A"
   ) +
   theme(
     plot.title = element_text(face = "bold", size = gallery$base_size + 1),
@@ -354,6 +346,7 @@ mini_plot <- ggideogram(
   tracks = mini_tracks,
   axis = selected_chr,
   axis_side = "left",
+  axis_colour = "black", axis_linewidth = 0.22,
   axis_size = 1.8,
   name_size = 2.4,
   padding = 0.25,
@@ -388,11 +381,8 @@ scatter_plot <- ggplot(windows, aes(Value_gene, Value_ltr)) +
   ) +
   labs(
     tag = "B",
-    title = "Ideogram inside a ggplot",
-    subtitle = paste0("Blue points = chromosome ", selected_chr),
     x = "Genes / window",
-    y = "LTRs / window",
-    caption = "Nominal 1 Mb bins; terminal bins are shorter."
+    y = "LTRs / window"
   ) +
   common_theme +
   theme(plot.margin = margin(6, 6, 6, 6))
@@ -457,3 +447,9 @@ source(
 # Stable outward boundaries used by other graphics systems.
 stopifnot(inherits(as_ideogram_grob(classic_plot), "gtable"))
 stopifnot(inherits(ggplotGrob(inward_plot), "gtable"))
+
+writeLines(c(
+  "Human chromosomes, GRCh38. The overview shows gene density per Mb and 500 randomly sampled GENCODE RNA annotations.",
+  "Inward tracks: the body fill shows genes per Mb; blue lines show genes per window and green columns show LTRs per window. Nominal windows are 1 Mb; terminal windows are shorter.",
+  paste0("Bidirectional insets: A shows counts in the labelled source interval; B compares genes and LTRs per window. Blue points and the chromosome inset identify Chr", selected_chr, ". Nominal windows are 1 Mb; terminal windows are shorter.")
+), file.path(gallery$output_dir, "captions.txt"))

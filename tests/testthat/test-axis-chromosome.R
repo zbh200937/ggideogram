@@ -102,6 +102,26 @@ test_that("data-trained limits and unknown chromosome breaks are explicit", {
   )
 })
 
+test_that("chromosome axes preserve plotmath labels through rendering", {
+  labels <- expression(italic(A), italic(B), italic(C))
+  values <- data.frame(Chr = axis_karyotype$Chr, Value = c(2, 5, 3))
+  text_labels <- function(grob) {
+    if (inherits(grob, "text")) return(list(grob$label))
+    unlist(lapply(c(grob$grobs, as.list(grob$children)), text_labels), recursive = FALSE)
+  }
+  for (vertical in c(FALSE, TRUE)) {
+    plot <- if (vertical) {
+      ggplot2::ggplot(values, ggplot2::aes(Value, Chr)) +
+        scale_y_chromosome(axis_karyotype, labels = labels)
+    } else {
+      ggplot2::ggplot(values, ggplot2::aes(Chr, Value)) +
+        scale_x_chromosome(axis_karyotype, labels = labels)
+    }
+    rendered <- text_labels(ggplot2::ggplotGrob(plot + ggplot2::geom_col()))
+    expect_true(any(vapply(rendered, identical, logical(1), labels)))
+  }
+})
+
 test_that("axis chromosome length and centromere geometry are data-derived", {
   semantic <- as_ideogram_data(axis_karyotype)
   lengths <- semantic$karyotype$.end - semantic$karyotype$.start

@@ -13,10 +13,10 @@ suppressPackageStartupMessages({
 axis_gallery <- list(
   output_dir = file.path("work", "api-optimization", "examples", "original-data-axis-integration"),
   dpi = 300,
-  base_size = 10.5,
+  base_size = 9,
   body_fill = "#FAFAFA",
-  body_colour = "#5A5A5A",
-  body_linewidth = 0.38,
+  body_colour = "black",
+  body_linewidth = 0.25,
   plot_margin_pt = c(top = 7, right = 8, bottom = 7, left = 8),
   axis_text_size = 9,
   x_axis = list(
@@ -89,10 +89,12 @@ save_axis_example <- function(plot, stem, dimensions) {
   invisible(c(png = png_file, pdf = pdf_file))
 }
 
-publication_theme <- theme_minimal(base_size = axis_gallery$base_size) +
+publication_theme <- theme_classic(base_size = axis_gallery$base_size) +
   theme(
     panel.grid.minor = element_blank(),
-    plot.title = element_text(face = "bold"),
+    axis.text = element_text(colour = "black"),
+    axis.line = element_line(colour = "black", linewidth = 0.25),
+    axis.ticks = element_line(colour = "black", linewidth = 0.25),
     plot.title.position = "plot",
     plot.margin = do.call(margin, as.list(unname(axis_gallery$plot_margin_pt)))
   )
@@ -118,11 +120,6 @@ x_axis_plot <- ggplot(rna_counts, aes(Chr, Records)) +
     expand = expansion(mult = axis_gallery$x_axis$value_expand)
   ) +
   labs(
-    title = "Sampled RNA annotations across human chromosomes",
-    subtitle = paste0(
-      format(nrow(Random_RNAs_500), big.mark = ","),
-      " randomly selected GENCODE RNA annotations"
-    ),
     x = "Chromosome",
     y = "Sampled records"
   ) +
@@ -161,11 +158,6 @@ y_axis_plot <- ggplot(gene_density, aes(Rate, Chr)) +
     expand = expansion(mult = axis_gallery$y_axis$value_expand)
   ) +
   labs(
-    title = "Gene density across human chromosomes",
-    subtitle = paste0(
-      format(nrow(gene_density), big.mark = ","),
-      " windows; density normalized by actual window width"
-    ),
     x = "Genes / Mb",
     y = "Chromosome"
   ) +
@@ -190,3 +182,8 @@ save_axis_example(
   "original-data-chromosome-y-axis",
   axis_gallery$y_axis
 )
+
+writeLines(c(
+  "Human chromosomes, GRCh38. RNA counts are 500 randomly selected GENCODE annotations, grouped by chromosome.",
+  "Gene density uses all bundled windows, normalized to genes per Mb using each actual window width. Boxes show median and quartiles; whiskers extend to 1.5 IQR and points show outliers."
+), file.path(axis_gallery$output_dir, "captions.txt"))

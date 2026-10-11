@@ -1,0 +1,23 @@
+Local Arabidopsis views (optimized-local-linear and optimized-local-circle)
+Arabidopsis thaliana TAIR10 / Araport11, Chr1 4.5–14.5 kb. Protein-coding gene models use original exon, CDS and annotated UTR boundaries; arrows and blue/rose fills indicate positive/negative strand. Counts are protein-coding gene midpoints per 1 kb window. Exon coverage is the union fraction of exons linked to the displayed gene models in each window, from 0 to 1. Shared exons across transcripts contribute only once to the covered interval. Both layouts use the same source observations and bp coordinates. The first visible window is clipped at 4.5 kb.
+
+Human chromosome overview (gallery-classic-rebuilt)
+Human GRCh38 karyotype. Chromosome fills encode genes per Mb, normalized by each window's actual width. Marker shapes and colours distinguish 500 randomly sampled GENCODE RNA annotations. Counts describe this sample. Nominal windows are 1 Mb; terminal windows are shorter.
+
+Quantitative tracks (gallery-inward-tracks)
+Human GRCh38, chromosomes 1–4. Chromosome fill encodes genes per Mb. Blue lines show genes per window; green columns show LTRs per window. Each side track has a common value range across chromosomes, with endpoints shown beside the first or second chromosome. RNA markers use the same sampled annotations as the overview. Nominal windows are 1 Mb; terminal windows are shorter.
+
+Bidirectional composition (gallery-bidirectional-insets)
+Human GRCh38. A: chromosome 14 with a gene-count track and a bar-chart inset anchored to the highlighted 106,000,001–107,000,000 interval. The inset reports gene and LTR counts in that window. B: all bundled windows plotted by gene and LTR counts; blue points identify chromosome 14. Its chromosome inset shows the sampled RNA annotations. Nominal windows are 1 Mb; terminal windows are shorter.
+
+Full-genome composition (original-data-composition)
+Human GRCh38. A: source chromosomes with blue gene-density lines and rose LTR-density columns. Both use counts per Mb, normalized by actual window width; endpoint ticks show the shared track ranges. Symbols represent the 500 sampled RNA annotations. B: numbers of sampled records by RNA type. C: gene-density distributions by chromosome; boxes show medians and quartiles, whiskers extend to 1.5 IQR, and points show outliers.
+
+Chromosome x axis (original-data-chromosome-x-axis)
+Human GRCh38. The native chromosome axis aligns 500 randomly sampled GENCODE RNA annotations, counted by chromosome. Chromosome glyph lengths are proportional to source sequence lengths and include centromere geometry.
+
+Chromosome y axis (original-data-chromosome-y-axis)
+Human GRCh38. Gene density per Mb uses all bundled windows and their actual widths. Boxes show medians and quartiles, whiskers extend to 1.5 IQR, and points show outliers. Chromosome glyphs form the native discrete y axis.
+
+Sources
+The Arabidopsis example uses inst/extdata/arabidopsis-first-genes.gff3, whose header records the assembly and annotation source. Human figures use the bundled human_karyotype, gene_density, LTR_density and Random_RNAs_500 datasets; see their package help pages for source details.

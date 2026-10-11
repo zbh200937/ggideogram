@@ -163,6 +163,7 @@ circular_coordinate_distance <- function(layout, x, y) {
   dx <- abs(diff(x))
   semantic <- pmax(abs(utils::head(x, -1L)), abs(utils::tail(x, -1L))) >
     layout$circular$semantic_separation / 2
+  semantic[is.na(semantic)] <- FALSE
   dx[semantic] <- dx[semantic] * max(layout$chrom$.units_per_bp)
   diameter <- 2 * max(abs(unlist(layout$bounds)))
   # Native coordinate munching subdivides long edges; the bound keeps a raw

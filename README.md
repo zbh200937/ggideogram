@@ -11,6 +11,11 @@ The host plot owns chromosome coordinates and layout. Named tracks own space and
 
 ![Local Arabidopsis linear view with gene models, gene counts and exon coverage](inst/examples/optimized-local-linear.png)
 
+Arabidopsis TAIR10 / Araport11, Chr1 4.5–14.5 kb. Protein-coding gene structures
+retain source strand and feature boundaries; the lower tracks show their
+midpoint counts per 1 kb window and the union coverage of their exons. [Figure captions](inst/examples/captions.txt)
+describe the data and encodings of all gallery figures.
+
 [Quick start](#quick-start) · [Public functions](#public-functions) · [Example gallery](#example-gallery)
 
 ## Installation
@@ -22,7 +27,7 @@ install.packages(c("remotes", "patchwork"))
 remotes::install_github("zbh200937/ggideogram")
 ```
 
-After cloning the repository, you can also run `R CMD INSTALL .` from the source directory. Optional features require ggrepel for repelled labels, ggiraph and htmlwidgets for interactive plots, and GenomicRanges for GRanges input.
+After cloning the repository, you can also run `R CMD INSTALL .` from the source directory. Optional features require ggrepel ≥ 0.9.6 for repelled labels, ggiraph and htmlwidgets for interactive plots, and GenomicRanges for GRanges input.
 
 ## Quick start
 
@@ -98,6 +103,49 @@ p + geom_track(track = "density", axis = list(size = 2.2, label_gap = 0.35)) +
 
 `limits`, `value_scale`, `transform` and `reverse` control the track's value scale. Set `label = NULL` to remove its title or `axis = FALSE` to hide its value axis. Native point, line, col, area, ribbon, tile, text, boxplot and violin layers enter through `geom` or `layers`. Boxplot and violin statistics run on raw values, with widths specified in bp. Compatible third-party identity geoms can use the same interface; see the [interactive track examples](inst/examples/interactive-gallery.R).
 
+### Choosing the right setting
+
+| Change | Setting | Meaning / unit |
+| --- | --- | --- |
+| Visible genomic interval | `chr_view(start, end)` | Source bp boundaries; annotations retain their original coordinates |
+| Chromosome arrangement | `ggideogram(orientation, ncol, reverse_chr)` | Display direction and grid arrangement |
+| Plot proportions | `max_chr_length`, `chromosome_gap`, `row_gap`; circular `radius`, `opening_angle` | Layout dimensions; opening angle in degrees |
+| Track allocation | `geom_track(width, gap, side)` | Chromosome body widths |
+| Quantitative comparison | `limits`, `value_scale`, `transform`, `reverse` | Raw value range, sharing, transformation and display direction |
+| Track title / ticks | `label = list(...)`, `axis = list(...)` | Text size in mm; title/label gaps in em; tick length in mm |
+| Marks and lines | Native `geom_*(size, linewidth, alpha, ...)` | Standard ggplot2 styling |
+| Gene text | `geom_genemodel(label_size, label_family, label_fontface, label_colour)` | Text styled independently of exon and intron geometry |
+| Legends / general text | `theme()`, `guides()`, `scale_*()` | Theme text in pt; continuous and discrete native guides |
+| Export slot | `ggsave(width, height, units)` | Physical output dimensions; native text and mark sizes stay fixed |
+
+For comparisons, use shared limits across the relevant tracks or chromosomes.
+Per-chromosome ranges emphasize local variation and should be labelled explicitly.
+Automatic ranges include native tile footprints and deterministic nudge, stack
+and fill adjustments. Missing observations remain missing; a completely missing
+layer can share limits with another layer or use explicit limits.
+
+Use a linear view for precise local positions and gene structures, circular
+views for chromosome relationships, and chromosome x/y scales for summaries.
+Choose the output size first, then allocate tracks and labels for that slot.
+The gallery uses vector PDF output and separates explanatory captions from
+the plotting area; PNG files provide previews.
+
+### Extension boundaries
+
+| Input | Interface | Behaviour |
+| --- | --- | --- |
+| Native / compatible third-party identity geom | `geom_track(geom = ...)` or `layers = list(...)` | Native Geom and Position with bp/value projection |
+| Area, ribbon, boxplot or violin | Same track interface | Supported native statistics run before projection |
+| A different statistical summary | Summarize first, or place its complete plot with `geom_locus_inset()` | An arbitrary Stat needs an explicit adapter |
+| Independent colour scales | `ggnewscale::new_scale_*()` between layers | Native scale ownership survives track updates |
+| Complete ggplot or grob | `geom_locus_inset()` | Independent coordinates, theme, guides and physical viewport |
+| Ideogram as a panel / inset | patchwork, cowplot, `as_ideogram_grob()` | Standard ggplot/grob composition |
+
+The CI matrix targets ggplot2 3.5.0 with compatible versions of ggrepel, patchwork and
+cowplot, and the current ggplot2 release with current optional extensions.
+The ggiraph feature requires a mutually compatible ggiraph/ggplot2 pair;
+ggiraph 0.9.0 requires ggplot2 ≥ 3.5.2, and 0.9.6 requires ≥ 4.0.0.
+
 ## Local views and gene models
 
 This example uses bundled Arabidopsis TAIR10 / Araport11 annotations. It resolves GFF3 Parent relationships between transcripts and genes, expands shared features with multiple parents, then draws a local view of Chr1.
@@ -131,6 +179,11 @@ p_genes
 ```
 
 Exon outlines show complete exon intervals, CDS and explicitly annotated UTRs use fills, and intron arrows indicate strand direction. `mode = "gene"` shows the union of each feature type within a gene; `mode = "transcript"` with a `transcript` mapping draws individual transcripts. Local tracks accept complete source annotations, clip structures to the display window, and retain original bp labels.
+
+Use `label_fontface = "italic"` for gene symbols when appropriate for the
+organism's nomenclature. `label_family = NULL` inherits the plot's
+`base_family`; `label_colour` and `label_size` control the text independently
+of the feature fills and intron lines.
 
 `read_karyotype()` reads chrom.sizes / FAI files. `read_chr_features()` reads BED / GFF3 / GTF, and `as_chr_features()` accepts data frames or GRanges. **The BED reader converts coordinates to 1-based closed intervals; GFF3, GTF and GRanges retain their annotation coordinates.** Chromosome names and assembly versions should match the karyotype.
 

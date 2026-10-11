@@ -21,7 +21,9 @@ geom_genemodel(
 
 \item{...}{Gene styling: optional lane_order (complete identifier vector),
 block_height = 0.35 (fraction of one lane), native grid::arrow() or NULL,
-labels = TRUE, label_size = 3 (mm), label_gap = 0.3 (em), and standard
+labels = TRUE, label_size = 3 (mm), label_gap = 0.3 (em),
+label_colour = "#202020", label_family = NULL (inherits \code{base_family}),
+label_fontface = "plain" (use "italic" for gene symbols), and standard
 aesthetics. Intron arrows follow strand; arrow_min_bp, arrow_spacing_bp
 and arrow_margin_bp control their genomic spacing.}
 }

@@ -281,7 +281,8 @@ linear_name_axis_clearance <- function(plot, name_layer) {
       same_chr <- layer$data$.model_chr == names$name_chr[i]
       if (!any(same_chr)) next
       dimensions <- circular_text_dimensions(layer$data$.model_label[same_chr],
-        layer$aes_params$size, layer$aes_params$family %||% "")
+        layer$aes_params$size, layer$aes_params$family %||% "",
+        layer$aes_params$fontface %||% 1)
       if (names$nx[i] < 0) {
         clearance[i] <- max(clearance[i], dimensions$width * layer$aes_params$hjust)
       } else if (names$ny[i] > 0) {
@@ -566,7 +567,8 @@ reserve_chromosome_axis_space <- function(plot, layers) {
     gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label), plot$layers)
     for (layer in gene_labels) {
       dimensions <- circular_text_dimensions(layer$data$.model_label,
-        layer$aes_params$size, layer$aes_params$family %||% "")
+        layer$aes_params$size, layer$aes_params$family %||% "",
+        layer$aes_params$fontface %||% 1)
       if (layout$orientation == "horizontal") {
         needed[4] <- max(needed[4], dimensions$width * layer$aes_params$hjust)
       } else {

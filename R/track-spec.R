@@ -277,9 +277,7 @@ register_track_values <- function(layout, track_id, chr, value) {
   if (any(!is.finite(value[finite]))) {
     stopf("Track `value` must contain only finite numbers or missing values.")
   }
-  if (!any(finite)) {
-    stopf("Track `value` contains no finite observations.")
-  }
+  if (!any(finite)) return(layout)
 
   transformed <- spec$transform[[1]]$transform(value[finite])
   if (anyNA(transformed) || any(!is.finite(transformed))) {
