@@ -98,6 +98,11 @@ ggplot_add.ggideogram_track_scope <- function(object, plot, ...) {
   }
   spec <- layout$base_spec
   spec$tracks <- specs
+  rebuild_ideogram(plot, spec, id, isTRUE(object$replace))
+}
+
+rebuild_ideogram <- function(plot, spec, id = NULL, replace = FALSE) {
+  layout <- ideogram_plot_layout(plot)
   spec$data <- layout$data
   rebuilt <- do.call(ggideogram, spec)
   updated <- ideogram_plot_layout(rebuilt)
@@ -130,7 +135,7 @@ ggplot_add.ggideogram_track_scope <- function(object, plot, ...) {
       }, logical(1)))
       if (length(index)) {
         fresh <- generated[[index[1]]]
-        replacing <- identical(layer$ideogram_scope, id) && isTRUE(object$replace) &&
+        replacing <- identical(layer$ideogram_scope, id) && replace &&
           startsWith(layer$ideogram_scope_slot, "content:")
         if (!replacing) fresh <- preserve_ideogram_aesthetics(fresh, layer)
         rebuilt$layers <- c(rebuilt$layers, list(fresh))

@@ -55,7 +55,7 @@ test_that("a native Position evaluates displayed coordinates after a late track 
     }
     first <- actual(p); second <- actual(q)
     expected <- offset_chr_points_signed(q$coordinates$layout, d$Chr,
-      project_positions_checked(q$coordinates$layout, d$Chr, d$Pos), rep(2.7, nrow(d)))
+      project_positions_checked(q$coordinates$layout, d$Chr, d$Pos), rep(2.8, nrow(d)))
     identity <- transform_ideogram_semantics(p$coordinates$layout, first)
     expect_gt(max(abs(first$x - identity$x) + abs(first$y - identity$y)), 0)
     expect_equal(second$x - expected$x, first$x - identity$x)

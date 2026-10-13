@@ -18,8 +18,9 @@ chromosome_axis_basis <- function(g) {
 }
 
 chromosome_profile_breaks <- function(g, width, curve_points,
-                                      from = 0, to = g$.display_length) {
-  radius <- width / 2
+                                      from = 0, to = g$.display_length,
+                                      cap_ratio = 1) {
+  radius <- width / 2 * cap_ratio
   circular <- !is.null(g$.circular_radius)
   if (!circular && g$.display_length < width) {
     stopf(paste0(
@@ -45,17 +46,18 @@ chromosome_profile_breaks <- function(g, width, curve_points,
   values[values >= from & values <= to]
 }
 
-chromosome_halfwidth_next <- function(g, s, width) {
+chromosome_halfwidth_next <- function(g, s, width, cap_ratio = 1) {
   radius <- width / 2
+  cap <- radius * cap_ratio
   total <- g$.display_length
   halfwidth <- rep(radius, length(s))
 
   circular <- !is.null(g$.circular_radius)
-  top <- !circular & !isTRUE(g$.cut_start) & s < radius
-  halfwidth[top] <- sqrt(pmax(0, radius^2 - (radius - s[top])^2))
-  bottom <- !circular & !isTRUE(g$.cut_end) & s > total - radius
+  top <- !circular & !isTRUE(g$.cut_start) & s < cap
+  halfwidth[top] <- radius * sqrt(pmax(0, 1 - (1 - s[top] / cap)^2))
+  bottom <- !circular & !isTRUE(g$.cut_end) & s > total - cap
   halfwidth[bottom] <- sqrt(pmax(
-    0, radius^2 - (s[bottom] - (total - radius))^2))
+    0, 1 - ((s[bottom] - (total - cap)) / cap)^2)) * radius
 
   if (!is.na(g$.centromere_start) &&
       g$.centromere_end > g$.centromere_start) {
@@ -69,12 +71,13 @@ chromosome_halfwidth_next <- function(g, s, width) {
 }
 
 chromosome_section_polygon <- function(g, width, curve_points,
-                                       start = g$.start, end = g$.end) {
+                                       start = g$.start, end = g$.end,
+                                       cap_ratio = 1) {
   basis <- chromosome_axis_basis(g)
   from <- (start - g$.start) * g$.units_per_bp
   to <- (end - g$.start) * g$.units_per_bp
-  s <- chromosome_profile_breaks(g, width, curve_points, from, to)
-  halfwidth <- chromosome_halfwidth_next(g, s, width)
+  s <- chromosome_profile_breaks(g, width, curve_points, from, to, cap_ratio)
+  halfwidth <- chromosome_halfwidth_next(g, s, width, cap_ratio)
   centre_x <- g$.axis_start_x + basis$tx * s
   centre_y <- g$.axis_start_y + basis$ty * s
   right <- data.frame(
@@ -135,6 +138,8 @@ cytoband_polygon_data <- function(layout, curve_points = 32,
       start = bands$.start[index], end = bands$.end[index])
     polygon$.chr <- bands$.chr[index]
     polygon$.band <- index
+    polygon$.start <- bands$.start[index]
+    polygon$.end <- bands$.end[index]
     polygon$.fill <- fill[index]
     polygon
   })
@@ -156,11 +161,11 @@ chromosome_body_layers <- function(layout, fill, colour, linewidth,
 
 chromosome_fill_layer <- function(layout, fill, curve_points, alpha = NA) {
   body <- chromosome_polygon_data(layout, curve_points)
-  ggplot2::geom_polygon(
+  ggplot2::layer(geom = GeomChromosomePolygon, stat = "identity", position = "identity",
     data = body,
     mapping = ggplot2::aes(x = .data$x, y = .data$y,
-                           group = .data$.group),
-    fill = fill, colour = NA, alpha = alpha, inherit.aes = FALSE
+                           group = .data$.group, ideogram_chr = .data$.chr),
+    params = list(fill = fill, colour = NA, alpha = alpha, curve_points = curve_points), inherit.aes = FALSE
   )
 }
 
@@ -169,42 +174,44 @@ chromosome_cytoband_layer <- function(
   bands <- cytoband_polygon_data(
     layout, curve_points, scheme, palette, bleach)
   if (is.null(bands)) return(NULL)
-  ggplot2::geom_polygon(
+  ggplot2::layer(geom = GeomChromosomePolygon, stat = "identity", position = "identity",
     data = bands,
     mapping = ggplot2::aes(
       x = .data$x, y = .data$y, group = .data$.band,
+      ideogram_chr = .data$.chr, ideogram_start = .data$.start,
+      ideogram_end = .data$.end,
       fill = I(.data$.fill), colour = I(.data$.fill)
     ),
-    linewidth = 0, alpha = alpha, inherit.aes = FALSE, show.legend = FALSE
+    params = list(linewidth = 0, alpha = alpha, curve_points = curve_points), inherit.aes = FALSE, show.legend = FALSE
   )
 }
 
 chromosome_outline_layer <- function(
     layout, colour, linewidth, curve_points, alpha = NA, linetype = 1) {
   body <- chromosome_polygon_data(layout, curve_points)
-  ggplot2::geom_path(
+  ggplot2::layer(geom = GeomChromosomePath, stat = "identity", position = "identity",
     data = body,
     mapping = ggplot2::aes(x = .data$x, y = .data$y,
-                           group = .data$.group),
-    colour = colour, linewidth = linewidth, alpha = alpha, linetype = linetype,
-    linejoin = "round", lineend = "round", inherit.aes = FALSE
+                           group = .data$.group, ideogram_chr = .data$.chr),
+    params = list(colour = colour, linewidth = linewidth, alpha = alpha, linetype = linetype,
+      linejoin = "round", lineend = "round", curve_points = curve_points), inherit.aes = FALSE
   )
 }
 
 chromosome_name_layer <- function(layout, size, gap, family, colour,
-                                  position = "auto") {
+                                  position = "auto", align = "body") {
   check_nonnegative_layout(gap, "name_gap")
   position <- match.arg(position, c("auto", "start", "end", "middle"))
   if (is_circular_layout(layout)) return(circular_chromosome_name_layer(
     layout, size, gap, family, colour, position))
-  data <- linear_chromosome_name_data(layout, position)
+  data <- linear_chromosome_name_data(layout, position, align)
   layer <- ggplot2::layer(
     data = data,
     mapping = ggplot2::aes(x = .data$x, y = .data$y,
       label = .data$label, name_chr = .data$name_chr),
     stat = StatChromosomeName, geom = GeomChromosomeName,
     position = "identity",
-    params = list(name_position = position, name_gap = gap,
+    params = list(name_position = position, name_align = align, name_gap = gap,
       size = size, family = family, colour = colour, na.rm = FALSE),
     inherit.aes = FALSE
   )
@@ -212,7 +219,7 @@ chromosome_name_layer <- function(layout, size, gap, family, colour,
   layer
 }
 
-linear_chromosome_name_data <- function(layout, position = "auto") {
+linear_chromosome_name_data <- function(layout, position = "auto", align = "body") {
   g <- layout$chrom
   if (position == "auto") position <- "start"
   vertical <- layout$orientation == "vertical"
@@ -223,7 +230,7 @@ linear_chromosome_name_data <- function(layout, position = "auto") {
     y = (g$.axis_start_y + g$.axis_end_y) / 2,
     label = g$.display_name %||% g$.chr, nx = 0, ny = 0)
   if (vertical) {
-    data$x <- data$x + (right - left) / 2
+    if (align == "tracks") data$x <- data$x + (right - left) / 2
     if (position == "middle") { data$x <- g$.axis_start_x + right; data$nx <- 1 }
     else {
       data$y <- if (position == "start") pmax(g$.axis_start_y, g$.axis_end_y) else
@@ -231,7 +238,7 @@ linear_chromosome_name_data <- function(layout, position = "auto") {
       data$ny <- if (position == "start") 1 else -1
     }
   } else {
-    data$y <- data$y + (left - right) / 2
+    if (align == "tracks") data$y <- data$y + (left - right) / 2
     if (position == "middle") { data$y <- g$.axis_start_y - right; data$ny <- -1 }
     else {
       data$x <- if (position == "start") pmin(g$.axis_start_x, g$.axis_end_x) else
@@ -244,9 +251,10 @@ linear_chromosome_name_data <- function(layout, position = "auto") {
 
 StatChromosomeName <- ggplot2::ggproto("StatChromosomeName", ggplot2::StatIdentity,
   required_aes = c("name_chr", "label"),
-  extra_params = c("na.rm", "name_position", "name_gap"),
+  extra_params = c("na.rm", "name_position", "name_align", "name_gap"),
   compute_layer = function(self, data, params, layout) {
-    anchors <- linear_chromosome_name_data(layout$coord$layout, params$name_position)
+    anchors <- linear_chromosome_name_data(layout$coord$layout, params$name_position,
+      params$name_align)
     i <- match(data$name_chr, anchors$name_chr)
     data[c("x", "y", "nx", "ny")] <- anchors[i, c("x", "y", "nx", "ny")]
     data$hjust <- data$vjust <- 0.5
@@ -363,7 +371,7 @@ GeomIdeogramAxisText <- ggplot2::ggproto(
   draw_key = ggplot2::draw_key_blank,
   draw_panel = function(
       data, panel_params, coord, tick_length = 1.5, label_gap = 0.25,
-      na.rm = FALSE) {
+      check_overlap = FALSE, na.rm = FALSE) {
     coordinates <- coord$transform(data, panel_params)
     direction_length <- sqrt(coordinates$nx^2 + coordinates$ny^2)
     coordinates$nx <- coordinates$nx / direction_length
@@ -387,6 +395,7 @@ GeomIdeogramAxisText <- ggplot2::ggproto(
       coordinates$label,
       x = x, y = y,
       hjust = hjust, vjust = vjust,
+      check.overlap = check_overlap,
       rot = coordinates$angle,
       gp = grid::gpar(
         col = scales::alpha(coordinates$colour, coordinates$alpha),
@@ -411,19 +420,30 @@ chromosome_axis_layers <- function(
           if (length(unknown) > 1L) "s" else "",
           format_chr_rows(unknown))
   }
-  side_sign <- if (side == "left") -1 else 1
+  shared <- shared_microsynteny_axis(layout) && side == "auto" && isTRUE(chr) && is.null(breaks)
+  if (shared) selected <- utils::tail(layout$chrom$.chr, 1)
   spine_parts <- list()
   tick_parts <- list()
   text_parts <- list()
 
   for (index in seq_along(selected)) {
     g <- layout$chrom[layout$index[[selected[index]]], , drop = FALSE]
+    axis_side <- if (side == "auto") microsynteny_side(layout, g$.chr, "axis") else side
+    side_sign <- if (axis_side == "left") -1 else 1
     normal <- chromosome_right_normal(layout, g)
+    if (shared) {
+      g$.start <- 0
+      g$.end <- max(layout$chrom$.end - layout$chrom$.start)
+      g$.axis_start_x <- min(layout$chrom$.x_min)
+      g$.axis_end_x <- max(layout$chrom$.x_max)
+      g$.direction <- 1
+    }
     span <- g$.end - g$.start
     local_breaks <- if (is.function(breaks)) {
       breaks(c(g$.start, g$.end))
     } else if (is.null(breaks)) {
-      g$.start + axis_breaks(span, n)
+      if (is_circular_layout(layout)) g$.start + axis_breaks(span, n) else
+        axis_breaks(span, n, start = g$.start)
     } else {
       breaks
     }
@@ -433,10 +453,10 @@ chromosome_axis_layers <- function(
       local_breaks <- local_breaks[local_breaks < g$.end]
     }
     if (!length(local_breaks)) next
-    projected <- project_positions_raw(layout$chrom, g$.chr, local_breaks)
-    marker_extent <- (layout$marker_extent %||% c(left = 0, right = 0))[[side]]
+    projected <- project_positions_raw(if (shared) g else layout$chrom, g$.chr, local_breaks)
+    marker_extent <- (layout$marker_extent %||% c(left = 0, right = 0))[[axis_side]]
     offset <- layout$chromosome_width / 2 +
-      max(layout$track_extent[[side]], marker_extent) + gap
+      max(annotation_extent(layout, g$.chr, axis_side), marker_extent) + gap
     nx <- normal$nx * side_sign
     ny <- normal$ny * side_sign
     tick_parts[[index]] <- data.frame(
@@ -496,6 +516,7 @@ chromosome_axis_layers <- function(
       inherit.aes = FALSE, show.legend = FALSE,
       params = list(
         tick_length = tick_length, label_gap = label_gap,
+        check_overlap = is.null(breaks),
         size = size, family = family, colour = colour, na.rm = FALSE)
     )))
   }

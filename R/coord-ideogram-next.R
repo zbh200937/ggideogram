@@ -18,6 +18,13 @@ coord_ideogram_next <- function(layout, padding = 0.5, clip = "off") {
     reverse = "none",
     layout = layout,
     padding = padding,
+    aspect = function(self, ranges) {
+      if (is_circular_layout(self$layout)) {
+        return(ggplot2::ggproto_parent(ggplot2::CoordFixed, self)$aspect(ranges))
+      }
+      target <- self$layout$base_spec$layout_aspect
+      if (is.null(target)) NULL else 1 / target
+    },
     is_linear = function(self) !is_circular_layout(self$layout),
     distance = function(self, x, y, panel_params) {
       if (is_circular_layout(self$layout)) return(circular_coordinate_distance(self$layout, x, y))

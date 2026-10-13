@@ -12,7 +12,7 @@ test_that('overlay offsets place independent lanes inside the body', {
   expect_equal(b$.x - a$.x, 0.6)
   expect_error(track('right', offset = 0.1), 'Only an overlay')
   expect_error(ideogram_layout(k,
-    tracks = track_layout(a = track('overlay', width = 0.4, offset = 0.4))), 'beyond')
+    tracks = track_layout(a = track('overlay', width = 0.4, offset = 0.5))), 'beyond')
 })
 
 test_that('region fills preserve annotation coordinates and use native masked rectangles', {

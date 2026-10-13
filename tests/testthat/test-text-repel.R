@@ -88,9 +88,9 @@ test_that('overflow is explicit and omission keeps the highest priority', {
   d <- data.frame(Chr = 'A', Pos = rep(50, 12),
     Label = paste('gene', seq_len(12)), Priority = c(10, rep(0, 11)))
   p <- repel_test_plot(d)
-  expect_warning(draw_repel_test(p, width = 70, height = 40), 'do not fit')
+  expect_warning(draw_repel_test(p, width = 30, height = 20), 'do not fit')
   p <- repel_test_plot(d, overflow = 'omit')
-  expect_warning(result <- draw_repel_test(p, width = 70, height = 40), 'omitted')
+  expect_warning(result <- draw_repel_test(p, width = 30, height = 20), 'omitted')
   expect_lt(nrow(result$positions), nrow(d))
   expect_true('L1' %in% result$positions$id)
   expect_equal(ggideogram:::chr_repel_conflicts(result$positions,

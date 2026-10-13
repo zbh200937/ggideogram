@@ -37,6 +37,7 @@ inset_integrity_fixture <- function(component = NULL) {
   data <- data.frame(Chr = "A", Pos = 50)
   data$Plot <- list(component)
   base <- ggideogram(karyotype, show_names = FALSE, max_chr_length = 40,
+    layout_aspect = 0.25,
     fill = "#4477AA", colour = "#4477AA",
     tracks = track_layout(inset = track("right", width = 8)))
   inset <- function(clip = "on", hjust = NULL) geom_chr_inset(

@@ -84,6 +84,28 @@ p_circular
 
 `side = "left"` means left in a vertical layout, above in a horizontal layout, and inward in a circular layout; `"right"` selects the opposite side. Circular layouts also accept `"inner"` / `"outer"`. Use `"overlay"` for tracks inside chromosome bodies. Track `width` and `gap` are measured in chromosome body widths; native point sizes, text sizes and line widths retain ggplot2's physical sizing.
 
+Chromosome names align with the body by default; `name_align = "tracks"` centers
+endpoint names across the body and its tracks. For horizontal chromosome stacks,
+use `chromosome_gap` to separate chromosomes; `row_gap` separates groups created
+by wrapping with `ncol`.
+
+The default chromosome width is 1.2 layout units. Linear plots use the width
+and height of their actual drawing panel, including panels and insets assigned
+by composition packages. The same plot or grob adapts when exported at another
+size. Chromosome lengths, widths and track spacing follow the available area;
+round caps are regenerated at drawing time, while text, points and line widths
+retain physical sizes. Circular plots preserve their circular shape.
+
+`layout_aspect = NULL` is the responsive default; a number explicitly sets the
+linear panel's width-to-height ratio. `ncol` and `max_chr_length` control the
+data layout. Input-ordered layouts with more than three chromosomes choose
+compact, balanced rows; the default row gap is 6 layout units.
+
+Local bp axes choose round positions within the original genomic range. Use
+`axis_n` to reduce their density or `axis_breaks` to supply exact positions.
+Complete themes such as `theme_classic()` preserve the chromosome axes without
+displaying the internal layout coordinates.
+
 ### Adjusting a track
 
 Reuse the same `track` name to update a track. Omitted settings stay unchanged; new layers are appended unless `replace = TRUE` is set.
@@ -109,7 +131,7 @@ p + geom_track(track = "density", axis = list(size = 2.2, label_gap = 0.35)) +
 | --- | --- | --- |
 | Visible genomic interval | `chr_view(start, end)` | Source bp boundaries; annotations retain their original coordinates |
 | Chromosome arrangement | `ggideogram(orientation, ncol, reverse_chr)` | Display direction and grid arrangement |
-| Plot proportions | `max_chr_length`, `chromosome_gap`, `row_gap`; circular `radius`, `opening_angle` | Layout dimensions; opening angle in degrees |
+| Plot proportions | `layout_aspect`, `max_chr_length`, `chromosome_gap`, `row_gap`; circular `radius`, `opening_angle` | Optional fixed panel width-to-height ratio and layout dimensions; opening angle in degrees |
 | Track allocation | `geom_track(width, gap, side)` | Chromosome body widths |
 | Quantitative comparison | `limits`, `value_scale`, `transform`, `reverse` | Raw value range, sharing, transformation and display direction |
 | Track title / ticks | `label = list(...)`, `axis = list(...)` | Text size in mm; title/label gaps in em; tick length in mm |
@@ -196,6 +218,13 @@ All summary results carry `attr(result, "window_summary")` with the method, sour
 ## Locus annotations and links
 
 `geom_locus()` adds points, text, intervals and leaders. Text accepts `position = "identity"`, `"spread"` or `"repel"`. Ordered spreading uses actual text dimensions while leaders retain the source loci. `track` and `track_position` place annotations at a declared track's near edge, middle or far edge. See the [label examples](inst/examples/label-layout-gallery.R) for complete code.
+
+Horizontal spread labels stay horizontal when they fit along the chromosome and
+turn vertically for dense sets. Set `angle` explicitly to retain a chosen linear
+orientation. Automatic label space uses 16 layout units for vertical plots and 8
+for horizontal plots; `label_width` or a named track overrides it. The
+[visual defaults example](inst/examples/visual-defaults.R) renders a real local
+Arabidopsis window at two sizes.
 
 The following plot shows Chr1–Chr5 collinear blocks from the official MCScanX Arabidopsis example.
 
@@ -296,3 +325,21 @@ Each script starts with run instructions. Associated data are bundled in [inst/e
 This project's chromosome geometry and some example datasets derive from [RIdeogram](https://github.com/TickingClock1992/RIdeogram). We thank its original authors: Zhaodong Hao, Dekang Lv, Ying Ge, Jisen Shi, Dolf Weijers, Guangchuang Yu and Jinhui Chen. Original publication: Hao et al. (2020), *RIdeogram: drawing SVG graphics to visualize and map genome-wide data on the idiograms*, [PeerJ Computer Science 6:e251](https://doi.org/10.7717/peerj-cs.251).
 
 `ggideogram` is an independent ggplot2 extension with a reworked data model, layout, native layers and composition interfaces, distributed under the [Artistic License 2.0](LICENSE). Other bundled datasets include source records; the license for MCScanX materials is provided in [MCScanX-LICENSE.txt](inst/extdata/MCScanX-LICENSE.txt).
+
+### Local synteny defaults
+
+Horizontal comparisons of two or three chromosomes reserve the space between
+chromosomes for connections. A chromosome connected to both others is centered;
+`link_layout = "input"` or an explicit `chr` order preserves a chosen order.
+Connection endpoints face their partner independently, including both sides of
+the middle chromosome. Automatic annotations go outside the comparison, with
+middle-chromosome text represented by small diamonds. Explicit `side` or `track`
+keeps the requested annotation placement.
+
+Chromosome windows use their actual bp lengths with the default global scaling.
+With `axis = TRUE`, two chromosomes have separate original genomic axes on
+their outer sides. Three chromosomes share a bottom axis showing bp distance
+from each display start. Original genomic coordinates locate all features and
+connections. Explicit `scale_length = "per_chr"`, `axis_side`, or `axis_breaks`
+uses separate genomic axes. The default connection gap is 9 body widths;
+`chromosome_gap`, `label_width`, and `connection_height` control spacing.

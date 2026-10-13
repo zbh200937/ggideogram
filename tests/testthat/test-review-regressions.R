@@ -37,7 +37,7 @@ test_that("distribution tracks preserve discrete aesthetic groups", {
   boxes <- built$data[[length(built$data)]]
   expect_equal(nrow(boxes), 2L)
   expect_equal(length(unique(boxes$fill)), 2L)
-  expect_equal(sort(boxes$xmiddle), c(1.4, 2.0))
+  expect_equal(sort(boxes$xmiddle), c(1.6, 2.2))
   violin <- base + geom_track_violin(
     ggplot2::aes(chr = Chr, position = Pos, value = Value, fill = Class),
     values, track = "signal")

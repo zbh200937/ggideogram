@@ -33,8 +33,8 @@ ideogram_layout.data.frame <- function(karyotype, ...) {
 #' @param karyotype An [as_ideogram_data()] result.
 #' @param ncol Number of chromosomes per linear row. `NULL` uses one row and
 #'   is required for a circular sector ring.
-#' @param chromosome_width Width of a chromosome body in layout units.  The
-#'   default `1` defines the package's normalized body-width unit.
+#' @param chromosome_width Width of a chromosome body in layout units,
+#'   default 1.2. The normalized reference unit is 1.
 #' @param chromosome_gap Clear gap between adjacent body columns, in body-width
 #'   units. Circular gaps use `gap_angle`.
 #' @param max_chr_length Linear display length of the longest chromosome, in
@@ -73,7 +73,7 @@ ideogram_layout.data.frame <- function(karyotype, ...) {
 ideogram_layout.ideogram_data <- function(
     karyotype,
     ncol = NULL,
-    chromosome_width = 1,
+    chromosome_width = 1.2,
     chromosome_gap = 3,
     max_chr_length = 40,
     row_gap = 2,

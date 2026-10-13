@@ -234,7 +234,7 @@ test_that('circular links attach inside tracks and retain interval arcs and corr
   expect_s3_class(layer$geom, 'GeomSegment')
   expect_equal(nrow(layer$data), 22)
   first <- layer$data[c(1, 12), ]
-  expect_equal(sqrt(first$.pair_x^2 + first$.pair_y^2), rep(16, 2))
+  expect_equal(sqrt(first$.pair_x^2 + first$.pair_y^2), rep(15.9, 2))
   expect_equal(first$P1, d$P1); expect_equal(first$P2, d$P2)
   expect_true(all(utils::tail(ggplot2::ggplot_build(p)$data, 1)[[1]]$ideogram_cartesian))
   expect_no_error(ggplot2::ggplotGrob(p))
@@ -249,7 +249,7 @@ test_that('circular links attach inside tracks and retain interval arcs and corr
   expect_equal(layer$data$.pair_from2[1], 41)
   expect_equal(layer$data$.pair_to2[1], 30)
   expect_equal(nrow(layer$data), 48)
-  expect_equal(sqrt(layer$data$.pair_x[13:24]^2 + layer$data$.pair_y[13:24]^2), rep(16, 12))
+  expect_equal(sqrt(layer$data$.pair_x[13:24]^2 + layer$data$.pair_y[13:24]^2), rep(15.9, 12))
   expect_no_error(ggplot2::ggplotGrob(ribbon))
 })
 
@@ -261,7 +261,7 @@ test_that('circular semantic segments draw both interval and leader endpoints', 
   build <- ggplot2::ggplot_build(interval)
   data <- utils::tail(build$data, 1)[[1]]
   expect_equal(data$start, 10); expect_equal(data$end, 90)
-  expect_equal(data$y, 17.5); expect_equal(data$yend, 17.5)
+  expect_equal(data$y, 17.4); expect_equal(data$yend, 17.4)
   expect_gt(abs(data$xend - data$x), 0)
   grob <- ggplot2::GeomSegment$draw_panel(data,
     build$layout$panel_params[[1]], build$plot$coordinates)
@@ -278,7 +278,7 @@ test_that('circular semantic segments draw both interval and leader endpoints', 
   data <- utils::tail(build$data, 1)[[1]]
   expect_equal(data$ideogram_anchor_position, markers$Pos)
   expect_equal(data$ideogram_position, c(42, 50, 58))
-  expect_equal(data$y, rep(20.5, 3)); expect_equal(data$yend, rep(24.5, 3))
+  expect_equal(data$y, rep(20.6, 3)); expect_equal(data$yend, rep(24.6, 3))
   expect_s3_class(utils::tail(leader$layers, 1)[[1]]$geom, 'GeomSegment')
   grob <- ggplot2::GeomSegment$draw_panel(data,
     build$layout$panel_params[[1]], build$plot$coordinates)

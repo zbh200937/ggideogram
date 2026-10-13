@@ -32,8 +32,9 @@ expect_chr_labels_native_baseline <- function(state) {
   expect_equal(text$gp$fontsize, z$size * ggplot2::.pt)
   angle <- as.numeric(text$rot) * pi / 180
   distance <- (0.5 - as.numeric(text$hjust)) * z$width
-  expect_equal(z$x, as.numeric(text$x) * mm[1] + distance * cos(angle))
-  expect_equal(z$y, as.numeric(text$y) * mm[2] + distance * sin(angle))
+  across <- (0.5 - as.numeric(text$vjust)) * z$height
+  expect_equal(z$x, as.numeric(text$x) * mm[1] + distance * cos(angle) - across * sin(angle))
+  expect_equal(z$y, as.numeric(text$y) * mm[2] + distance * sin(angle) + across * cos(angle))
   last <- !duplicated(state$cache$leaders$group, fromLast = TRUE)
   expect_equal(state$cache$leaders$xend[last], z$baseline_x / mm[1])
   expect_equal(state$cache$leaders$yend[last], z$baseline_y / mm[2])
@@ -80,8 +81,8 @@ test_that('ordered labels are native text and segments and retain real positions
     near <- if (orientation == 'vertical') 'near_x' else 'near_y'
     expect_equal(result$positions[[normal]], rep(result$positions[[normal]][1], nrow(d)))
     expect_equal(abs(result$positions[[normal]] - result$positions[[near]]), rep(5, nrow(d)))
-    expect_equal(result$positions$angle, rep(if (orientation == 'vertical') 0 else 90, nrow(d)))
-    extent <- result$positions$height
+    expect_equal(result$positions$angle, rep(0, nrow(d)))
+    extent <- if (orientation == 'vertical') result$positions$height else result$positions$width
     i <- order(result$positions[[axis]])
     expect_true(all(diff(result$positions[[axis]][i]) >=
       (utils::head(extent[i], -1) + utils::tail(extent[i], -1)) / 2 + 0.6 - 1e-8))
@@ -197,6 +198,39 @@ test_that('connection height is physical and explicit track widths remain unchan
   result <- draw_chr_labels_test(p)
   expect_equal(abs(result$positions$baseline_x - result$positions$near_x), rep(7, nrow(d)))
   expect_error(geom_chr_labels(connection_height = -1), 'connection_height')
+})
+
+test_that('horizontal labels use device capacity and preserve explicit angles', {
+  skip_if_not(capabilities('cairo'))
+  k <- data.frame(Chr = 'A', Start = 0, End = 100)
+  d <- data.frame(Chr = 'A', Pos = c(49, 50, 51),
+    Label = c('CsCBP60a-1', 'CsCBP60a-4', 'CsCBP60a-13'))
+  base <- ggideogram(k, orientation = 'horizontal', show_names = FALSE)
+  label <- function(...) geom_locus(geom = 'text', position = 'spread',
+    data = d, ggplot2::aes(chr = Chr, position = Pos, label = Label), ...)
+  p <- base + label()
+  expect_equal(track_table_row(p$coordinates$layout, 'chr_labels')$width, 8)
+  for (size in c(100, 180)) {
+    expect_no_warning(result <- draw_chr_labels_test(p, size))
+    expect_equal(result$positions$angle, rep(0, 3))
+    expect_equal(result$positions$position, d$Pos)
+    expect_chr_labels_native_baseline(result$states[[1]])
+    pairs <- utils::combn(1:3, 2)
+    expect_false(any(apply(pairs, 2, function(i)
+      chr_labels_test_overlap(result$positions[i[1], ], result$positions[i[2], ]))))
+  }
+  tilted <- base + label(angle = 45, label_width = 20)
+  expect_no_warning(result <- draw_chr_labels_test(tilted, 180))
+  expect_equal(result$positions$angle, rep(45, 3))
+  expect_chr_labels_native_baseline(result$states[[1]])
+  dense <- data.frame(Chr = 'A', Pos = seq(45, 55, length.out = 8),
+    Label = paste0('CsCBP60a-', 1:8))
+  q <- base + geom_locus(geom = 'text', position = 'spread', data = dense,
+    ggplot2::aes(chr = Chr, position = Pos, label = Label), label_width = 20)
+  expect_no_warning(result <- draw_chr_labels_test(q, 100))
+  expect_equal(result$positions$angle, rep(90, 8))
+  expect_equal(result$positions$position, dense$Pos)
+  expect_chr_labels_native_baseline(result$states[[1]])
 })
 
 test_that('own label tracks relayout chromosome collections and survive replay', {

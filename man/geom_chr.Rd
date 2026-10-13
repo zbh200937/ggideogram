@@ -36,7 +36,7 @@ NULL uses the constructor default on a new plot.}
 \code{\link[=geom_track]{geom_track()}}.}
 
 \item{...}{Component styling. A new plot also accepts \code{\link[=ggideogram]{ggideogram()}} layout
-arguments such as \code{orientation}. Names accept size/gap/position; axes
+arguments such as \code{orientation}. Names accept size/gap/position/align; axes
 accept side/breaks/units. Bodies accept fill/colour/linewidth/alpha/linetype.
 Unsupported parameters and visual mappings outside \code{component = "fill"}
 raise an error.}

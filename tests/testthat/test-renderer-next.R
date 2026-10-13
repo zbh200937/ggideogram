@@ -3,7 +3,7 @@ renderer_kar <- data.frame(
   CE_start = c(400, 250), CE_end = c(600, 400)
 )
 
-test_that("ggideogram returns a standard fixed-aspect ggplot", {
+test_that("ggideogram returns a standard responsive ggplot", {
   p <- ggideogram(renderer_kar, ncol = 2, base_family = "sans")
 
   expect_s3_class(p, "ggplot")
@@ -13,7 +13,7 @@ test_that("ggideogram returns a standard fixed-aspect ggplot", {
   expect_no_error(ggplot2::ggplot_build(p))
   grob <- ggplot2::ggplotGrob(p)
   expect_s3_class(grob, "gtable")
-  expect_true(grob$respect)
+  expect_false(grob$respect)
 
   themed <- p + ggplot2::labs(title = "Chromosomes") +
     ggplot2::theme(plot.title = ggplot2::element_text(colour = "navy"))

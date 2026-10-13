@@ -9,7 +9,7 @@ geom_locus(
   data = NULL,
   geom = ggplot2::geom_point,
   track = NULL,
-  side = c("right", "left", "inner", "outer"),
+  side = c("auto", "right", "left", "inner", "outer"),
   gap = 0.25,
   position = "identity",
   track_position = 0.5,
@@ -25,7 +25,10 @@ geom_locus(
 
 \item{track}{Optional declared track identifier, inherited within a track.}
 
-\item{side, gap}{Beside placement in chromosome-body-width units.}
+\item{side, gap}{Beside placement in chromosome-body-width units. Auto side
+places annotations outside linked horizontal two/three-chromosome
+comparisons; middle-chromosome text becomes a small diamond. Explicit
+side or track placement retains the requested text.}
 
 \item{position}{A standard Position, including \code{\link[=position_chr_repel]{position_chr_repel()}}, or
 \code{"spread"} / \code{"repel"} for text.}
@@ -35,13 +38,15 @@ near edge, 1 the far edge, and 0.5 (default) the middle. This is annotation
 placement, independent of a track's scientific values.}
 
 \item{label_width}{Space reserved for spread/repel text without an explicit
-track, in chromosome-body widths. NULL selects 32 for linear/outer text
-and 14 for inner circular text. An explicit track owns its width.}
+track, in layout units. NULL selects 16 for vertical layouts, 8 for
+horizontal layouts (4 in local linked comparisons), 32 for outer circular text and 14 for inner circular
+text. An explicit track owns its width.}
 
 \item{...}{Native geom parameters and aesthetics. Ordered text also accepts
 padding = 0.6 mm, label_gap = 0 em, connection_height = 5 mm,
 segment_colour = "#626A73", and segment_linewidth = 0.22 mm. Its default
-gap is 0.2 body widths. Text defaults to size = 3 mm. Free repulsion
+gap is 0.2 body widths; local linked horizontal comparisons use a 2 mm
+connection height. Text defaults to size = 3 mm. Free repulsion
 accepts columns, seed, max.iter, box.padding and overflow.
 Explicit arguments override an existing layer's styling and position;
 omitted arguments retain the layer's settings. Native layers must use
@@ -61,4 +66,7 @@ Text layout is a property of this same locus annotation: \code{position = "ident
 and \code{"repel"} uses the optional ggrepel for free text-box repulsion.
 Spreading aligns the near text edges on one straight baseline or circular
 arc, with readable facing and native segment leaders to the source loci.
+Horizontal layouts use horizontal text when its measured boxes fit along
+each chromosome, otherwise vertical text. Explicit linear text angles are
+retained. Font sizes and source positions do not change during spreading.
 }

@@ -65,12 +65,13 @@ geom_chr_name <- function(
     gap = 0.5,
     colour = ideogram_colour("text"),
     family = "",
-    position = c("auto", "start", "end", "middle")) {
+    position = c("auto", "start", "end", "middle"),
+    align = c("body", "tracks")) {
   check_positive_layout(size, "size")
   check_nonnegative_layout(gap, "gap")
   new_chromosome_component("name", list(
     size = size, gap = gap, colour = colour, family = family,
-    position = match.arg(position)
+    position = match.arg(position), align = match.arg(align)
   ))
 }
 
@@ -159,7 +160,7 @@ ggplot_add.ggideogram_chromosome_component <- function(
     },
     name = list(chromosome_name_layer(
       layout, parameters$size, parameters$gap,
-      parameters$family, parameters$colour, parameters$position)),
+      parameters$family, parameters$colour, parameters$position, parameters$align)),
     axis = chromosome_axis_layers(
       layout,
       chr = parameters$chr,

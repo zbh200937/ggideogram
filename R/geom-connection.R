@@ -1,6 +1,6 @@
 #' @noRd
 geom_chr_connection <- function(mapping = NULL, data = NULL,
-    side1 = 'auto', side2 = 'auto', gap = 0, bend = 0, curvature = NULL,
+    side1 = 'auto', side2 = 'auto', gap = NULL, bend = 0, curvature = NULL,
     curve_points = 32, stat = 'identity',
     position = 'identity', ..., na.rm = FALSE, show.legend = NA, inherit.aes = FALSE,
     nodes = NULL) {
@@ -11,7 +11,7 @@ geom_chr_connection <- function(mapping = NULL, data = NULL,
 
 #' @noRd
 geom_chr_synteny <- function(mapping = NULL, data = NULL,
-    side1 = 'auto', side2 = 'auto', gap = 0, bend = 0, orientation = '+',
+    side1 = 'auto', side2 = 'auto', gap = NULL, bend = 0, orientation = '+',
     curvature = NULL, curve_points = 32, stat = 'identity',
     position = 'identity', ..., na.rm = FALSE, show.legend = NA, inherit.aes = FALSE,
     nodes = NULL) {
@@ -27,14 +27,14 @@ chr_pair_component <- function(mapping, data, type, side1, side2, gap, bend,
   choices <- c('auto', 'left', 'right', 'inner', 'outer', 'center')
   side1 <- canonical_chr_side(match.arg(side1, choices))
   side2 <- canonical_chr_side(match.arg(side2, choices))
-  if (!is.numeric(gap) || !length(gap) %in% c(1, 2) || anyNA(gap) ||
-      any(!is.finite(gap)) || any(gap < 0)) stopf('`gap` must contain one or two non-negative offsets.')
+  if (!is.null(gap) && (!is.numeric(gap) || !length(gap) %in% c(1, 2) || anyNA(gap) ||
+      any(!is.finite(gap)) || any(gap < 0))) stopf('`gap` must contain one or two non-negative offsets.')
   if (!is.numeric(bend) || length(bend) != 1L || !is.finite(bend)) stopf('`bend` must be one finite layout distance.')
   if (!is.null(curvature) && (!is.numeric(curvature) || length(curvature) != 1L ||
       !is.finite(curvature) || curvature < 0 || curvature > 1)) stopf('`curvature` must be NULL or a number from 0 to 1.')
   curve_points <- validate_curve_points(curve_points)
   structure(list(mapping = mapping, data = data, nodes = nodes, type = type, side1 = side1,
-    side2 = side2, gap = rep(gap, length.out = 2), bend = bend, orientation = orientation,
+    side2 = side2, gap = if (is.null(gap)) NULL else rep(gap, length.out = 2), bend = bend, orientation = orientation,
     bend_explicit = bend_explicit, curvature = curvature, curve_points = curve_points,
     position = position, params = params, na.rm = na.rm, show.legend = show.legend,
     inherit.aes = inherit.aes), class = 'ggideogram_pair_component')
@@ -94,6 +94,8 @@ prepare_chr_pairs <- function(object, layout) {
 }
 
 pair_endpoint_offset <- function(layout, chr, point, other, side, gap) {
+  automatic_gap <- is.null(gap)
+  gap <- gap %||% 0
   if (is_circular_layout(layout) && side == 'auto') {
     return(offset_chr_points_signed(layout, chr, point,
       rep(-layout$chromosome_width / 2 - layout$track_extent[['left']] - gap, length(chr))))
@@ -102,6 +104,9 @@ pair_endpoint_offset <- function(layout, chr, point, other, side, gap) {
   normal <- chromosome_right_normal(layout, g)
   sign <- switch(side, left = -1, right = 1, center = 0,
     auto = ifelse((other$x - point$x) * normal$nx + (other$y - point$y) * normal$ny >= 0, 1, -1))
+  if (automatic_gap && isTRUE(layout$microsynteny)) {
+    gap <- microsynteny_link_gap(layout, chr, rep(sign, length.out = length(chr)))
+  }
   offset_chr_points_signed(layout, chr, point,
     rep(sign, length.out = length(chr)) * (layout$chromosome_width / 2 + gap))
 }

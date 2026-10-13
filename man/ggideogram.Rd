@@ -11,10 +11,10 @@ ggideogram(
   cytoband = NULL,
   cytoband_mapping = NULL,
   ncol = NULL,
-  chromosome_width = 1,
+  chromosome_width = 1.2,
   chromosome_gap = NULL,
-  max_chr_length = 40,
-  row_gap = 2,
+  max_chr_length = NULL,
+  row_gap = 6,
   orientation = c("vertical", "horizontal", "circular"),
   scale_length = c("global", "per_chr"),
   tracks = NULL,
@@ -39,7 +39,7 @@ ggideogram(
   name_colour = ideogram_colour("text"),
   name_position = c("auto", "start", "end", "middle"),
   axis = FALSE,
-  axis_side = c("left", "right", "inner", "outer"),
+  axis_side = c("auto", "left", "right", "inner", "outer"),
   axis_breaks = NULL,
   axis_n = 6,
   axis_units = c("auto", "bp", "kb", "Mb", "Gb"),
@@ -54,7 +54,11 @@ ggideogram(
   cytoband_bleach = 0,
   padding = 0.5,
   base_family = "",
-  chr = NULL
+  chr = NULL,
+  name_align = c("body", "tracks"),
+  link_layout = c("auto", "input"),
+  axis_width = 4,
+  layout_aspect = NULL
 )
 }
 \arguments{
@@ -63,12 +67,20 @@ ggideogram(
 \item{mapping, centromere, cytoband, cytoband_mapping}{Passed to
 \code{\link[=as_ideogram_data]{as_ideogram_data()}} for a data-frame input.}
 
-\item{ncol, chromosome_width, max_chr_length, row_gap, orientation, scale_length, order_by, genome_order, homolog_order, reverse_chr, radius, clockwise}{Passed to the dimensionless
+\item{ncol}{Chromosomes per linear row. NULL selects compact rows for
+input-ordered layouts with more than three chromosomes; smaller and
+grouped layouts retain their natural arrangement.}
+
+\item{chromosome_width, row_gap, orientation, scale_length, order_by, genome_order, homolog_order, reverse_chr, radius, clockwise}{Passed to the dimensionless
 \code{\link[=ideogram_layout]{ideogram_layout()}} method.}
 
 \item{chromosome_gap}{Clear space between chromosome columns, in body-width
 units. \code{NULL} uses 8 when constructing a vertical plot with a bp axis,
-and 3 otherwise. An explicit value is retained.}
+9 for linked horizontal two/three-chromosome comparisons, and 3 otherwise.
+An explicit value is retained.}
+
+\item{max_chr_length}{Display length of the longest chromosome in layout
+units. NULL uses 40.}
 
 \item{tracks}{\code{NULL} or a named list of \code{\link[=geom_track]{geom_track()}} declarations.}
 
@@ -102,14 +114,21 @@ outer label ring.}
 \item{axis}{\code{FALSE}, \code{TRUE}, or a chromosome vector selecting local base-pair
 axes.}
 
-\item{axis_side}{Side of the chromosome axis. Circular \code{"inner"}/\code{"outer"}
-correspond to \code{"left"}/\code{"right"}; its default is outer.}
+\item{axis_side}{Axis side; \code{"auto"} uses left for linear plots and outer
+for circles. Linked horizontal two-chromosome comparisons use separate
+genomic axes on their outer sides. Three-chromosome comparisons with
+global scaling share one bottom bp-distance axis measured from each
+display start. Explicit per-chromosome scaling, sides
+or breaks use separate source-coordinate axes. Circular inner/outer
+correspond to left/right.}
 
 \item{axis_breaks}{Explicit breaks, a function receiving \code{c(start, end)}, or
-\code{NULL} for round automatic breaks. Circular automatic breaks omit the
+\code{NULL} for round automatic breaks in the original coordinate range.
+Automatic labels that collide on the output device are suppressed.
+Explicit breaks retain all labels. Circular automatic breaks omit the
 terminal endpoint to keep adjacent seam labels separate.}
 
-\item{axis_n}{Target automatic break intervals.}
+\item{axis_n}{Maximum target automatic break intervals.}
 
 \item{axis_units}{Label unit.}
 
@@ -133,6 +152,21 @@ controls passed to \code{\link[=cytoband_colours]{cytoband_colours()}}.}
 \item{base_family}{Base font family.}
 
 \item{chr}{Optional chromosome identifiers to select, in display order.}
+
+\item{name_align}{Linear endpoint names align with the chromosome \code{"body"}
+by default; \code{"tracks"} centers them across the body and its tracks.}
+
+\item{link_layout}{Automatically center the shared chromosome of a
+three-chromosome comparison, or \code{"input"} to retain input order.
+Explicit \code{chr} ordering takes precedence.}
+
+\item{axis_width}{Layout space reserved beyond an axis spine for connection
+clearance in local horizontal comparisons, in body-width units.}
+
+\item{layout_aspect}{Linear panel width divided by height. NULL uses the
+actual available panel in standalone plots, compositions and insets.
+A number explicitly fixes this ratio and also guides automatic row
+selection. Circular plots always preserve equal coordinate units.}
 }
 \value{
 A standard ggplot object whose coordinate object owns the single
@@ -141,7 +175,8 @@ A standard ggplot object whose coordinate object owns the single
 \description{
 \code{ggideogram()} creates semantic
 chromosome data, computes a dimensionless layout, and returns an ordinary
-ggplot object with a fixed coordinate ratio.
+ggplot object. Linear plots use their allocated panel; circular plots
+retain an equal coordinate ratio.
 }
 \details{
 The constructor provides chromosome bodies, cytobands, names and local

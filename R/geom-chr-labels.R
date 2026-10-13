@@ -39,7 +39,9 @@ declare_chr_labels_track <- function(plot, object) {
   if (length(existing)) return(list(plot = plot, track = existing[1]))
   id <- "chr_labels"
   while (id %in% layout$tracks$id) id <- paste0(id, "_")
-  width <- object$width %||% if (is_circular_layout(layout) && object$side == "left") 14 else 32
+  width <- object$width %||% if (is_circular_layout(layout)) {
+    if (object$side == "left") 14 else 32
+  } else if (layout$orientation == "vertical") 16 else if (isTRUE(layout$microsynteny)) 4 else 8
   spec <- geom_track(track = id, side = object$side, width = width, gap = object$gap)
   spec$.labels_source <- source
   plot <- ggplot_add.ggideogram_track_scope(spec, plot)
@@ -82,6 +84,9 @@ chr_spread_geom <- function(kind, text_geom = ggplot2::GeomText) {
 #' @method ggplot_add ggideogram_labels_component
 #' @export
 ggplot_add.ggideogram_labels_component <- function(object, plot, ...) {
+  if (isTRUE(ideogram_plot_layout(plot)$microsynteny) && isTRUE(object$auto_connection_height)) {
+    object$connection_height <- 2
+  }
   declared <- declare_chr_labels_track(plot, object)
   plot <- declared$plot; object$track <- declared$track
   layout <- ideogram_plot_layout(plot)
@@ -99,6 +104,7 @@ ggplot_add.ggideogram_labels_component <- function(object, plot, ...) {
   options <- list(track = object$track, source = d,
     connection_height = object$connection_height,
     label_gap = object$label_gap, padding = object$padding, parse = object$parse,
+    auto_angle = is.null(object$params$angle) && is.null(object$mapping$angle),
     text_geom = object$text_geom %||% ggplot2::GeomText,
     text_params = object$text_params %||% list(),
     segment_colour = object$segment_colour, segment_linewidth = object$segment_linewidth)
@@ -150,7 +156,8 @@ resolve_chr_labels <- function(state) {
   xy <- cbind(base$x * mm[1], base$y * mm[2])
   anchor_mm <- cbind(anchors$x * mm[1], anchors$y * mm[2])
   baseline <- centres <- xy
-  angle <- rep(0, nrow(data)); hjust <- rep(0, nrow(data)); bad <- character()
+  angle <- rep(0, nrow(data)); hjust <- rep(0, nrow(data))
+  vjust <- rep(0.5, nrow(data)); bad <- character()
   connection <- state$options$connection_height + state$options$label_gap * max(data$size)
   label_theta <- NULL
   origin_mm <- NULL
@@ -203,28 +210,42 @@ resolve_chr_labels <- function(state) {
     sign <- if (spec$side == "right") 1 else -1
     if (!vertical) sign <- -sign
     baseline[, normal_axis] <- baseline[, normal_axis] + sign * connection
-    centres[, normal_axis] <- baseline[, normal_axis] + sign * width / 2
-    angle[] <- if (vertical) 0 else 90
-    hjust[] <- as.numeric(sign < 0)
     available <- abs(far_mm[, normal_axis] - xy[, normal_axis])
-    bad <- c(bad, as.character(data$label[available < connection + width]))
     for (chr in unique(as.character(data$chr))) {
       rows <- which(as.character(data$chr) == chr)
       g <- layout$chrom[layout$index[[chr]], , drop = FALSE]
       ends <- coord$transform(data.frame(x = c(g$.axis_start_x, g$.axis_end_x),
         y = c(g$.axis_start_y, g$.axis_end_y)), state$panel)
       extent <- range(if (vertical) ends$y * mm[2] else ends$x * mm[1])
-      half <- (height[rows] + state$options$padding) / 2
+      angle[rows] <- if (!isTRUE(state$options$auto_angle)) data$angle[rows] else
+        if (vertical || sum(width[rows] + state$options$padding) <= diff(extent)) 0 else 90
+      radians <- angle[rows] * pi / 180
+      cos_a <- cos(radians); sin_a <- sin(radians)
+      x_extent <- abs(cos_a) * width[rows] + abs(sin_a) * height[rows]
+      y_extent <- abs(sin_a) * width[rows] + abs(cos_a) * height[rows]
+      along <- if (vertical) y_extent else x_extent
+      across <- if (vertical) x_extent else y_extent
+      # Place the near edge of the rotated glyph box on the common baseline.
+      hjust[rows] <- 0.5 - sign * across / 2 *
+        (if (vertical) cos_a else sin_a) / width[rows]
+      vjust[rows] <- 0.5 - sign * across / 2 *
+        (if (vertical) -sin_a else cos_a) / height[rows]
+      bad <- c(bad, as.character(data$label[rows][available[rows] < connection + across]))
+      half <- (along + state$options$padding) / 2
       packed <- ordered_label_positions(xy[rows, axis], half, extent[1], extent[2])
       baseline[rows, axis] <- packed$position
-      centres[rows, axis] <- packed$position
       if (!packed$fits) bad <- c(bad, as.character(data$label[rows]))
     }
+    radians <- angle * pi / 180
+    centres[, 1] <- baseline[, 1] + (0.5 - hjust) * width * cos(radians) -
+      (0.5 - vjust) * height * sin(radians)
+    centres[, 2] <- baseline[, 2] + (0.5 - hjust) * width * sin(radians) +
+      (0.5 - vjust) * height * cos(radians)
   }
   if (length(bad)) warning(sprintf("Labels exceed the available display span or track width: %s.",
     paste(unique(bad), collapse = ", ")), call. = FALSE)
   data$x <- baseline[, 1] / mm[1]; data$y <- baseline[, 2] / mm[2]
-  data$angle <- angle; data$hjust <- hjust; data$vjust <- 0.5
+  data$angle <- angle; data$hjust <- hjust; data$vjust <- vjust
   identity <- ggplot2::ggproto(NULL, ggplot2::CoordCartesian,
     transform = function(data, panel_params) data)
   text_params <- state$options$text_params
@@ -244,7 +265,7 @@ resolve_chr_labels <- function(state) {
     baseline_x = baseline[, 1], baseline_y = baseline[, 2],
     near_x = xy[, 1], near_y = xy[, 2],
     anchor_x = anchor_mm[, 1], anchor_y = anchor_mm[, 2],
-    width = width, height = height, angle = angle, hjust = hjust, vjust = 0.5,
+    width = width, height = height, angle = angle, hjust = hjust, vjust = vjust,
     size = data$size)
   state$device <- device
   state$cache <- list(text = text, segments = segments, leaders = leaders,

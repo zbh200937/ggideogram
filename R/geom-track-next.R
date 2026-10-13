@@ -270,9 +270,15 @@ mask_chr_geometry <- function(data, panel_params, coord, draw) {
   children <- lapply(split(seq_len(nrow(data)), chromosome), function(rows) {
     g <- layout$chrom[layout$index[[chromosome[rows[1]]]], , drop = FALSE]
     silhouette <- chromosome_section_polygon(g, layout$chromosome_width, layout$curve_points)
-    silhouette <- coord$transform(silhouette, panel_params)
-    mask <- grid::polygonGrob(x = silhouette$x, y = silhouette$y,
-      default.units = "native", gp = grid::gpar(fill = "white", col = NA))
+    silhouette$ideogram_chr <- g$.chr
+    silhouette$group <- 1L
+    silhouette$fill <- "white"
+    silhouette$colour <- NA_character_
+    silhouette$alpha <- 1
+    silhouette$linewidth <- 0
+    silhouette$linetype <- 1
+    mask <- chromosome_render_grob(silhouette, panel_params, coord,
+      ggplot2::GeomPolygon, list())
     grid::grobTree(draw(data[rows, , drop = FALSE]),
       vp = grid::viewport(mask = grid::as.mask(mask)))
   })

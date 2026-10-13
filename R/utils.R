@@ -42,14 +42,17 @@ normalise_colour <- function(x) {
 
 NICE_AXIS_STEPS <- c(1, 2, 5, 10)
 
-axis_breaks <- function(span, n = 6) {
+axis_breaks <- function(span, n = 6, start = 0) {
   if (!is.finite(span) || span <= 0) return(0)
   raw <- span / max(n, 1)
   magnitude <- 10^floor(log10(raw))
   step <- magnitude * NICE_AXIS_STEPS[
-    which.min(abs(NICE_AXIS_STEPS * magnitude - raw))
+    which(NICE_AXIS_STEPS * magnitude >= raw)[1L]
   ]
-  seq(0, span, by = step)
+  first <- ceiling(start / step) * step
+  last <- floor((start + span) / step) * step
+  if (first > last) return(numeric())
+  seq(first, last, by = step)
 }
 
 axis_unit <- function(step, units) {

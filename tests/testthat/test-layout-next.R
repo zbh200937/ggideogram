@@ -10,7 +10,7 @@ test_that("ideogram_data dispatches to a dimensionless layout", {
 
   expect_s3_class(layout, "ideogram_layout_v2")
   expect_identical(layout$units, "chromosome_width")
-  expect_equal(layout$chromosome_width, 1)
+  expect_equal(layout$chromosome_width, 1.2)
   expect_equal(max(layout$chrom$.display_length), 40)
   expect_true(layout$length_comparable)
   expect_false(any(c("mpx", "px_per_bp", "flip_y", "chr_width") %in%

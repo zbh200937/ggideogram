@@ -22,7 +22,9 @@ ID mappings are from/to and use the supplied nodes table.}
 
 \item{nodes}{Optional source node table from \code{\link[=chr_nodes]{chr_nodes()}}.}
 
-\item{...}{Endpoint side1/side2, gap, bend/curvature, curve_points,
+\item{...}{Endpoint side1/side2 (auto faces the other chromosome), gap
+(NULL reserves annotation clearance; a number sets the body-edge offset),
+bend/curvature, curve_points,
 orientation for intervals, and native colour/fill/alpha/linewidth/arrow.}
 }
 \value{

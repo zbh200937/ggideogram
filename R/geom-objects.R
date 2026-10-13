@@ -27,7 +27,7 @@ new_ideogram_object <- function(component) {
 #' @param track Track identifier for `component = "fill"`; inherited inside
 #'   [geom_track()].
 #' @param ... Component styling. A new plot also accepts [ggideogram()] layout
-#'   arguments such as `orientation`. Names accept size/gap/position; axes
+#'   arguments such as `orientation`. Names accept size/gap/position/align; axes
 #'   accept side/breaks/units. Bodies accept fill/colour/linewidth/alpha/linetype.
 #'   Unsupported parameters and visual mappings outside `component = "fill"`
 #'   raise an error.
@@ -82,6 +82,9 @@ geom_genemodel <- function(mapping = NULL, data = NULL, track = NULL,
 #' and `"repel"` uses the optional ggrepel for free text-box repulsion.
 #' Spreading aligns the near text edges on one straight baseline or circular
 #' arc, with readable facing and native segment leaders to the source loci.
+#' Horizontal layouts use horizontal text when its measured boxes fit along
+#' each chromosome, otherwise vertical text. Explicit linear text angles are
+#' retained. Font sizes and source positions do not change during spreading.
 #'
 #' @param mapping,data Source locus mappings and data.
 #' @param geom A point/text/segment layer or constructor; also `"point"`,
@@ -90,16 +93,21 @@ geom_genemodel <- function(mapping = NULL, data = NULL, track = NULL,
 #' @param track_position Relative transverse position in a track: 0 is the
 #'   near edge, 1 the far edge, and 0.5 (default) the middle. This is annotation
 #'   placement, independent of a track's scientific values.
-#' @param side,gap Beside placement in chromosome-body-width units.
+#' @param side,gap Beside placement in chromosome-body-width units. Auto side
+#'   places annotations outside linked horizontal two/three-chromosome
+#'   comparisons; middle-chromosome text becomes a small diamond. Explicit
+#'   side or track placement retains the requested text.
 #' @param position A standard Position, including [position_chr_repel()], or
 #'   `"spread"` / `"repel"` for text.
 #' @param label_width Space reserved for spread/repel text without an explicit
-#'   track, in chromosome-body widths. NULL selects 32 for linear/outer text
-#'   and 14 for inner circular text. An explicit track owns its width.
+#'   track, in layout units. NULL selects 16 for vertical layouts, 8 for
+#'   horizontal layouts (4 in local linked comparisons), 32 for outer circular text and 14 for inner circular
+#'   text. An explicit track owns its width.
 #' @param ... Native geom parameters and aesthetics. Ordered text also accepts
 #'   padding = 0.6 mm, label_gap = 0 em, connection_height = 5 mm,
 #'   segment_colour = "#626A73", and segment_linewidth = 0.22 mm. Its default
-#'   gap is 0.2 body widths. Text defaults to size = 3 mm. Free repulsion
+#'   gap is 0.2 body widths; local linked horizontal comparisons use a 2 mm
+#'   connection height. Text defaults to size = 3 mm. Free repulsion
 #'   accepts columns, seed, max.iter, box.padding and overflow.
 #'   Explicit arguments override an existing layer's styling and position;
 #'   omitted arguments retain the layer's settings. Native layers must use
@@ -108,13 +116,19 @@ geom_genemodel <- function(mapping = NULL, data = NULL, track = NULL,
 #'   or a compatible text extension.
 #' @export
 geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
-    track = NULL, side = c("right", "left", "inner", "outer"), gap = 0.25,
+    track = NULL, side = c("auto", "right", "left", "inner", "outer"), gap = 0.25,
     position = "identity", track_position = 0.5, label_width = NULL, ...) {
   check_track_position(track_position)
   side <- canonical_chr_side(match.arg(side))
+  automatic <- side == "auto" && is.null(track)
+  if (side == "auto") side <- "right"
+  wrap <- function(component) {
+    if (automatic) component$ideogram_auto_side <- TRUE
+    new_ideogram_object(component)
+  }
   if (is.character(position) && length(position) == 1L && position %in% c("spread", "repel")) {
     if (missing(gap)) gap <- 0.2
-    return(new_ideogram_object(locus_text_component(mapping, data, geom,
+    return(wrap(locus_text_component(mapping, data, geom,
       track, side, gap, label_width, position, list(...))))
   }
   if (is.character(geom)) {
@@ -131,7 +145,7 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
       gap = gap, position = position, track_position = track_position), params)
     if (geom == "text" && is.null(args$size) && is.null(mapping$size)) args$size <- ideogram_text_size("label")
     if (geom == "interval" && !is.null(track)) args$placement <- "beside"
-    return(new_ideogram_object(do.call(fun, args)))
+    return(wrap(do.call(fun, args)))
   }
   prototype <- locus_native_layer(geom, list(...),
     if (missing(position)) NULL else position)
@@ -159,7 +173,7 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
     base$aes_params$size <- ideogram_text_size("label")
   }
   base$show.legend <- prototype$show.legend
-  new_ideogram_object(base)
+  wrap(base)
 }
 
 locus_native_layer <- function(geom, params, position = NULL) {
@@ -204,6 +218,7 @@ locus_text_component <- function(mapping, data, geom, track, side, gap,
   args$stat <- "identity"
   object <- do.call(fun, c(list(mapping = mapping, data = data, track = track,
     side = side, gap = gap, width = width), args))
+  object$auto_connection_height <- position == "spread" && is.null(args$connection_height)
   object$text_geom <- prototype$geom
   object$text_params <- native
   object
@@ -223,7 +238,9 @@ locus_text_component <- function(mapping, data, geom, track, side, gap,
 #'   ID mappings are from/to and use the supplied nodes table.
 #' @param type Point connections or interval bands.
 #' @param nodes Optional source node table from [chr_nodes()].
-#' @param ... Endpoint side1/side2, gap, bend/curvature, curve_points,
+#' @param ... Endpoint side1/side2 (auto faces the other chromosome), gap
+#'   (NULL reserves annotation clearance; a number sets the body-edge offset),
+#'   bend/curvature, curve_points,
 #'   orientation for intervals, and native colour/fill/alpha/linewidth/arrow.
 #' @return An additive native connection or band component.
 #' @export
@@ -270,8 +287,13 @@ geom_locus_inset <- function(plot = NULL, mapping = NULL, data = NULL, ...) {
 #' @export
 ggplot_add.ggideogram_object <- function(object, plot, ...) {
   initial <- !inherits(plot$coordinates$layout, "ideogram_layout_v2")
+  if (!initial && inherits(object$component, "ggideogram_pair_component")) {
+    plot <- register_microsynteny_pairs(plot, object$component)
+  }
   before <- length(plot$layers)
-  result <- ggplot2::ggplot_add(object$component, plot,
+  result <- if (isTRUE(object$component$ideogram_auto_side)) {
+    add_auto_locus(object$component, plot)
+  } else ggplot2::ggplot_add(object$component, plot,
     ggplot_add_object_name(..., fallback = "ideogram_object"))
   if (initial) return(result)
   layout <- ideogram_plot_layout(result)

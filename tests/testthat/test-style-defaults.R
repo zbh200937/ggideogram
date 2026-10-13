@@ -1,4 +1,4 @@
-test_that("bp labels preserve a local window's fractional unit offset", {
+test_that("explicit bp labels retain precision and automatic ticks use round coordinates", {
   expect_equal(axis_labels(c(2500, 4500, 14500), 1e3, "kb"),
     c("2.5 kb", "4.5 kb", "14.5 kb"))
   expect_equal(axis_labels(c(1000001, 2000001), 1e6, "Mb"),
@@ -9,7 +9,58 @@ test_that("bp labels preserve a local window's fractional unit offset", {
   text <- Filter(function(x) !is.null(x$ideogram_axis_spec) &&
     inherits(x$geom, "GeomText"), p$layers)[[1]]$data
   expect_equal(as.numeric(sub(" kb", "", text$label)) * 1000,
-    seq(2500, 14500, by = 2000))
+    c(5000, 10000, 15000))
+})
+
+test_that("complete themes do not expose internal layout axes", {
+  k <- data.frame(Chr = c("A", "B"), Start = 0, End = c(100, 80))
+  for (orientation in c("vertical", "horizontal", "circular")) {
+    p <- ggideogram(k, orientation = orientation, axis = TRUE) +
+      ggplot2::theme_classic() + geom_track(track = "signal", width = 2)
+    gt <- ggplot2::ggplotGrob(p)
+    slots <- grepl("^(axis|xlab|ylab)-", gt$layout$name)
+    expect_true(all(vapply(gt$grobs[slots], inherits, logical(1), "zeroGrob")))
+    expect_true(any(vapply(p$layers, function(layer)
+      !is.null(layer$ideogram_axis_spec), logical(1))))
+  }
+})
+
+test_that("local automatic axes stay round and explicit breaks stay exact", {
+  k <- data.frame(Chr = "A", Start = 0, End = 1e8)
+  view <- chr_view(k, "A", 79007836, 81007836)
+  axis_text <- function(p) Filter(function(layer)
+    inherits(layer$geom, "GeomIdeogramAxisText"), p$layers)[[1]]
+  for (orientation in c("vertical", "horizontal")) {
+    p <- ggideogram(view, orientation = orientation, axis = TRUE, axis_units = "Mb")
+    labels <- axis_text(p)
+    expect_equal(labels$data$label, c("79.5 Mb", "80.0 Mb", "80.5 Mb", "81.0 Mb"))
+    expect_true(labels$geom_params$check_overlap)
+    explicit <- c(79007836, 80007836)
+    q <- ggideogram(view, orientation = orientation, axis = TRUE,
+      axis_units = "Mb", axis_breaks = explicit, reverse_chr = "A")
+    expect_equal(axis_text(q)$data$label, c("79.007836 Mb", "80.007836 Mb"))
+    expect_false(axis_text(q)$geom_params$check_overlap)
+    expect_equal(p$coordinates$layout$data$karyotype, as_ideogram_data(k)$karyotype)
+  }
+})
+
+test_that("endpoint names align with bodies by default and tracks by request", {
+  k <- data.frame(Chr = c("A", "B"), Start = 0, End = c(100, 80))
+  name_data <- function(p) {
+    b <- ggplot2::ggplot_build(p)
+    i <- which(vapply(b$plot$layers, function(l) inherits(l$stat, "StatChromosomeName"), logical(1)))
+    b$data[[i]]
+  }
+  for (orientation in c("vertical", "horizontal")) {
+    p <- ggideogram(k, orientation = orientation,
+      tracks = list(labels = geom_track(side = "right", width = 16, gap = 0)))
+    g <- p$coordinates$layout$chrom
+    axis <- if (orientation == "vertical") "x" else "y"
+    expect_equal(name_data(p)[[axis]], g[[paste0(".axis_start_", axis)]])
+    q <- ggideogram(k, orientation = orientation, name_align = "tracks",
+      tracks = list(labels = geom_track(side = "right", width = 16, gap = 0)))
+    expect_equal(abs(name_data(q)[[axis]] - name_data(p)[[axis]]), rep(8, 2))
+  }
 })
 
 test_that("vertical bp axes get default space and retain explicit spacing", {
@@ -129,4 +180,26 @@ test_that("circular text reservation keeps explicit legend gaps during component
     expect_equal(grid::convertUnit(r$theme$legend.box.spacing, "mm", valueOnly = TRUE), 1)
     expect_no_warning(ggplot2::ggplotGrob(r))
   }
+})
+
+test_that("default bodies are wider and automatic layout uses annotation space", {
+  k <- data.frame(Chr = paste0("Chr", 1:15), Start = 0, End = 100)
+  tracks <- list(labels = geom_track(width = 16))
+  p <- ggideogram(k, tracks = tracks)
+  l <- p$coordinates$layout
+  expect_equal(l$chromosome_width, 1.2)
+  expect_gt(l$nrow, 1)
+  expect_lt(abs(log(diff(l$bounds$x) / diff(l$bounds$y))),
+    abs(log((15 * 17.2 + 14 * 3) / 40)))
+  explicit <- ggideogram(k, tracks = tracks, ncol = 15, chromosome_width = 2)
+  expect_equal(explicit$coordinates$layout$ncol, 15)
+  expect_equal(explicit$coordinates$layout$chromosome_width, 2)
+  horizontal <- ggideogram(k[1:2, ], orientation = "horizontal", tracks = tracks,
+    layout_aspect = 3)
+  h <- horizontal$coordinates$layout
+  expect_equal(horizontal$coordinates$aspect(list()), 1 / 3)
+  expect_equal(h$max_chr_length, 40)
+  fixed <- ggideogram(k[1:2, ], orientation = "horizontal", tracks = tracks,
+    layout_aspect = 3, max_chr_length = 40)
+  expect_equal(fixed$coordinates$layout$max_chr_length, 40)
 })

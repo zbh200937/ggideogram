@@ -13,7 +13,7 @@ ideogram_layout(karyotype, ...)
 \method{ideogram_layout}{ideogram_data}(
   karyotype,
   ncol = NULL,
-  chromosome_width = 1,
+  chromosome_width = 1.2,
   chromosome_gap = 3,
   max_chr_length = 40,
   row_gap = 2,
@@ -41,8 +41,8 @@ ideogram_layout(karyotype, ...)
 \item{ncol}{Number of chromosomes per linear row. \code{NULL} uses one row and
 is required for a circular sector ring.}
 
-\item{chromosome_width}{Width of a chromosome body in layout units.  The
-default \code{1} defines the package's normalized body-width unit.}
+\item{chromosome_width}{Width of a chromosome body in layout units,
+default 1.2. The normalized reference unit is 1.}
 
 \item{chromosome_gap}{Clear gap between adjacent body columns, in body-width
 units. Circular gaps use \code{gap_angle}.}
