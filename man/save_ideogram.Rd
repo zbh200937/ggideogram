@@ -17,7 +17,9 @@ save_ideogram(
 \arguments{
 \item{filename}{Output filename.}
 
-\item{plot}{A \code{\link[=ggideogram]{ggideogram()}} plot or any standard ggplot composition.}
+\item{plot}{A \code{\link[=ggideogram]{ggideogram()}} plot or any object supported by
+\code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}, including grobs and compositions with a
+\code{\link[grid:grid.draw]{grid::grid.draw()}} method.}
 
 \item{width, height, units, dpi}{Standard \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}} arguments.}
 
@@ -27,7 +29,7 @@ save_ideogram(
 \code{filename}, invisibly.
 }
 \description{
-This convenience wrapper validates the plot and delegates to
+This convenience wrapper delegates plotting and validation to
 \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}. Width and height are ordinary device choices.
 Omitting both uses ggplot2's own
 device defaults.

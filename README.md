@@ -289,6 +289,43 @@ p_axis
 
 `limits = NULL` trains the axis on the plotted chromosomes. The default keeps every chromosome in the supplied karyotype; `drop` applies when limits are trained.
 
+### ggalign
+
+With ggalign ≥ 1.2.0 (which requires ggplot2 ≥ 4.0.0), use
+`ggalign::align_plots(p, child)` for panel composition or `ggalign::ggfree(p)`
+inside a ggalign layout. To anchor a complete ggalign composition, layout or
+plot containing insets, pass `ggalign::ggalignGrob(child)` to
+`geom_locus_inset(plot = ...)`. The standard grob retains the child's panels,
+coordinates, themes and guides. Complete compositions can be saved directly
+with `save_ideogram()`, which delegates to `ggplot2::ggsave()`.
+
+For chromosome-level alignment, use a matrix whose row names match the
+karyotype chromosome keys. Map the aligned axis to `.discrete_x` or
+`.discrete_y`, and set `limits = NULL` so the chromosome guide follows the
+layout's ordering and groups:
+
+```r
+counts <- table(factor(as.character(Random_RNAs_500$Chr),
+  levels = as.character(human_karyotype$Chr)))
+rna_matrix <- matrix(as.numeric(counts), ncol = 1,
+  dimnames = list(names(counts), "RNAs"))
+
+p_aligned <- ggalign::stack_discretev(rna_matrix) +
+  ggalign::align_order() +
+  ggalign::ggalign() +
+  geom_col(aes(x = .discrete_x, y = value)) +
+  scale_x_chromosome(human_karyotype, limits = NULL) +
+  theme(axis.text.x = element_text())
+```
+
+Panel composition does not establish shared bp coordinates; use
+`geom_track()` for observations along a chromosome. See the runnable
+[ggalign examples](inst/examples/ggalign-composition.R) for external panels,
+ordered chromosome axes and complete composition insets.
+The [clustered heatmap example](inst/examples/ggalign-clustered-heatmap.R)
+links a chromosome guide, a dendrogram, gene/LTR density profiles and a
+chromosome-level summary through one shared row domain.
+
 ## Public functions
 
 | Purpose | Functions |

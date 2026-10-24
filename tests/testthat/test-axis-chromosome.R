@@ -142,6 +142,14 @@ test_that("axis chromosome length and centromere geometry are data-derived", {
                     abs(profile$cross - 0.5) < 1e-12))
 })
 
+test_that("named axis labels retain native partial and expression semantics", {
+  for (labels in list(c(C = "third"), expression(C = italic(C), A = alpha))) {
+    actual <- scale_x_chromosome(axis_karyotype, limits = c("C", "A", "B"), labels = labels)
+    native <- ggplot2::scale_x_discrete(limits = c("C", "A", "B"), labels = labels)
+    expect_equal(actual$get_labels(), native$get_labels())
+  }
+})
+
 test_that("axis physical dimensions reject relative and invalid units", {
   expect_error(
     guide_chromosome_axis(axis_karyotype, axis_length = grid::unit(1, "npc")),

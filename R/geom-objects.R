@@ -253,6 +253,9 @@ geom_chrlink <- function(mapping = NULL, data = NULL,
 #' Anchor a complete ggplot or grob to a chromosome locus
 #'
 #' Complete plots preserve their own coordinate system, theme and guides.
+#' For complete third-party compositions, first use the composition package's
+#' public grob converter, for example `ggalign::ggalignGrob(child)`, and supply
+#' the resulting grob. This also applies to plots containing ggalign insets.
 #' For plots that should share genomic coordinates, use [geom_track()] with
 #' ordinary layers instead.
 #'
@@ -273,7 +276,7 @@ geom_chrlink <- function(mapping = NULL, data = NULL,
 geom_locus_inset <- function(plot = NULL, mapping = NULL, data = NULL, ...) {
   if (inherits(plot, "uneval") && is.null(mapping)) { mapping <- plot; plot <- NULL }
   if (!is.null(plot)) {
-    if (!inherits(plot, "ggplot") && !inherits(plot, "grob")) stopf("`plot` must be a complete ggplot or grob.")
+    if (!is_inset_plot(plot)) stopf("`plot` must be a complete ggplot or grob.")
     if (!is.data.frame(data)) stopf("An inset requires data-frame chromosome anchors.")
     column <- ".ideogram_child"
     while (column %in% names(data)) column <- paste0(column, "_")

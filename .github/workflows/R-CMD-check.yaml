@@ -24,6 +24,7 @@ jobs:
               ggrepel@0.9.6
               patchwork@1.2.0
               cowplot@1.1.3
+              ggalign=?ignore
               ggiraph=?ignore
             force-suggests: 'false'
     env:

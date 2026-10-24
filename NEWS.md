@@ -1,5 +1,12 @@
 # ggideogram 0.5.0
 
+- Chromosome axes retain default and named labels when ggalign reorders or
+  groups observations. Complete ggalign layouts, compositions and nested
+  insets enter `geom_locus_inset()` as standard grobs via `ggalignGrob()`.
+- `save_ideogram()` delegates object support to `ggplot2::ggsave()`, including
+  grobs and compositions with a standard drawing method.
+- Added optional ggalign interoperability examples and regression coverage.
+
 - Native tile footprints and nudge/stack/fill results train automatic track
   ranges. Completely missing layers can use explicit or shared finite limits.
 - Chromosome-axis labels preserve plotmath expressions. Gene-model labels

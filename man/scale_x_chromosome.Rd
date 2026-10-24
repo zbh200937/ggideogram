@@ -106,6 +106,10 @@ label. This means \code{labels} may safely add prefixes or other presentation
 text without changing biological alignment. The compact guide displays the
 chromosome outline and centromere; use \code{\link[=ggideogram]{ggideogram()}} when full cytoband
 detail or bp-position tracks are required.
+
+In ggalign discrete layouts, map the aligned axis to \code{.discrete_x} or
+\code{.discrete_y} and use \code{limits = NULL} to follow layout ordering and groups.
+Default and named labels are matched by chromosome key after reordering.
 }
 \examples{
 data(human_karyotype, package = "ggideogram")

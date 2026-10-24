@@ -337,12 +337,14 @@ validate_inset_mapping <- function(data, mapping) {
   }
   plots <- base$plot
   if (!is.list(plots) ||
-      any(!vapply(plots, function(plot) {
-        inherits(plot, "ggplot") || grid::is.grob(plot)
-      }, logical(1)))) {
+      any(!vapply(plots, is_inset_plot, logical(1)))) {
     stopf("Inset `plot` must be a list-column of ggplot objects or grobs.")
   }
   invisible(TRUE)
+}
+
+is_inset_plot <- function(plot) {
+  inherits(plot, "ggplot") || grid::is.grob(plot)
 }
 
 #' Convert an ideogram to a standard grob

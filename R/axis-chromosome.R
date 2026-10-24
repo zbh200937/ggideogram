@@ -15,6 +15,10 @@
 #' chromosome outline and centromere; use [ggideogram()] when full cytoband
 #' detail or bp-position tracks are required.
 #'
+#' In ggalign discrete layouts, map the aligned axis to `.discrete_x` or
+#' `.discrete_y` and use `limits = NULL` to follow layout ordering and groups.
+#' Default and named labels are matched by chromosome key after reordering.
+#'
 #' @param data A karyotype data frame or an [as_ideogram_data()] object.
 #' @param mapping,centromere Passed to [as_ideogram_data()] for a data-frame
 #'   input.
@@ -135,6 +139,9 @@ chromosome_position_scale <- function(
   if (inherits(labels, "waiver") && !is.null(semantic$karyotype$.display_name)) {
     labels <- stats::setNames(semantic$karyotype$.display_name, semantic$karyotype$.chr)
   }
+  if (!is.function(labels) && !is.null(names(labels))) {
+    labels <- chromosome_axis_label_function(labels)
+  }
   if (inherits(limits, "waiver")) {
     limits <- semantic$karyotype$.chr
   }
@@ -161,6 +168,14 @@ chromosome_position_scale <- function(
     expand = expand, guide = guide, position = position,
     drop = drop, na.translate = na.translate, ...
   )
+}
+
+chromosome_axis_label_function <- function(labels) {
+  force(labels)
+  function(breaks) {
+    index <- match(names(labels), breaks, nomatch = 0L)
+    replace(breaks, index, labels[index != 0L])
+  }
 }
 
 chromosome_axis_semantic <- function(data, mapping, centromere) {

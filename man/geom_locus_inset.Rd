@@ -27,6 +27,9 @@ An additive positioned-plot component.
 }
 \description{
 Complete plots preserve their own coordinate system, theme and guides.
+For complete third-party compositions, first use the composition package's
+public grob converter, for example \code{ggalign::ggalignGrob(child)}, and supply
+the resulting grob. This also applies to plots containing ggalign insets.
 For plots that should share genomic coordinates, use \code{\link[=geom_track]{geom_track()}} with
 ordinary layers instead.
 }

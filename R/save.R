@@ -2,13 +2,15 @@
 
 #' Save an ideogram with ggplot2
 #'
-#' This convenience wrapper validates the plot and delegates to
+#' This convenience wrapper delegates plotting and validation to
 #' [ggplot2::ggsave()]. Width and height are ordinary device choices.
 #' Omitting both uses ggplot2's own
 #' device defaults.
 #'
 #' @param filename Output filename.
-#' @param plot A [ggideogram()] plot or any standard ggplot composition.
+#' @param plot A [ggideogram()] plot or any object supported by
+#'   [ggplot2::ggsave()], including grobs and compositions with a
+#'   [grid::grid.draw()] method.
 #' @param width,height,units,dpi Standard [ggplot2::ggsave()] arguments.
 #' @param ... Additional arguments passed to [ggplot2::ggsave()].
 #'
@@ -22,9 +24,6 @@ save_ideogram <- function(
     units = "in",
     dpi = 300,
     ...) {
-  if (!inherits(plot, "ggplot")) {
-    stopf("`plot` must be a ggplot object or compatible ggplot composition.")
-  }
   arguments <- list(
     filename = filename,
     plot = plot,

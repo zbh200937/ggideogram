@@ -486,6 +486,11 @@ geom_locus_inset(
 或规范化面板单位，默认含义必须写入帮助页。inset 不参与宿主 plot 的数据 scale；
 其内部 guide 默认归 inset 自己所有，除非用户显式关闭。
 
+完整第三方组合以标准 grob 为接入边界。调用方先使用组合包的公开转换函数，
+再将结果交给 plot 参数或 list-column。例如，ggalign 的组合、布局和带 inset 的
+图形使用 ggalign::ggalignGrob(child)。组合包负责构建子图，ggideogram 负责
+染色体锚点及物理视口；全部子面板、坐标、主题与图例保留在该 grob 中。
+
 可选 track 引用已经声明的 beside 轨道；它不根据子图的 width/height 自动创建或扩大
 轨道。轨道几何控制锚点的空间边界，width/height 控制子图视口，子图的坐标与图例仍
 独立。需要为子图留出区域时，使用明确的空间声明和视口尺寸。
@@ -523,6 +528,13 @@ grid::grobTree(ggplot2::ggplotGrob(p_ideo))
 
 如提供 `as_ideogram_grob()`，它只能是 `ggplotGrob()` 的稳定便捷封装，不能产生与
 标准 ggplot 输出不同的第二种版式。
+
+ggalign 的 align_plots()、ggfree() 和 inset() 接入同一标准 ggplot 边界。
+save_ideogram() 将图形直接委托 ggplot2::ggsave()；可保存的对象由其标准绘制
+协议决定，包含 ggplot、grob 及提供相应 grid.draw 方法的组合对象。
+外部排版不隐式建立 chr/bp 对齐。参与 ggalign 离散排序的染色体轴使用其
+.discrete_x/.discrete_y 名称映射及 limits = NULL；默认名称和命名标签按原始 break
+键生成，排序或分组不改变染色体名称与主体的对应关系。
 
 ### 7.6 原生染色体轴
 
