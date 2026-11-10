@@ -49,6 +49,7 @@ ggplot_add.ggideogram_fill_component <- function(object, plot, ...) {
   if (!any(keep)) return(plot)
   data <- data[keep, , drop = FALSE]
   chr <- chr[keep]; lo <- lo[keep]; hi <- hi[keep]
+  check_track_chromosomes(layout, object$track, chr)
   a <- offset_chr_points_signed(layout, chr,
     project_positions_checked(layout, chr, lo), rep(spec$low_offset, length(chr)))
   b <- offset_chr_points_signed(layout, chr,

@@ -564,6 +564,70 @@ test_that("track ownership follows chromosome selection and overlay edits", {
   expect_no_warning(ggplot2::ggplotGrob(shifted))
 })
 
+test_that("track edits resolve automatic dimensions from the final declaration", {
+  k <- data.frame(Chr = "A", Start = 0, End = 100)
+  d <- data.frame(Chr = "A", Pos = c(20, 70), Value = c(1, 2))
+  p <- ggideogram(k, tracks = list(signal = geom_track(
+    ggplot2::aes(chr = Chr, x = Pos, y = Value), d, geom = ggplot2::geom_point())))
+  dimensions <- function(plot) {
+    row <- track_table_row(ideogram_plot_layout(plot), "signal")
+    c(width = row$width, gap = row$gap)
+  }
+  overlay <- p + geom_track(track = "signal", side = "overlay")
+  expect_equal(dimensions(overlay), c(width = 1, gap = 0))
+  expect_equal(dimensions(overlay + geom_track(track = "signal", side = "left")),
+    c(width = 3, gap = 0.2))
+  custom <- p + geom_track(track = "signal", width = 0.7, gap = 0.8)
+  expect_equal(dimensions(custom + geom_track(track = "signal", side = "left")),
+    c(width = 0.7, gap = 0.8))
+  expect_error(custom + geom_track(track = "signal", side = "overlay"), "gap = 0")
+  expect_equal(dimensions(custom + geom_track(track = "signal", side = "overlay", gap = NULL)),
+    c(width = 0.7, gap = 0))
+  expect_equal(dimensions(custom + geom_track(track = "signal", width = NULL, gap = NULL)),
+    c(width = 3, gap = 0.2))
+
+  genes <- geom_genemodel(data = data.frame(Chr = "A", Start = 21, End = 33,
+    Gene = "G1", Type = "exon", Strand = "+"), labels = FALSE,
+    ggplot2::aes(chr = Chr, start = Start, end = End, gene = Gene, type = Type, strand = Strand))
+  mixed <- p + geom_track(track = "signal", layers = list(genes))
+  expect_equal(dimensions(mixed), c(width = 6, gap = 0.2))
+  expect_length(track_scope_indices(mixed, "GeomPoint"), 1)
+  restored <- mixed + geom_track(track = "signal", replace = TRUE, geom = ggplot2::geom_point())
+  expect_equal(dimensions(restored), dimensions(p))
+  expect_no_warning(ggplot2::ggplotGrob(mixed))
+  loci <- mixed + geom_track(track = "signal", layers = list(geom_locus(geom = "point")))
+  built <- ggplot2::ggplot_build(loci)
+  marker <- which(vapply(loci$layers, function(layer) inherits(layer$stat, "StatChrMarker"), logical(1)))
+  expect_equal(built$data[[marker]]$ideogram_anchor_position, d$Pos)
+})
+
+test_that("scoped axes skip undefined ranges and validate source keys", {
+  k <- data.frame(Chr = c("A", "B"), Start = 0, End = 100)
+  d <- data.frame(Chr = rep(k$Chr, each = 2), Pos = c(10, 80), Value = c(1, 2, NA, NA))
+  scope <- geom_track(ggplot2::aes(chr = Chr, x = Pos, y = Value), d,
+    geom = ggplot2::geom_point(na.rm = TRUE), value_scale = "per_chr", axis = TRUE)
+  axes <- function(plot) Filter(function(layer) inherits(layer$stat, "StatTrackAxis"), plot$layers)
+  for (orientation in c("horizontal", "vertical", "circular")) {
+    p <- ggideogram(k, orientation = orientation, tracks = list(signal = scope))
+    expect_identical(axes(p)[[1]]$stat_params$chromosomes, "A")
+    expect_no_warning(ggplot2::ggplotGrob(p))
+    q <- p + geom_track(track = "signal", data = transform(d, Value = 1:4))
+    expect_identical(axes(q)[[1]]$stat_params$chromosomes, c("A", "B"))
+    expect_no_warning(ggplot2::ggplotGrob(q))
+    expect_error(p + geom_track(track = "signal", axis = list(chr = "B")), "no resolved range")
+    expect_error(p + geom_track(track = "signal", chr = "typo"), "unknown source chromosomes:.*typo")
+  }
+  local <- ggideogram(chr_view(k, "A", 0, 100), tracks = list(signal = scope)) +
+    geom_track(track = "signal", chr = "B")
+  expect_length(axes(local), 0)
+  expect_length(track_scope_indices(local, "GeomPoint"), 0)
+  circular <- ggideogram(k, orientation = "circular", tracks = list(signal = scope))
+  expect_error(circular + geom_track(track = "signal", axis = list(position = "gap")),
+    "must select one chromosome")
+  expect_no_warning(ggplot2::ggplotGrob(circular + geom_track(track = "signal",
+    axis = list(position = "gap", chr = "A"))))
+})
+
 test_that("rebinding track data respects layer overrides and retrains fixed ranges", {
   f <- track_scope_fixture()
   own <- transform(f$data[1, ], Value = 8, ID = "own")

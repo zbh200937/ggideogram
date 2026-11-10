@@ -28,7 +28,8 @@ new_ideogram_object <- function(component) {
 #'   [geom_track()].
 #' @param ... Component styling. A new plot also accepts [ggideogram()] layout
 #'   arguments such as `orientation`. Names accept size/gap/position/align; axes
-#'   accept side/breaks/units. Bodies accept fill/colour/linewidth/alpha/linetype.
+#'   accept side/breaks/units, angle (degrees from horizontal), and check_overlap.
+#'   Bodies accept fill/colour/linewidth/alpha/linetype.
 #'   Unsupported parameters and visual mappings outside `component = "fill"`
 #'   raise an error.
 #' @return An additive chromosome component returning a standard ggplot.
@@ -227,26 +228,42 @@ locus_text_component <- function(mapping, data, geom, track, side, gap,
 #' Connect chromosome loci or genomic intervals
 #'
 #' Endpoints can be mapped directly, or resolved by their IDs from [chr_nodes()]
-#' using `aes(from = ..., to = ...)`. Same-chromosome local relations and
-#' reversed interval relations default to smooth arcs. Set curvature = 0 for
-#' straight connections. Curves use native segments; interval bands use native
-#' polygons and retain their original genomic bounds.
+#' using `aes(from = ..., to = ...)`. Cross-chromosome bands are straight in
+#' linear layouts and curved in circular layouts by default, for both forward
+#' and reversed intervals. Local links on the same chromosome default to arcs.
+#' Set `curvature = 0` for straight edges or use a positive value up to 1 for
+#' curved edges. Point links use native segments. Interval bands use native polygons
+#' and retain their original genomic bounds.
+#' In horizontal local synteny plots, automatic endpoints clear the tracks
+#' and bp axes declared in `ggideogram()` on each facing side. Default ribbons between adjacent
+#' chromosomes stay in the space between those endpoints.
 #'
 #' @param mapping,data Edge mappings and source edge data.
 #'   Direct point mappings are chr1/position1/chr2/position2; interval mappings
 #'   are chr1/start1/end1/chr2/start2/end2, with optional orientation (+/-).
 #'   ID mappings are from/to and use the supplied nodes table.
-#' @param type Point connections or interval bands.
+#' @param type `"auto"` (default) draws a band for interval mappings or
+#'   interval nodes and a line for points. Use `"point"` or `"interval"` to
+#'   choose explicitly. Point connections between interval nodes use their
+#'   midpoints. Bands use translucent fill by default.
 #' @param nodes Optional source node table from [chr_nodes()].
-#' @param ... Endpoint side1/side2 (auto faces the other chromosome), gap
-#'   (NULL reserves annotation clearance; a number sets the body-edge offset),
-#'   bend/curvature, curve_points,
+#' @param ... Endpoint side1/side2. Auto faces the other chromosome in linear
+#'   layouts and attaches to the innermost track boundary in circular layouts.
+#'   `gap = NULL` uses automatic clearance. A number sets an offset from the
+#'   body edge or, for circular auto sides, from that inner boundary. Circular
+#'   endpoint offsets must leave a positive radius. Also accepts bend, curvature, curve_points,
 #'   orientation for intervals, and native colour/fill/alpha/linewidth/arrow.
 #' @return An additive native connection or band component.
 #' @export
 geom_chrlink <- function(mapping = NULL, data = NULL,
-    type = c("point", "interval"), nodes = NULL, ...) {
-  fun <- if (match.arg(type) == "point") geom_chr_connection else geom_chr_synteny
+    type = c("auto", "point", "interval"), nodes = NULL, ...) {
+  type <- match.arg(type)
+  if (type == "auto") {
+    intervals <- any(c("start1", "end1", "start2", "end2") %in% names(mapping)) ||
+      (inherits(nodes, "chr_nodes") && ".node_start" %in% names(nodes))
+    type <- if (intervals) "interval" else "point"
+  }
+  fun <- if (type == "point") geom_chr_connection else geom_chr_synteny
   new_ideogram_object(fun(mapping, data, nodes = nodes, ...))
 }
 
@@ -271,6 +288,9 @@ geom_chrlink <- function(mapping = NULL, data = NULL,
 #'   to the true anchor. Map position or 1-based closed start/end (midpoint
 #'   `(start - 1 + end) / 2`) and, without plot, a plot
 #'   list-column. hjust/vjust can override placement-aware justification.
+#'   Collision checks cover other insets and, for beside placement, chromosome
+#'   bodies and other declared tracks. Physical sizes are checked when drawn in
+#'   the final host panel; changing output size can therefore reveal a collision.
 #' @return An additive positioned-plot component.
 #' @export
 geom_locus_inset <- function(plot = NULL, mapping = NULL, data = NULL, ...) {

@@ -2,7 +2,7 @@ test_that("track axes follow ranges registered after axis addition", {
   kar <- data.frame(Chr = "A", Start = 0, End = 100)
   values <- data.frame(Chr = "A", Pos = c(20, 80), Value = c(0, 10))
   for (orientation in c("vertical", "horizontal")) {
-    p <- ggideogram(kar, orientation = orientation, show_names = FALSE,
+    p <- ggideogram(kar, orientation = orientation, show_names = FALSE, min_gap = 0.7,
       tracks = track_layout(signal = track())) +
       geom_track_point(ggplot2::aes(chr = Chr, position = Pos, value = Value),
         values, track = "signal") +
@@ -12,11 +12,12 @@ test_that("track axes follow ranges registered after axis addition", {
       transform(values, Value = c(0, 100)), track = "signal")
     built <- ggplot2::ggplot_build(updated)
     text <- built$data[[length(built$data) - 1L]]
-    expected <- project_chr_track(updated$coordinates$layout,
+    layout <- ideogram_plot_layout(updated)
+    expected <- project_chr_track(layout,
       transform(values, Pos = 100), "Chr", "Pos", "Value", "signal")
     expect_equal(text$label, c("0", "10"))
-    expect_equal(text$x, expected$.x)
-    expect_equal(text$y, expected$.y)
+    expect_equal(text$x, expected$.x + if (orientation == "horizontal") 0.2 else 0)
+    expect_equal(text$y, expected$.y - if (orientation == "vertical") 0.2 else 0)
     expect_no_error(ggplot2::ggplotGrob(updated))
     # Building a derived plot must not change the original plot's range.
     original <- ggplot2::ggplot_build(p)

@@ -401,3 +401,14 @@ test_that('circular physical labels keep annular columns and true Cartesian anch
   expect_equal(a$positions$anchor_x, expected$x)
   expect_equal(a$positions$anchor_y, expected$y)
 })
+test_that('whole turns preserve circular sectors and their closing gap', {
+  for (clockwise in c(FALSE, TRUE)) {
+    args <- list(karyotype = circular_kar, orientation = 'circular',
+      gap_angle = 2, opening_angle = 35, clockwise = clockwise)
+    layout <- do.call(ideogram_layout, c(args, list(start_angle = 73)))
+    equivalent <- do.call(ideogram_layout, c(args, list(start_angle = 73 + 360 * 2^40)))
+    expect_equal(equivalent$circular$label_gap, layout$circular$label_gap)
+    expect_equal(circular_xy(equivalent, equivalent$chrom$.arc_start, 10),
+      circular_xy(layout, layout$chrom$.arc_start, 10))
+  }
+})

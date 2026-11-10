@@ -24,15 +24,15 @@ test_that("declared tracks own stable named layout space", {
 
   expect_s3_class(specs, "ideogram_track_layout")
   expect_equal(layout$tracks$id, c("first", "second", "left", "overlay"))
-  expect_equal(layout$tracks$low_offset, c(0.7, 2, -0.6, -0.3))
-  expect_equal(layout$tracks$high_offset, c(1.7, 2.5, -1.4, 0.3))
-  expect_equal(layout$track_extent, c(left = 0.9, right = 2))
+  expect_equal(layout$tracks$low_offset, c(0.7, 2, -0.7, -0.3))
+  expect_equal(layout$tracks$high_offset, c(1.7, 2.5, -1.5, 0.3))
+  expect_equal(layout$track_extent, c(left = 1, right = 2))
 
   centres <- layout$chrom$.axis_start_x
   first_outer <- centres[1] + 0.5 + layout$track_extent[["right"]]
   second_outer <- centres[2] - 0.5 - layout$track_extent[["left"]]
   expect_equal(second_outer - first_outer, 0.7)
-  expect_equal(diff(layout$bounds$x), 2 * (0.9 + 1 + 2) + 0.7)
+  expect_equal(diff(layout$bounds$x), 2 * (1 + 1 + 2) + 0.7)
 })
 
 test_that("track declarations reject ambiguous or impossible geometry", {

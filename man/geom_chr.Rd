@@ -37,7 +37,8 @@ NULL uses the constructor default on a new plot.}
 
 \item{...}{Component styling. A new plot also accepts \code{\link[=ggideogram]{ggideogram()}} layout
 arguments such as \code{orientation}. Names accept size/gap/position/align; axes
-accept side/breaks/units. Bodies accept fill/colour/linewidth/alpha/linetype.
+accept side/breaks/units, angle (degrees from horizontal), and check_overlap.
+Bodies accept fill/colour/linewidth/alpha/linetype.
 Unsupported parameters and visual mappings outside \code{component = "fill"}
 raise an error.}
 }

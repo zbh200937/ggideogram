@@ -84,6 +84,8 @@ chr_spread_geom <- function(kind, text_geom = ggplot2::GeomText) {
 #' @method ggplot_add ggideogram_labels_component
 #' @export
 ggplot_add.ggideogram_labels_component <- function(object, plot, ...) {
+  data <- prepare_chr_label_data(object, ideogram_plot_layout(plot))
+  if (!nrow(data)) return(plot)
   if (isTRUE(ideogram_plot_layout(plot)$microsynteny) && isTRUE(object$auto_connection_height)) {
     object$connection_height <- 2
   }
@@ -92,7 +94,7 @@ ggplot_add.ggideogram_labels_component <- function(object, plot, ...) {
   layout <- ideogram_plot_layout(plot)
   prepare <- object
   prepare$columns <- 1; prepare$max_labels <- Inf
-  d <- prepare_repel_labels(prepare, layout)
+  d <- prepare_repel_labels(prepare, layout, data)
   if (!nrow(d)) return(plot)
   mapping <- track_mapping_without(object$mapping, c("chr", "position", "x", "side", "priority"))
   mapping <- combine_track_mapping(mapping, ggplot2::aes(chr = .data$.label_chr,
@@ -121,23 +123,21 @@ ggplot_add.ggideogram_labels_component <- function(object, plot, ...) {
 }
 
 ordered_label_positions <- function(target, halfwidth, lo, hi) {
+  if (!length(target)) return(list(position = numeric(), fits = TRUE))
   i <- order(target, seq_along(target))
-  position <- target[i]; half <- halfwidth[i]
-  fit <- 2 * sum(half) <= hi - lo
-  if (!length(i)) return(list(position = numeric(), fits = TRUE))
-  position[1] <- max(position[1], lo + half[1])
-  if (length(i) > 1L) for (j in 2:length(i))
-    position[j] <- max(position[j], position[j - 1L] + half[j - 1L] + half[j])
-  if (fit) {
-    position[length(i)] <- min(position[length(i)], hi - half[length(i)])
-    if (length(i) > 1L) for (j in rev(seq_len(length(i) - 1L)))
-      position[j] <- min(position[j], position[j + 1L] - half[j + 1L] - half[j])
+  half <- halfwidth[i]
+  packed <- lo + cumsum(2 * half) - half
+  room <- hi - lo - 2 * sum(half)
+  if (room >= 0) {
+    # After subtracting the tightly packed centres, spacing requires only
+    # nondecreasing offsets. Fit the offsets closest to the original anchors.
+    offsets <- stats::isoreg(target[i] - packed)$yf
+    position <- packed + pmin(room, pmax(0, offsets))
   } else {
-    position <- lo + cumsum(2 * half) - half
-    position <- position + (hi - lo - 2 * sum(half)) / 2
+    position <- packed + room / 2
   }
   result <- numeric(length(i)); result[i] <- position
-  list(position = result, fits = fit)
+  list(position = result, fits = room >= 0)
 }
 
 resolve_chr_labels <- function(state) {
@@ -191,8 +191,7 @@ resolve_chr_labels <- function(state) {
         half, g$.arc_start / layout$circular$radius * label_radius,
         g$.arc_end / layout$circular$radius * label_radius)
       if (!packed$fits) bad <- c(bad, as.character(data$label[rows]))
-      theta <- layout$circular$start_angle * pi / 180 +
-        (if (layout$circular$clockwise) 1 else -1) * packed$position / label_radius
+      theta <- circular_theta(layout, packed$position / label_radius * layout$circular$radius)
       baseline[rows, ] <- cbind(centre[1] + label_radius * sin(theta),
         centre[2] + label_radius * cos(theta))
       glyph_radius <- label_radius + sign * width[rows] / 2

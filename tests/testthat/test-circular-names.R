@@ -208,37 +208,48 @@ test_that('selected chromosome components preserve other name-axis clearance', {
   expect_no_error(ggplot2::ggplotGrob(q))
 })
 
-test_that('track titles contribute their native text extent to endpoint name clearance', {
+test_that('endpoint names align with track titles when the physical label rows fit', {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
   k <- data.frame(Chr = c('1', '14'), Start = 0, End = c(100, 80))
-  p <- ggideogram(k, orientation = 'vertical', reverse_chr = '14') +
-    geom_track(track = 'density', side = 'left', width = 3, label = 'Genes / Mb',
-      limits = c(0, 200))
-  name <- Filter(function(layer) inherits(layer$geom, 'GeomChromosomeName'), p$layers)[[1]]
-  title <- Filter(function(layer) !is.null(layer$ideogram_track_title), p$layers)[[1]]
-  for (mm in c(120, 200)) {
-    file <- tempfile(fileext = '.pdf')
-    grDevices::cairo_pdf(file, width = mm / 25.4, height = mm / 25.4)
-    grid::pushViewport(grid::viewport(width = grid::unit(mm, 'mm'),
-      height = grid::unit(mm, 'mm'), xscale = c(0, 1), yscale = c(0, 1)))
+  for (orientation in c('horizontal', 'vertical')) {
+    vertical <- orientation == 'vertical'
+    p <- ggideogram(k, orientation = orientation, reverse_chr = '14') +
+      geom_track(track = 'density', side = 'left', width = 3, label = 'Genes / Mb',
+        limits = c(0, 200), axis = list(position = 'start', breaks = c(0, 200)))
     b <- ggplot2::ggplot_build(p)
-    draw <- function(geom_class, track_title = FALSE) {
-      index <- which(vapply(b$plot$layers, function(layer)
-        if (track_title) !is.null(layer$ideogram_track_title) else inherits(layer$geom, geom_class), logical(1)))
+    name_index <- which(vapply(b$plot$layers, function(layer)
+      inherits(layer$geom, 'GeomChromosomeName'), logical(1)))
+    title_index <- which(vapply(b$plot$layers, function(layer)
+      !is.null(layer$ideogram_track_title), logical(1)))
+    draw <- function(index) {
       layer <- b$plot$layers[[index]]
       do.call(layer$geom$draw_panel, c(list(data = b$data[[index]],
         panel_params = b$layout$panel_params[[1]], coord = b$plot$coordinates),
         layer$computed_geom_params[intersect(names(layer$computed_geom_params), layer$geom$parameters())]))
     }
-    text <- draw('GeomChromosomeName')
-    title_text <- draw(NULL, TRUE)
-    name_height <- grid::convertHeight(grid::grobHeight(grid::textGrob(text$label[1],
-      gp = text$gp)), 'mm', TRUE)
-    title_height <- grid::convertHeight(grid::grobHeight(grid::textGrob(title_text$label,
-      gp = title_text$gp)), 'mm', TRUE)
-    name_bottom <- grid::convertY(text$y[1], 'mm', TRUE) - name_height / 2
-    title_top <- grid::convertY(title_text$y, 'mm', TRUE) + title_height
-    expect_gte(name_bottom - title_top, name$geom_params$name_gap * name$aes_params$size - 1e-8)
-    expect_equal(text$gp$fontsize, rep(ideogram_text_size('chromosome') * ggplot2::.pt, 2))
-    grid::popViewport(); grDevices::dev.off(); unlink(file)
+    measure <- if (vertical) grid::grobHeight else grid::grobWidth
+    convert <- if (vertical) grid::convertY else grid::convertX
+    direction <- if (vertical) 1 else -1
+    along <- if (vertical) 'y' else 'x'
+    for (cross in c(120, 4)) {
+      grid::pushViewport(grid::viewport(
+        width = grid::unit(if (vertical) cross else 120, 'mm'),
+        height = grid::unit(if (vertical) 120 else cross, 'mm')))
+      text <- grid::makeContent(draw(name_index))$children[[1]]
+      title <- draw(title_index)
+      glyph <- grid::textGrob(text$label[1], gp = text$gp)
+      name_edge <- convert(text[[along]][1] - direction * measure(glyph) / 2, 'mm', TRUE)
+      title_edge <- convert(title[[along]], 'mm', TRUE)
+      if (cross == 120) {
+        expect_equal(name_edge, title_edge)
+      } else {
+        glyph <- grid::textGrob(title$label, gp = title$gp)
+        title_outer <- convert(title[[along]] + direction * measure(glyph), 'mm', TRUE)
+        expect_gt(direction * (name_edge - title_outer), 0)
+      }
+      expect_equal(text$gp$fontsize, rep(ideogram_text_size('chromosome') * ggplot2::.pt, 2))
+      grid::popViewport()
+    }
   }
 })

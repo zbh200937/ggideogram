@@ -90,7 +90,7 @@ geom_chr_axis <- function(
     size = ideogram_text_size("bp"),
     family = "",
     colour = ideogram_colour("axis"),
-    linewidth = ideogram_linewidth("axis")) {
+    linewidth = ideogram_linewidth("axis"), angle = 0, check_overlap = NULL) {
   if (!isTRUE(chr) && (!is.character(chr) || !length(chr))) {
     stopf("`chr` must be `TRUE` or a non-empty chromosome vector.")
   }
@@ -119,7 +119,8 @@ geom_chr_axis <- function(
     size = size,
     family = family,
     colour = colour,
-    linewidth = linewidth
+    linewidth = linewidth,
+    angle = angle, check_overlap = check_overlap
   ))
 }
 
@@ -175,7 +176,8 @@ ggplot_add.ggideogram_chromosome_component <- function(
       size = parameters$size,
       family = parameters$family,
       colour = parameters$colour,
-      linewidth = parameters$linewidth
+      linewidth = parameters$linewidth,
+      angle = parameters$angle %||% 0, check_overlap = parameters$check_overlap
     ),
     stopf("Unknown chromosome component `%s`.", object$kind)
   )

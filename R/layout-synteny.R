@@ -1,8 +1,11 @@
 # Local horizontal comparisons share ordering and annotation-side decisions.
+is_microsynteny_layout <- function(orientation, rows, chromosomes, edges) {
+  identical(orientation, "horizontal") && rows == 1L &&
+    chromosomes %in% 2:3 && !is.null(edges) && nrow(edges) > 0
+}
+
 is_microsynteny <- function(layout) {
-  edges <- layout$data$pair_edges
-  identical(layout$orientation, "horizontal") && layout$nrow == 1L &&
-    nrow(layout$chrom) %in% 2:3 && !is.null(edges) && nrow(edges) > 0
+  is_microsynteny_layout(layout$orientation, layout$nrow, nrow(layout$chrom), layout$data$pair_edges)
 }
 
 microsynteny_order <- function(data, spec) {
@@ -91,7 +94,12 @@ add_auto_locus <- function(component, plot) {
 
 microsynteny_link_gap <- function(layout, chr, sign) {
   sides <- ifelse(sign < 0, "left", "right")
-  gap <- annotation_extent(layout, chr, sides)
+  gap <- numeric(length(chr))
+  for (side in unique(sides)) {
+    rows <- sides == side
+    keys <- unique(chr[rows])
+    gap[rows] <- annotation_extent(layout, keys, side)[match(chr[rows], keys)]
+  }
   axis <- layout$base_spec$axis
   selected <- if (isTRUE(axis)) layout$chrom$.chr else if (identical(axis, FALSE)) character() else axis
   axis_side <- layout$base_spec$axis_side
@@ -109,14 +117,9 @@ annotation_extent <- function(layout, chr, side) {
   if (!isTRUE(layout$microsynteny)) return(unname(layout$track_extent[side]))
   vapply(seq_along(chr), function(i) {
     rows <- layout$tracks[layout$tracks$side == side[i], , drop = FALSE]
-    keep <- vapply(rows$id, function(id) {
-      spec <- layout$base_spec$tracks[[id]]
-      selected <- spec$chr
-      source <- spec$.labels_source
-      if (!is.null(source)) selected <- mapped_fields(source$data, source$mapping, "chr", what = "mapping")$chr
-      is.null(selected) || chr[i] %in% selected
-    }, logical(1))
-    max(c(0, abs(rows$high_offset[keep]) - layout$chromosome_width / 2))
+    keep <- vapply(rows$id, function(id) chr[i] %in% track_chromosomes(layout, id), logical(1))
+    max(c((layout$marker_extent %||% c(left = 0, right = 0))[[side[i]]],
+      abs(rows$high_offset[keep]) - layout$chromosome_width / 2))
   }, numeric(1))
 }
 

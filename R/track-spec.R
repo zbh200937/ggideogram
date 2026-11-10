@@ -20,10 +20,10 @@ track <- function(
     stopf("`offset` must be one finite number.")
   }
   if (!.partial && side == "overlay" && gap != 0) {
-    stopf("An overlay track must use `gap = 0`.")
+    stopf("An overlay track must use `gap = 0` or the default `gap = NULL`.")
   }
   if (!.partial && side != "overlay" && offset != 0) {
-    stopf("Only an overlay track can use a non-zero `offset`.")
+    stopf("Only an overlay track can use a non-zero `offset`; set `offset = 0` for a beside track.")
   }
   if (!is.logical(reverse) || length(reverse) != 1L || is.na(reverse)) {
     stopf("`reverse` must be `TRUE` or `FALSE`.")
@@ -66,9 +66,25 @@ track <- function(
   )
 }
 
+default_track_width <- function(side, layers) {
+  if (side == "overlay") return(1)
+  gene <- vapply(layers, function(layer) {
+    if (inherits(layer, "ggideogram_object")) layer <- layer$component
+    inherits(layer, "ggideogram_gene_component")
+  }, logical(1))
+  if (any(gene)) 6 else 3
+}
+
 validate_track_spec <- function(spec) {
   args <- setdiff(names(formals(track)), ".partial")
-  geometry <- do.call(track, spec[args])
+  geometry <- spec[args]
+  if (isTRUE(spec$auto_width)) {
+    layers <- if (is.null(spec$parts)) spec$layers else
+      unlist(lapply(spec$parts, `[[`, "layers"), recursive = FALSE)
+    geometry$width <- default_track_width(spec$side, layers)
+  }
+  if (isTRUE(spec$auto_gap)) geometry["gap"] <- list(NULL)
+  geometry <- do.call(track, geometry)
   spec[names(geometry)] <- geometry
   spec
 }
@@ -133,9 +149,33 @@ print.ideogram_track_layout <- function(x, ...) {
   invisible(x)
 }
 
-resolve_track_geometry <- function(tracks, chromosome_width) {
+# Track and column boundaries in the layout's Cartesian coordinates.
+track_column_region <- function(layout, chr, spec, column = 1L, columns = 1L) {
+  g <- layout$chrom[layout$index[[chr]], , drop = FALSE]
+  offsets <- spec$low_offset + c(column - 1, column) / columns * (spec$high_offset - spec$low_offset)
+  if (is_circular_layout(layout)) {
+    positions <- seq(g$.start, g$.end, length.out = layout$curve_points)
+    points <- project_positions_checked(layout, rep(chr, length(positions) * 2),
+      rep(positions, 2))
+    p <- offset_chr_points_signed(layout, rep(chr, length(points$x)), points,
+      rep(offsets, each = length(positions)))
+    xy <- as.data.frame(circular_xy(layout, p$x, p$y))
+    polygon <- rbind(xy[seq_along(positions), ], xy[rev(seq_along(positions) + length(positions)), ])
+    polygon <- rbind(polygon, polygon[1, ])
+    return(list(xlim = range(xy$x), ylim = range(xy$y), offset = mean(offsets), polygon = polygon))
+  }
+  points <- project_positions_checked(layout, rep(chr, 4), rep(c(g$.start, g$.end), each = 2))
+  corners <- offset_chr_points_signed(layout, rep(chr, 4), points, rep(offsets, 2))
+  polygon <- data.frame(x = range(corners$x)[c(1, 2, 2, 1, 1)],
+    y = range(corners$y)[c(1, 1, 2, 2, 1)])
+  list(xlim = range(corners$x), ylim = range(corners$y), offset = offsets[1], polygon = polygon)
+}
+
+resolve_track_geometry <- function(tracks, chromosome_width, source_chr, visible_chr,
+    compact = FALSE, min_gap = 0) {
   tracks <- normalise_chr_tracks(tracks)
   if (is.null(tracks)) tracks <- track_layout()
+  marker_extent <- attr(tracks, "marker_extent") %||% c(left = 0, right = 0)
   if (!inherits(tracks, "ideogram_track_layout")) {
     stopf("`tracks` must be NULL or created by `track_layout()`.")
   }
@@ -148,16 +188,32 @@ resolve_track_geometry <- function(tracks, chromosome_width) {
     )
     table$limits <- I(list())
     table$transform <- I(list())
-    return(list(table = table, left = 0, right = 0))
+    return(list(table = table, owners = list(),
+      left = marker_extent[["left"]], right = marker_extent[["right"]]))
   }
 
+  owners <- lapply(names(tracks), function(id) {
+    spec <- tracks[[id]]
+    unknown <- setdiff(spec$chr, source_chr)
+    if (length(unknown)) stopf("Track `%s` selects unknown source chromosomes: %s.",
+      id, format_chr_rows(unknown))
+    selected <- spec$chr
+    labels <- spec$.labels_source
+    if (!is.null(labels)) {
+      selected <- as.character(mapped_fields(labels$data, labels$mapping, "chr", what = "mapping")$chr)
+    }
+    intersect(visible_chr, selected %||% visible_chr)
+  })
+  names(owners) <- names(tracks)
   rows <- vector("list", length(tracks))
-  left_cursor <- chromosome_width / 2
-  right_cursor <- chromosome_width / 2
+  half <- chromosome_width / 2
+  first <- half + marker_extent
+  cursors <- lapply(as.list(first), rep, length.out = if (compact) length(visible_chr) else 1L)
   for (index in seq_along(tracks)) {
     spec <- tracks[[index]]
+    gap <- spec$gap
     if (spec$side == "overlay") {
-      if (abs(spec$offset) + spec$width / 2 > chromosome_width / 2 + sqrt(.Machine$double.eps)) {
+      if (abs(spec$offset) + spec$width / 2 > half + sqrt(.Machine$double.eps)) {
         stopf(paste0(
           "Overlay track `%s` extends beyond the chromosome body.\n",
           "  Adjust its `width` or `offset` to fit inside body width %s."),
@@ -165,18 +221,21 @@ resolve_track_geometry <- function(tracks, chromosome_width) {
       }
       low <- spec$offset - spec$width / 2
       high <- spec$offset + spec$width / 2
-    } else if (spec$side == "right") {
-      low <- right_cursor + spec$gap
-      high <- low + spec$width
-      right_cursor <- high
     } else {
-      low <- -(left_cursor + spec$gap)
-      high <- low - spec$width
-      left_cursor <- abs(high)
+      gap <- max(gap, min_gap)
+      side <- spec$side
+      keys <- owners[[index]]
+      slots <- if (compact) match(keys, visible_chr) else if (length(keys)) 1L else integer()
+      near <- max(c(first[[side]], cursors[[side]][slots])) + gap
+      far <- near + spec$width
+      sign <- if (side == "left") -1 else 1
+      low <- sign * near
+      high <- sign * far
+      cursors[[side]][slots] <- far
     }
     rows[[index]] <- data.frame(
       id = names(tracks)[index], side = spec$side,
-      width = spec$width, gap = spec$gap,
+      width = spec$width, gap = gap,
       value_scale = spec$value_scale, reverse = spec$reverse,
       transform_name = spec$transform_name, offset = spec$offset,
       low_offset = low, high_offset = high,
@@ -188,11 +247,40 @@ resolve_track_geometry <- function(tracks, chromosome_width) {
   table <- do.call(rbind, rows)
   row.names(table) <- NULL
   validate_global_track_specs(table)
+  validate_overlay_tracks(table, owners)
   list(
-    table = table,
-    left = max(0, left_cursor - chromosome_width / 2),
-    right = max(0, right_cursor - chromosome_width / 2)
+    table = table, owners = owners,
+    left = max(cursors$left) - half,
+    right = max(cursors$right) - half
   )
+}
+
+validate_overlay_tracks <- function(table, owners) {
+  rows <- which(table$side == "overlay" & lengths(owners) > 0L)
+  if (length(rows) < 2L) return(invisible(NULL))
+  for (j in seq.int(2L, length(rows))) {
+    i <- rows[j]
+    others <- rows[seq_len(j - 1L)]
+    width <- pmin(table$high_offset[i], table$high_offset[others]) -
+      pmax(table$low_offset[i], table$low_offset[others])
+    for (other in others[width > sqrt(.Machine$double.eps)]) {
+      shared <- intersect(owners[[i]], owners[[other]])
+      if (length(shared)) stopf(paste0(
+        "Overlay tracks `%s` and `%s` overlap on %s. ",
+        "Adjust `width` or `offset`, or use one track for layers that should overlap."),
+        table$id[other], table$id[i], format_chr_rows(shared))
+    }
+  }
+}
+
+track_chromosomes <- function(layout, id) {
+  intersect(layout$chrom$.chr, layout$track_owners[[id]] %||% layout$chrom$.chr)
+}
+
+check_track_chromosomes <- function(layout, id, chr) {
+  outside <- setdiff(chr, track_chromosomes(layout, id))
+  if (length(outside)) stopf("Track `%s` is not assigned to chromosome%s %s.",
+    id, if (length(outside) > 1L) "s" else "", format_chr_rows(outside))
 }
 
 validate_global_track_specs <- function(table) {
@@ -270,6 +358,7 @@ register_track_values <- function(layout, track_id, chr, value) {
   spec <- track_table_row(layout, track_id)
   chr <- as.character(chr)
   match_layout_chr(layout, chr)
+  check_track_chromosomes(layout, track_id, chr)
   if (!is.numeric(value) || length(value) != length(chr)) {
     stopf("Track `value` must be numeric and match the chromosome rows.")
   }
@@ -312,6 +401,7 @@ register_track_values <- function(layout, track_id, chr, value) {
 
 track_value_fraction <- function(layout, track_id, chr, value) {
   spec <- track_table_row(layout, track_id)
+  check_track_chromosomes(layout, track_id, chr)
   keys <- track_key_for_rows(spec, as.character(chr))
   fraction <- numeric(length(value))
   for (key in unique(keys)) {

@@ -263,82 +263,25 @@ StatChromosomeName <- ggplot2::ggproto("StatChromosomeName", ggplot2::StatIdenti
 
 GeomChromosomeName <- ggplot2::ggproto("GeomChromosomeName", ggplot2::GeomText,
   draw_panel = function(data, panel_params, coord, name_gap = 0.5,
-      name_axis_clearance = NULL, na.rm = FALSE) {
+      name_axis_clearance = NULL, name_end_gap = NULL, name_title_alignment = NULL,
+      na.rm = FALSE) {
     text <- ggplot2::GeomText$draw_panel(data, panel_params, coord, na.rm = na.rm)
     xy <- coord$transform(data, panel_params)
     dimensions <- chromosome_text_dimensions(data)
-    offset <- abs(xy$nx) * dimensions$width / 2 + abs(xy$ny) * dimensions$height / 2 +
-      grid::unit(name_gap * data$size, "mm")
+    gap <- grid::unit(name_gap * data$size, "mm")
+    offset <- abs(xy$nx) * dimensions$width / 2 + abs(xy$ny) * dimensions$height / 2 + gap
     if (!is.null(name_axis_clearance)) offset <- offset + name_axis_clearance
+    if (any(name_end_gap > 0)) {
+      end <- coord$transform(data.frame(x = data$x + data$nx * name_end_gap,
+        y = data$y + data$ny * name_end_gap), panel_params)
+      text$x <- text$x + grid::unit(end$x - xy$x, "native")
+      text$y <- text$y + grid::unit(end$y - xy$y, "native")
+    }
     text$x <- text$x + xy$nx * offset
     text$y <- text$y + xy$ny * offset
-    text
+    linear_name_alignment_grob(text, data, xy, dimensions, coord, panel_params, gap,
+      name_title_alignment)
   })
-
-linear_name_axis_clearance <- function(plot, name_layer) {
-  layout <- ideogram_plot_layout(plot)
-  names <- name_layer$data
-  clearance <- grid::unit(rep(0, nrow(names)), "mm")
-  previous <- name_layer$geom_params$name_axis_clearance
-  hidden <- !names$name_chr %in% layout$chrom$.chr
-  if (any(hidden) && !is.null(previous) && length(previous) == nrow(names))
-    clearance[hidden] <- previous[hidden]
-  gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label), plot$layers)
-  for (layer in gene_labels) {
-    for (i in seq_len(nrow(names))) {
-      same_chr <- layer$data$.model_chr == names$name_chr[i]
-      if (!any(same_chr)) next
-      dimensions <- circular_text_dimensions(layer$data$.model_label[same_chr],
-        layer$aes_params$size, layer$aes_params$family %||% "",
-        layer$aes_params$fontface %||% 1)
-      if (names$nx[i] < 0) {
-        clearance[i] <- max(clearance[i], dimensions$width * layer$aes_params$hjust)
-      } else if (names$ny[i] > 0) {
-        clearance[i] <- max(clearance[i], dimensions$height * (1 - layer$aes_params$vjust))
-      }
-    }
-  }
-  axes <- Filter(function(layer) inherits(layer$geom, "GeomIdeogramAxisText") &&
-    (inherits(layer$stat, "StatTrackAxis") || !is.null(layer$ideogram_track_title)), plot$layers)
-  for (layer in axes) {
-    title <- layer$ideogram_track_title
-    object <- if (is.null(title)) layer$stat_params$axis_spec else list(
-      size = layer$aes_params$size, family = layer$aes_params$family %||% "",
-      fontface = layer$aes_params$fontface %||% 1,
-      tick_length = layer$geom_params$tick_length, label_gap = layer$geom_params$label_gap)
-    selected <- intersect(if (is.null(title)) layer$stat_params$chromosomes else title$chr,
-      layout$chrom$.chr)
-    if (!length(selected)) next
-    for (i in seq_len(nrow(names))) {
-      chr <- as.character(names$name_chr[i])
-      if (!chr %in% selected) next
-      data <- if (!is.null(title)) layer$data else {
-        parts <- build_track_axis_layers(layout, object, chr)
-        if (!length(parts)) next
-        utils::tail(parts, 1)[[1]]$data
-      }
-      same_end <- data$nx * names$nx[i] + data$ny * names$ny[i] > 0.5
-      if (!any(same_end)) next
-      dimensions <- circular_text_dimensions(data$label[same_end], object$size,
-        object$family, object$fontface %||% 1)
-      extent <- abs(names$nx[i]) * dimensions$width + abs(names$ny[i]) * dimensions$height
-      clearance[i] <- max(clearance[i], extent +
-        grid::unit(object$tick_length + object$label_gap * object$size, "mm"))
-    }
-  }
-  clearance
-}
-
-chromosome_text_dimensions <- function(data, parse = FALSE) {
-  grobs <- lapply(seq_len(nrow(data)), function(i) {
-    label <- if (parse) parse(text = as.character(data$label[i])) else data$label[i]
-    grid::textGrob(label, gp = grid::gpar(fontsize = data$size[i] * ggplot2::.pt,
-      fontfamily = data$family[i], fontface = data$fontface[i],
-      lineheight = data$lineheight[i]))
-  })
-  list(width = do.call(grid::unit.c, lapply(grobs, grid::grobWidth)),
-    height = do.call(grid::unit.c, lapply(grobs, grid::grobHeight)))
-}
 
 GeomIdeogramTick <- ggplot2::ggproto(
   "GeomIdeogramTick", ggplot2::Geom,
@@ -368,10 +311,12 @@ GeomIdeogramTick <- ggplot2::ggproto(
 GeomIdeogramAxisText <- ggplot2::ggproto(
   "GeomIdeogramAxisText", ggplot2::GeomText,
   required_aes = c("x", "y", "label", "nx", "ny"),
+  default_aes = utils::modifyList(ggplot2::GeomText$default_aes,
+    ggplot2::aes(axis_chr = NA_character_)),
   draw_key = ggplot2::draw_key_blank,
   draw_panel = function(
       data, panel_params, coord, tick_length = 1.5, label_gap = 0.25,
-      check_overlap = FALSE, na.rm = FALSE) {
+      check_overlap = FALSE, na.rm = FALSE, text_clearance = NULL) {
     coordinates <- coord$transform(data, panel_params)
     direction_length <- sqrt(coordinates$nx^2 + coordinates$ny^2)
     coordinates$nx <- coordinates$nx / direction_length
@@ -381,17 +326,28 @@ GeomIdeogramAxisText <- ggplot2::ggproto(
     # `label_gap` in em therefore keeps the requested clear space independent
     # of panel scaling, while `tick_length` starts that clearance at the tick
     # tip rather than at the axis spine.
-    offset <- tick_length + label_gap * coordinates$size
+    offset <- grid::unit(tick_length + label_gap * coordinates$size, "mm") +
+      (text_clearance %||% grid::unit(0, "mm"))
+    rotated <- coordinates$angle %% 360 != 0
+    if (any(rotated)) {
+      dimensions <- chromosome_text_dimensions(coordinates)
+      radians <- coordinates$angle * pi / 180
+      # Center a rotated label, keeping its nearest edge outside the tick tip.
+      nx <- coordinates$nx; ny <- coordinates$ny
+      offset <- offset + as.numeric(rotated) * (abs(nx * cos(radians) + ny * sin(radians)) *
+        dimensions$width + abs(ny * cos(radians) - nx * sin(radians)) * dimensions$height) / 2
+    }
     x <- grid::unit(coordinates$x, "native") +
-      grid::unit(coordinates$nx * offset, "mm")
+      coordinates$nx * offset
     y <- grid::unit(coordinates$y, "native") +
-      grid::unit(coordinates$ny * offset, "mm")
+      coordinates$ny * offset
     hjust <- ifelse(coordinates$nx > 0, 0,
                     ifelse(coordinates$nx < 0, 1, 0.5))
     vjust <- ifelse(coordinates$ny > 0, 0,
                     ifelse(coordinates$ny < 0, 1, 0.5))
+    hjust[rotated] <- vjust[rotated] <- 0.5
 
-    grid::textGrob(
+    text <- grid::textGrob(
       coordinates$label,
       x = x, y = y,
       hjust = hjust, vjust = vjust,
@@ -405,13 +361,23 @@ GeomIdeogramAxisText <- ggplot2::ggproto(
         lineheight = coordinates$lineheight
       )
     )
+    layout <- coord$layout
+    if (is.null(layout) || is_circular_layout(layout) || all(is.na(data$axis_chr))) return(text)
+    axis_text_clearance_grob(text, data, coord, panel_params, check_overlap)
   }
 )
 
 chromosome_axis_layers <- function(
     layout, chr, side, breaks, n, units, labels,
     gap, tick_length, label_gap, size, family,
-    colour, linewidth) {
+    colour, linewidth, angle = 0, check_overlap = NULL) {
+  if (!is.numeric(angle) || length(angle) != 1L || !is.finite(angle)) {
+    stopf("Axis label angle must be one finite number in degrees.")
+  }
+  if (!is.null(check_overlap) && (!is.logical(check_overlap) ||
+      length(check_overlap) != 1L || is.na(check_overlap))) {
+    stopf("Axis overlap checking must be TRUE, FALSE or NULL.")
+  }
   if (identical(chr, FALSE)) return(list())
   selected <- if (isTRUE(chr)) layout$chrom$.chr else as.character(chr)
   unknown <- setdiff(selected, layout$chrom$.chr)
@@ -457,6 +423,9 @@ chromosome_axis_layers <- function(
     marker_extent <- (layout$marker_extent %||% c(left = 0, right = 0))[[axis_side]]
     offset <- layout$chromosome_width / 2 +
       max(annotation_extent(layout, g$.chr, axis_side), marker_extent) + gap
+    if (is_circular_layout(layout) && axis_side == "left" && offset >= layout$circular$radius) {
+      stopf("The inner bp axis reaches the circle center. Increase `radius` or reduce `axis_gap`.")
+    }
     nx <- normal$nx * side_sign
     ny <- normal$ny * side_sign
     tick_parts[[index]] <- data.frame(
@@ -478,6 +447,7 @@ chromosome_axis_layers <- function(
       x = projected$x + nx * offset,
       y = projected$y + ny * offset,
       nx = nx, ny = ny,
+      axis_chr = g$.chr,
       label = axis_labels(local_breaks, unit$div, unit$suffix),
       stringsAsFactors = FALSE
     )
@@ -510,122 +480,24 @@ chromosome_axis_layers <- function(
       data = text,
       mapping = ggplot2::aes(x = .data$x, y = .data$y,
                              label = .data$label,
+                             axis_chr = .data$axis_chr,
                              nx = .data$nx, ny = .data$ny),
       stat = "identity", position = "identity",
       geom = GeomIdeogramAxisText,
       inherit.aes = FALSE, show.legend = FALSE,
       params = list(
         tick_length = tick_length, label_gap = label_gap,
-        check_overlap = is.null(breaks),
-        size = size, family = family, colour = colour, na.rm = FALSE)
+        check_overlap = check_overlap %||% is.null(breaks),
+        size = size, angle = angle, family = family, colour = colour, na.rm = FALSE)
     )))
   }
   spec <- list(chr = chr, side = side, breaks = breaks, n = n, units = units,
     labels = labels, gap = gap, tick_length = tick_length, label_gap = label_gap,
-    size = size, family = family, colour = colour, linewidth = linewidth)
+    size = size, family = family, colour = colour, linewidth = linewidth,
+    angle = angle, check_overlap = check_overlap)
   for (part in seq_along(layers)) {
     layers[[part]]$ideogram_axis_spec <- spec
     layers[[part]]$ideogram_axis_part <- part
   }
   layers
-}
-
-# Include the axis spine in data bounds and reserve physical label overhang in
-# the standard plot margin. No device dimensions enter the genomic layout.
-reserve_chromosome_axis_space <- function(plot, layers) {
-  layout <- ideogram_plot_layout(plot)
-  for (layer in layers) {
-    data <- layer$data
-    layout <- include_ideogram_coordinates(layout, data$x, data$y, data$xend, data$yend)
-    if (is_circular_layout(layout) && identical(layer$ideogram_axis_spec$side, "right")) {
-      layout$circular_name_axis <- layer$ideogram_axis_spec
-      if ("label" %in% names(data)) {
-        layout$circular_name_axis$label <- data$label
-        layout$circular_name_axis$label_x <- data$x
-      }
-    }
-  }
-  plot <- update_plot_ideogram_layout(plot, layout)
-  layers <- Filter(function(layer) !is.null(layer$ideogram_axis_spec) ||
-    inherits(layer$stat, "StatTrackAxis") || !is.null(layer$ideogram_track_title), plot$layers)
-  needed <- grid::unit(rep(0, 4), "mm") # top, right, bottom, left
-  reserve <- function(current, extent, at) {
-    if (any(at)) max(current, extent[at]) else current
-  }
-  for (layer in layers) {
-    data <- layer$data
-    if (!all(c("nx", "ny") %in% names(data))) next
-    if (is_circular_layout(layout)) data <- circular_transform_data(layout, data)
-    tick <- layer$geom_params$tick_length %||% 0
-    width <- height <- grid::unit(rep(0, nrow(data)), "mm")
-    clearance <- grid::unit(tick, "mm")
-    if ("label" %in% names(data)) {
-      size <- layer$aes_params$size
-      family <- layer$aes_params$family %||% ""
-      fontface <- layer$aes_params$fontface %||% 1
-      grobs <- lapply(as.character(data$label), function(label) {
-        grid::textGrob(label, gp = grid::gpar(
-          fontsize = size * ggplot2::.pt, fontfamily = family, fontface = fontface))
-      })
-      width <- do.call(grid::unit.c, lapply(grobs, grid::grobWidth))
-      height <- do.call(grid::unit.c, lapply(grobs, grid::grobHeight))
-      clearance <- grid::unit(tick + layer$geom_params$label_gap * size, "mm")
-    }
-    left <- data$x <= layout$bounds$x[1]
-    right <- data$x >= layout$bounds$x[2]
-    bottom <- data$y <= layout$bounds$y[1]
-    top <- data$y >= layout$bounds$y[2]
-    needed[4] <- reserve(needed[4], width + clearance, left & data$nx < 0)
-    needed[4] <- reserve(needed[4], width / 2, left & data$nx == 0)
-    needed[2] <- reserve(needed[2], width + clearance, right & data$nx > 0)
-    needed[2] <- reserve(needed[2], width / 2, right & data$nx == 0)
-    needed[3] <- reserve(needed[3], height + clearance, bottom & data$ny < 0)
-    needed[3] <- reserve(needed[3], height / 2, bottom & data$ny == 0)
-    needed[1] <- reserve(needed[1], height + clearance, top & data$ny > 0)
-    needed[1] <- reserve(needed[1], height / 2, top & data$ny == 0)
-  }
-  if (!is_circular_layout(layout)) {
-    gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label), plot$layers)
-    for (layer in gene_labels) {
-      dimensions <- circular_text_dimensions(layer$data$.model_label,
-        layer$aes_params$size, layer$aes_params$family %||% "",
-        layer$aes_params$fontface %||% 1)
-      if (layout$orientation == "horizontal") {
-        needed[4] <- max(needed[4], dimensions$width * layer$aes_params$hjust)
-      } else {
-        needed[1] <- max(needed[1], dimensions$height * (1 - layer$aes_params$vjust))
-      }
-    }
-    names <- Filter(function(layer) !is.null(layer$ideogram_name_gap), plot$layers)
-    for (layer in names) {
-      axis_clearance <- linear_name_axis_clearance(plot, layer)
-      layer$geom_params$name_axis_clearance <- axis_clearance
-      dimensions <- circular_text_dimensions(layer$data$label, layer$aes_params$size,
-        layer$aes_params$family %||% "")
-      clearance <- grid::unit(layer$ideogram_name_gap * layer$aes_params$size, "mm") +
-        max(axis_clearance)
-      normals <- layer$data[c("nx", "ny")]
-      if (any(normals$ny > 0)) needed[1] <- max(needed[1], dimensions$height + clearance)
-      if (any(normals$nx > 0)) needed[2] <- max(needed[2], dimensions$width + clearance)
-      if (any(normals$ny < 0)) needed[3] <- max(needed[3], dimensions$height + clearance)
-      if (any(normals$nx < 0)) needed[4] <- max(needed[4], dimensions$width + clearance)
-    }
-  }
-  margin <- plot$theme$plot.margin %||% theme_ideogram()$plot.margin
-  # Keep text measurements lazy so the eventual device supplies font metrics.
-  plot <- plot + ggplot2::theme(plot.margin = grid::unit.pmax(margin, needed))
-  reserve_circular_text_space(reserve_ideogram_heading_space(plot, needed[1]))
-}
-
-reserve_ideogram_heading_space <- function(plot, needed) {
-  clearance <- grid::convertHeight(needed, "mm", valueOnly = TRUE)
-  heading_margin <- function(element) {
-    margin <- element$margin %||% ggplot2::margin(0, 0, 0, 0)
-    values <- grid::convertUnit(margin, "mm", valueOnly = TRUE)
-    values[3] <- max(values[3], clearance)
-    ggplot2::margin(values[1], values[2], values[3], values[4], unit = "mm")
-  }
-  plot + ggplot2::theme(
-    plot.title = ggplot2::element_text(margin = heading_margin(plot$theme$plot.title)),
-    plot.subtitle = ggplot2::element_text(margin = heading_margin(plot$theme$plot.subtitle)))
 }

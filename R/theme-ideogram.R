@@ -5,8 +5,8 @@
 #' `theme_ideogram()` is a small [ggplot2::theme_void()] preset. It does not
 #' remove guides, set a page size, or alter coordinate scaling. A later
 #' `theme()` call therefore overrides it exactly as for any other ggplot.
-#' The default gap between the plot and its legends is 6 mm. Circular plots
-#' can reserve additional space for chromosome text; set `legend.box.spacing`
+#' The default gap between the plot and its legends is 6 mm. Plots can reserve
+#' additional space for text below the panel; set `legend.box.spacing`
 #' in a later `theme()` call to choose an explicit gap.
 #'
 #' @param base_size Base font size in points.

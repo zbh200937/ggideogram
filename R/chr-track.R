@@ -10,6 +10,11 @@ ggideogram_track_spec <- function(...) track(...)
 #' Within a track, `x` is original genomic bp and `y` is the measured value,
 #' including in vertical and circular layouts. Ordinary layers inherit the
 #' track's data and mapping; their own data and mappings can override them.
+#' Locus annotations can inherit `x` as their bp position. Interval annotations
+#' use `start` and `end`, and neither annotation uses the track's `y` mapping.
+#' Put layers that should overlap in the same track. Two overlay tracks must
+#' occupy separate bands on any chromosome they share. In horizontal local
+#' synteny plots, tracks restricted to different chromosomes can reuse space.
 #'
 #' Pass an ordinary layer to `geom`, or several layers to `layers`. Compatible
 #' identity-stat geoms keep their original Geom, Position, parameters and keys.
@@ -33,8 +38,10 @@ ggideogram_track_spec <- function(...) track(...)
 #'   inside the chromosome body.
 #' @param width,gap Track width and gap in chromosome-body-width units. The
 #'   default width is 6 for gene-model tracks, 3 for other beside tracks,
-#'   and 1 inside the body; gap is 0.2 beside
-#'   and 0 inside. Native geom widths
+#'   and 1 inside the body; gap is 0.2 beside and 0 inside. Use `NULL`
+#'   to restore either default. Automatic dimensions follow the final side
+#'   and contents. Explicit dimensions and offsets are retained on edits;
+#'   adjust them if they conflict with the new side. Native geom widths
 #'   belong to the layer, e.g. geom = ggplot2::geom_col(width = 1e6).
 #' @param value_scale Auto range: per_track (default), per_chr, or global.
 #' @param limits Optional increasing raw-value limits.
@@ -51,14 +58,24 @@ ggideogram_track_spec <- function(...) track(...)
 #'   family, fontface and gap (em). A list can adjust the existing title's
 #'   style without repeating its text. Titles sit beside the start endpoint
 #'   in linear layouts and inside the closing gap in circular layouts.
+#'   In linear layouts, titles at a shared start align at their track-facing
+#'   edge and clear any value axes at that end.
 #' @param axis `FALSE`, `TRUE`, or a list of local value-axis arguments.
 #'   `position` accepts `"auto"` (default), `"start"`, `"end"`, or `"gap"`.
 #'   Auto places shared circular value axes in the closing gap; linear and
 #'   explicitly chromosome-specific axes keep their end placement. A gap
 #'   axis with per-chromosome ranges must select one chromosome with `chr`.
-#'   Tick text defaults to 2.2 mm; `size`, `family`, `colour`, `tick_length`
-#'   (mm) and `label_gap` (em) can be set independently of track width.
-#' @param chr Optional chromosome identifiers to select from the source data.
+#'   Automatic axes skip chromosomes without a resolved value range. Use
+#'   `labels = NULL` to hide all tick text. Empty strings or `NA` hide individual
+#'   labels. Ticks remain visible in both cases.
+#'   `gap` sets the distance from the track endpoint to the value-axis spine,
+#'   in body-width units (default 0.2). Circular axes use at most half the
+#'   adjacent sector gap, measured along the chromosome centerline.
+#'   Tick text defaults to one third of the default bp-axis text size.
+#'   `size`, `family`, `colour`, `tick_length` (mm) and `label_gap` (em)
+#'   can be set independently of track width.
+#' @param chr Optional chromosome keys from the source karyotype. Known keys
+#'   outside the current view are not drawn.
 #' @param clip Tile clipping: `"auto"` clips overlay tiles to the chromosome
 #'   silhouette, `"on"` requires an overlay track, `"off"` leaves tiles intact.
 #' @param ... Parameters for `geom` when it is a constructor function.
@@ -73,15 +90,12 @@ ggideogram_track_spec <- function(...) track(...)
 #'     layers = list(ggplot2::geom_line(), ggplot2::geom_point(size = 1)))
 #' @export
 geom_track <- function(mapping = NULL, data = NULL, geom = NULL, track = NULL,
-    side = c("right", "left", "overlay", "outer", "inner"), width = 3,
+    side = c("right", "left", "overlay", "outer", "inner"), width = NULL,
     gap = NULL, value_scale = c("per_track", "global", "per_chr"),
     limits = NULL, transform = "identity", reverse = FALSE, offset = 0,
     layers = NULL, label = NULL, axis = FALSE, chr = NULL,
     clip = c("auto", "on", "off"), replace = FALSE, ...) {
   side <- match.arg(side)
-  if (missing(width) && side == "overlay") width <- 1
-  spec <- ggideogram_track_spec(side, width, gap, value_scale, limits,
-    transform, reverse, offset, .partial = !is.null(track))
   if (!is.null(geom)) {
     if (is.function(geom)) geom <- geom(...)
     else check_unused_args(...)
@@ -90,11 +104,10 @@ geom_track <- function(mapping = NULL, data = NULL, geom = NULL, track = NULL,
     check_unused_args(...)
     layers <- chr_track_layers(layers)
   }
-  gene_models <- vapply(layers, function(layer) {
-    if (inherits(layer, "ggideogram_object")) layer <- layer$component
-    inherits(layer, "ggideogram_gene_component")
-  }, logical(1))
-  if (missing(width) && side != "overlay" && any(gene_models)) spec$width <- 6
+  spec <- ggideogram_track_spec(side, width %||% default_track_width(side, layers), gap,
+    value_scale, limits, transform, reverse, offset, .partial = !is.null(track))
+  spec$auto_width <- is.null(width)
+  spec$auto_gap <- is.null(gap)
   if (!is.null(data) && !is.data.frame(data)) stopf("Track `data` must be a data frame.")
   if (!is.null(mapping) && !inherits(mapping, "uneval") && !inherits(mapping, "ggplot2::mapping")) {
     stopf("Track `mapping` must be created with aes().")
@@ -106,7 +119,8 @@ geom_track <- function(mapping = NULL, data = NULL, geom = NULL, track = NULL,
   validate_optional_marker_track(track)
   if (!is.logical(replace) || length(replace) != 1L || is.na(replace)) stopf("`replace` must be TRUE or FALSE.")
   spec$data <- data; spec$mapping <- mapping; spec$layers <- layers
-  spec$label <- label; spec$axis <- axis; spec$chr <- chr; spec$track <- track
+  spec$label <- label; spec$axis <- axis; spec$track <- track
+  spec$chr <- if (!is.null(chr)) validate_chr(chr, "chr")
   spec$clip <- match.arg(clip)
   spec$replace <- replace
   spec$supplied_args <- names(match.call())[-1]
@@ -184,6 +198,11 @@ scope_track_mapping <- function(mapping) {
   track_mapping_without(mapping, c("x", "y"))
 }
 
+scope_annotation_mapping <- function(mapping, point = FALSE) {
+  if (point && is.null(mapping$position) && !is.null(mapping$x)) mapping$position <- mapping$x
+  track_mapping_without(mapping, c("x", "y", "value"))
+}
+
 scope_point_data <- function(data, mapping, layout, selected = NULL) {
   if (!is.data.frame(data)) stopf("Track layers require data-frame `data`.")
   fields <- mapped_fields(data, mapping, c("chr", "position"), what = "mapping")
@@ -238,6 +257,7 @@ native_track_component <- function(layer, spec, id, layout) {
   mapping <- scope_mapping(spec$mapping, layer$mapping, domain || isTRUE(layer$inherit.aes))
   data <- scope_layer_data(layer$data, spec$data)
   if (domain) {
+    mapping <- scope_annotation_mapping(mapping, point = inherits(layer$stat, "StatChrMarker"))
     prototype <- layer
     layer <- ggplot2::ggproto(NULL, prototype, data = data, mapping = mapping, inherit.aes = FALSE)
     layer$stat_params <- utils::modifyList(layer$stat_params, list(track = id))
@@ -349,7 +369,13 @@ prepare_track_scope <- function(spec, id, layout) {
       layer$track <- id
       layer$data <- scope_layer_data(layer$data, part$data)
       layer$mapping <- scope_mapping(part$mapping, layer$mapping)
-      if (inherits(layer, "ggideogram_track_component")) layer$mapping <- scope_track_mapping(layer$mapping)
+      if (inherits(layer, "ggideogram_track_component")) {
+        layer$mapping <- scope_track_mapping(layer$mapping)
+      } else if (inherits(layer, c("ggideogram_labels_component", "ggideogram_repel_component"))) {
+        layer$mapping <- scope_annotation_mapping(layer$mapping, point = TRUE)
+      } else if (inherits(layer, c("ggideogram_gene_component", "ggideogram_chr_component"))) {
+        layer$mapping <- scope_annotation_mapping(layer$mapping)
+      }
       if (!is.null(part$chr)) {
         interval <- all(c("start", "end") %in% names(layer$mapping))
         f <- mapped_fields(layer$data, layer$mapping,
@@ -416,16 +442,16 @@ train_track_scopes <- function(plot, components) {
   update_plot_ideogram_layout(plot, layout)
 }
 
-track_scope_owners <- function(layout, spec, contents) {
+track_scope_owners <- function(layout, id, contents) {
   owners <- unique(unlist(lapply(contents, function(object) {
     if (is.null(object$data) || is.null(object$mapping) || !nrow(object$data)) return(NULL)
     as.character(mapped_fields(object$data, object$mapping, "chr", what = "mapping")$chr)
   }), use.names = FALSE))
-  if (!length(owners)) owners <- spec$chr %||% layout$chrom$.chr
-  layout$chrom$.chr[layout$chrom$.chr %in% owners]
+  assigned <- track_chromosomes(layout, id)
+  if (length(owners)) intersect(assigned, owners) else assigned
 }
 
-add_track_scope_title <- function(plot, id, title, owners) {
+add_track_scope_title <- function(plot, id, title, owners, circular_gap = 0) {
   layout <- ideogram_plot_layout(plot)
   settings <- utils::modifyList(list(size = ideogram_text_size("track"),
     colour = ideogram_colour("text"), family = layout$base_spec$base_family %||% "",
@@ -443,8 +469,9 @@ add_track_scope_title <- function(plot, id, title, owners) {
     nx = if (layout$orientation == "vertical") 0 else -1,
     ny = if (layout$orientation == "vertical") 1 else 0)
   if (is_circular_layout(layout)) {
-    point <- circular_xy(layout, layout$circular$label_gap$left_arc, p$y)
-    theta <- layout$circular$label_gap$left_angle * pi / 180
+    arc <- circular_gap_axis_arc(layout, circular_gap)
+    point <- circular_xy(layout, arc, p$y)
+    theta <- circular_theta(layout, arc)
     data$x <- point$x; data$y <- point$y
     data$nx <- cos(theta); data$ny <- -sin(theta)
     if (abs(data$nx) < 1e-12) data$nx <- 0
@@ -459,7 +486,7 @@ add_track_scope_title <- function(plot, id, title, owners) {
     params = list(tick_length = 1, label_gap = settings$gap,
       size = settings$size, colour = settings$colour, family = settings$family,
       fontface = settings$fontface, na.rm = FALSE))
-  layer$ideogram_track_title <- list(chr = g$.chr)
+  layer$ideogram_track_title <- list(chr = g$.chr, track = id, anchor = data[c("x", "y")])
   if (is_circular_layout(layout)) {
     layer$geom_params$gap_track <- id
     layer$geom_params$gap_title <- TRUE
@@ -486,20 +513,36 @@ add_chr_track_contents <- function(plot, tracks) {
       }
     }
     layout <- ideogram_plot_layout(plot)
-    owners <- track_scope_owners(layout, tracks[[i]], components[[i]])
-    before <- length(plot$layers)
-    plot <- add_track_scope_title(plot, id, tracks[[i]]$label, owners)
-    if (length(plot$layers) > before) plot$layers[[length(plot$layers)]]$ideogram_scope_slot <- "title"
+    owners <- track_scope_owners(layout, id, components[[i]])
     axis <- tracks[[i]]$axis
-    if (isTRUE(axis) || is.list(axis)) {
-      args <- if (is.list(axis)) axis else list()
+    axis_owners <- owners
+    args <- if (is.list(axis)) axis else if (isTRUE(axis)) list()
+    circular_gap <- 0
+    if (!is.null(args)) {
       if (is.null(args$chr)) {
+        spec <- track_table_row(layout, id)
+        if (identical(args$position, "gap") && spec$value_scale == "per_chr") {
+          stopf("A gap axis with `value_scale = \"per_chr\"` must select one chromosome with `chr`.")
+        }
+        keys <- track_key_for_rows(spec, owners)
+        axis_owners <- owners[vapply(keys, function(key)
+          !is.null(layout$track_ranges[[key]]$limits), logical(1))]
         if (is_circular_layout(layout) && tracks[[i]]$value_scale != "per_chr" &&
             (args$position %||% "auto") == "auto") args$position <- "gap"
-        args$chr <- if (identical(args$position, "gap")) owners[1] else owners
+        args$chr <- if (identical(args$position, "gap")) axis_owners[1] else axis_owners
       }
+      position <- args$position %||% "auto"
+      if (is_circular_layout(layout) && length(axis_owners) && (position == "gap" ||
+          (position == "auto" && isTRUE(args$chr) && tracks[[i]]$value_scale != "per_chr"))) {
+        circular_gap <- track_axis_gap(args$gap)
+      }
+    }
+    before <- length(plot$layers)
+    plot <- add_track_scope_title(plot, id, tracks[[i]]$label, owners, circular_gap)
+    if (length(plot$layers) > before) plot$layers[[length(plot$layers)]]$ideogram_scope_slot <- "title"
+    if (!is.null(args) && length(axis_owners)) {
       before <- length(plot$layers)
-      if (length(owners)) plot <- plot + do.call(geom_track_axis, c(list(track = id), args))
+      plot <- plot + do.call(geom_track_axis, c(list(track = id), args))
       if (length(plot$layers) > before) for (j in seq.int(before + 1L, length(plot$layers))) {
         plot$layers[[j]]$ideogram_scope_slot <- paste0("axis:", j - before)
       }

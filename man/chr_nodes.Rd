@@ -21,9 +21,9 @@ also have \code{.node_start} and \code{.node_end} in original closed coordinates
 Nodes have unique identifiers and retain every input column. A point node
 maps \code{position} in original bp. An interval node maps one-based closed
 \code{start} and \code{end}; its point anchor is \code{(start - 1 + end) / 2}, while the
-complete interval remains available to \code{\link[=geom_chrlink]{geom_chrlink()}} with
-\code{type = "interval"}. Different
-identifiers may occupy the same position.
+complete interval is drawn by default in \code{\link[=geom_chrlink]{geom_chrlink()}}. Use
+\code{type = "point"} for midpoint connections. Different identifiers may
+occupy the same position.
 }
 \details{
 The full source table can be used in local views. Source chromosome names

@@ -74,7 +74,7 @@ test_that("default track space and font roles are coherent", {
   expect_equal(geom_track(side = "inner")$side, "left")
   k <- data.frame(Chr = c("A", "B"), Start = 0, End = 100)
   p <- ggideogram(k, orientation = "horizontal", axis = TRUE)
-  expect_equal(p$coordinates$layout$chromosome_gap, 3)
+  expect_equal(p$coordinates$layout$chromosome_gap, 4.3)
   sizes <- vapply(Filter(function(layer) inherits(layer$geom, "GeomText"), p$layers),
     function(layer) layer$aes_params$size, numeric(1))
   expect_equal(sort(unique(sizes)), c(2.8, 3.2))

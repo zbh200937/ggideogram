@@ -90,3 +90,54 @@ test_that("inset clipping preserves normalized viewport collision checks", {
   expect_error(ggplot2::ggplotGrob(
     fixture$base + fixture$inset(hjust = 1)), "Inset viewport collision")
 })
+
+draw_inset_viewport <- function(grob, width) {
+  grid::grid.newpage()
+  grid::pushViewport(grid::viewport(width = grid::unit(width, "mm"),
+    height = grid::unit(80, "mm")))
+  on.exit(grid::upViewport())
+  grid::grid.draw(grob)
+}
+
+test_that("mixed inset units are checked against the current panel on every draw", {
+  file <- tempfile(fileext = ".pdf")
+  grDevices::pdf(file, width = 9, height = 4)
+  on.exit({ suppressWarnings(grDevices::dev.off()); unlink(file) })
+  base <- ggideogram(data.frame(Chr = "A", Start = 0, End = 100),
+    orientation = "horizontal", show_names = FALSE)
+  inset <- function(pos, width) geom_locus_inset(grid::rectGrob(),
+    data = data.frame(Chr = "A", Pos = pos), ggplot2::aes(chr = Chr, position = Pos),
+    width = width, height = grid::unit(8, "mm"), placement = "center")
+  physical <- inset(40, grid::unit(40, "mm"))
+  normalized <- inset(60, grid::unit(.1, "npc"))
+  normalized$component$geom_params$height <- grid::unit(.1, "npc")
+  for (layers in list(list(physical, normalized), list(normalized, physical))) {
+    p <- base + layers
+    grob <- ggplot2::ggplotGrob(p)
+    expect_no_error(draw_inset_viewport(grob, 200))
+    expect_error(draw_inset_viewport(grob, 80), "insets .* overlap")
+    expect_no_error(draw_inset_viewport(grob, 200))
+    expect_equal(sort(unlist(lapply(utils::tail(ggplot2::ggplot_build(p)$data, 2),
+      `[[`, "ideogram_position"))), c(40, 60))
+  }
+})
+
+test_that("beside insets respect other declared tracks and physical overlap policies", {
+  file <- tempfile(fileext = ".pdf")
+  grDevices::pdf(file, width = 6, height = 4)
+  on.exit({ suppressWarnings(grDevices::dev.off()); unlink(file) })
+  base <- ggideogram(data.frame(Chr = "A", Start = 0, End = 100),
+    show_names = FALSE, tracks = list(
+      inset = geom_track(width = 1), signal = geom_track(width = 4)))
+  inset <- function(width, overlap = "error") geom_locus_inset(grid::rectGrob(),
+    data = data.frame(Chr = "A", Pos = 50), ggplot2::aes(chr = Chr, position = Pos),
+    track = "inset", width = width, height = grid::unit(.2, "npc"), overlap = overlap)
+  expect_error(ggplot2::ggplotGrob(base + inset(grid::unit(.4, "npc"))), "track signal")
+  grob <- function(action) ggplot2::ggplotGrob(base + inset(grid::unit(70, "mm"), action))
+  expect_error(draw_inset_viewport(grob("error"), 120), "track signal")
+  expect_warning(draw_inset_viewport(grob("warn"), 120), "track signal")
+  expect_no_warning(draw_inset_viewport(grob("allow"), 120))
+  wide <- base + geom_track(track = "inset", width = 20)
+  expect_no_error(draw_inset_viewport(ggplot2::ggplotGrob(
+    wide + inset(grid::unit(20, "mm"))), 120))
+})

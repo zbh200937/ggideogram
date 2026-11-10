@@ -132,10 +132,10 @@ rice_plot <- ggideogram(rice_model, orientation = 'horizontal',
   geom_chrlink(data = blocks, type = 'interval',
     aes(chr1 = Key1, start1 = Start1, end1 = End1, chr2 = Key2,
       start2 = Start2, end2 = End2, orientation = Orientation),
-    side1 = 'left', side2 = 'right', gap = 0, fill = '#AAB2BD', alpha = .4) +
+    fill = '#AAB2BD', alpha = .4) +
   geom_chrlink(data = blocks,
     aes(chr1 = Key1, position1 = Mid1, chr2 = Key2, position2 = Mid2),
-    side1 = 'left', side2 = 'right', gap = 0, colour = '#687889',
+    colour = '#687889',
     linewidth = .24, alpha = .8) +
   geom_locus(data = anchors[anchors$Genome == 'wild', ],
     aes(chr = Chr, position = Pos, colour = Genome),
@@ -207,7 +207,7 @@ arab_plot <- ggideogram(arab_view, orientation = 'circular',
   radius = 28, opening_angle = 60, reverse_chr = '1', tracks = arab_tracks, axis = TRUE,
   axis_breaks = c(7000, 7500, 8000, 8500), axis_units = 'kb',
   name_size = 3.2, fill = '#9ABCB7', linewidth = .24) +
-  geom_chrlink(data = arab_edges, nodes = arab_nodes, aes(from = From, to = To),
+  geom_chrlink(data = arab_edges, nodes = arab_nodes, aes(from = From, to = To), type = 'point',
     linewidth = .24, colour = '#A26995') +
   geom_locus(data = exon_anchors, aes(chr = Chr, position = Pos), track = 'coverage', track_position = 1,
     size = 1.6, stroke = .22, colour = '#A26995') +

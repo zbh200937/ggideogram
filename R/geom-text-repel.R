@@ -31,14 +31,14 @@ geom_chr_text_repel <- function(mapping = NULL, data = NULL, track = NULL,
     background = background), class = "ggideogram_repel_component")
 }
 
-prepare_repel_labels <- function(object, layout) {
+prepare_chr_label_data <- function(object, layout) {
   d <- object$data
   if (!is.data.frame(d)) stopf("Physical labels require data-frame `data`.")
   f <- mapped_fields(d, object$mapping, c("chr", "position", "label"), what = "mapping")
   d$.label_chr <- validate_chr(f$chr, "chr")
   d$.label_position <- validate_coordinate(f$position, "position")
   d$.label_text <- as.character(f$label)
-  d$.label_id <- paste0("L", seq_len(nrow(d)))
+  d$.label_id <- paste0(rep("L", nrow(d)), seq_len(nrow(d)))
   d$.label_priority <- if ("priority" %in% names(object$mapping))
     recycle_semantic(rlang::eval_tidy(object$mapping$priority, d), nrow(d), "priority") else rep(0, nrow(d))
   if (!is.numeric(d$.label_priority) || anyNA(d$.label_priority) || any(!is.finite(d$.label_priority))) {
@@ -52,7 +52,16 @@ prepare_repel_labels <- function(object, layout) {
   i <- match(d$.label_chr, layout$chrom$.chr)
   keep <- !is.na(i) & d$.label_position >= layout$chrom$.start[i] &
     d$.label_position <= layout$chrom$.end[i] & !is.na(d$.label_text) & nzchar(d$.label_text)
-  d <- d[keep, , drop = FALSE]
+  if ("side" %in% names(object$mapping)) {
+    d$.label_side <- canonical_chr_side(recycle_semantic(
+      rlang::eval_tidy(object$mapping$side, d), nrow(d), "side"))
+  }
+  d[keep, , drop = FALSE]
+}
+
+prepare_repel_labels <- function(object, layout,
+    data = prepare_chr_label_data(object, layout)) {
+  d <- data
   ids <- object$track
   if (!is.character(ids) || !length(ids) %in% 1:2 || anyNA(ids)) stopf("`track` must name one or two beside tracks.")
   specs <- lapply(ids, function(id) track_table_row(layout, id))
@@ -63,7 +72,7 @@ prepare_repel_labels <- function(object, layout) {
   }
   names(ids) <- sides
   if ("side" %in% names(object$mapping)) {
-    side <- canonical_chr_side(recycle_semantic(rlang::eval_tidy(object$mapping$side, object$data), nrow(object$data), "side")[keep])
+    side <- d$.label_side
     if (anyNA(side) || any(!side %in% sides)) stopf("Mapped label `side` must name an available track side.")
   } else {
     side <- rep(sides[1], nrow(d))
@@ -74,8 +83,11 @@ prepare_repel_labels <- function(object, layout) {
     }
   }
   d$.label_track <- unname(ids[side])
+  for (id in unique(d$.label_track)) {
+    check_track_chromosomes(layout, id, d$.label_chr[d$.label_track == id])
+  }
   groups <- interaction(d$.label_chr, d$.label_track, drop = TRUE)
-  d$.label_column <- 1L
+  d$.label_column <- rep(1L, nrow(d))
   retain <- rep(TRUE, nrow(d))
   for (rows in split(seq_len(nrow(d)), groups)) {
     rows <- rows[order(-d$.label_priority[rows], d$.label_position[rows], d$.label_id[rows])]
@@ -89,25 +101,6 @@ prepare_repel_labels <- function(object, layout) {
     d$.label_column[rows] <- rep(seq_len(object$columns), length.out = length(rows))
   }
   d[retain, , drop = FALSE]
-}
-
-repel_column_scope <- function(layout, chr, spec, column, columns) {
-  g <- layout$chrom[layout$index[[chr]], , drop = FALSE]
-  offsets <- spec$low_offset + c(column - 1, column) / columns * (spec$high_offset - spec$low_offset)
-  if (is_circular_layout(layout)) {
-    positions <- seq(g$.start, g$.end, length.out = layout$curve_points)
-    points <- project_positions_checked(layout, rep(chr, length(positions) * 2),
-      rep(positions, 2))
-    p <- offset_chr_points_signed(layout, rep(chr, length(points$x)), points,
-      rep(offsets, each = length(positions)))
-    xy <- as.data.frame(circular_xy(layout, p$x, p$y))
-    polygon <- rbind(xy[seq_along(positions), ], xy[rev(seq_along(positions) + length(positions)), ])
-    polygon <- rbind(polygon, polygon[1, ])
-    return(list(xlim = range(xy$x), ylim = range(xy$y), offset = mean(offsets), polygon = polygon))
-  }
-  points <- project_positions_checked(layout, rep(chr, 4), rep(c(g$.start, g$.end), each = 2))
-  corners <- offset_chr_points_signed(layout, rep(chr, 4), points, rep(offsets, 2))
-  list(xlim = range(corners$x), ylim = range(corners$y), offset = offsets[1])
 }
 
 chr_repel_geom <- function(kind) {
@@ -132,12 +125,14 @@ chr_repel_geom <- function(kind) {
 #' @method ggplot_add ggideogram_repel_component
 #' @export
 ggplot_add.ggideogram_repel_component <- function(object, plot, ...) {
+  data <- prepare_chr_label_data(object, ideogram_plot_layout(plot))
+  if (!nrow(data)) return(plot)
   if (is.null(object$track)) {
     declared <- declare_chr_labels_track(plot, object)
     plot <- declared$plot; object$track <- declared$track
   }
   layout <- ideogram_plot_layout(plot)
-  d <- prepare_repel_labels(object, layout)
+  d <- prepare_repel_labels(object, layout, data)
   if (!nrow(d)) return(plot)
   groups <- split(d, interaction(d$.label_chr, d$.label_track, d$.label_column, drop = TRUE))
   geoms <- list(leaders = chr_repel_geom("leaders"), labels = chr_repel_geom("labels"))
@@ -146,7 +141,7 @@ ggplot_add.ggideogram_repel_component <- function(object, plot, ...) {
     rows <- groups[[i]]
     chr <- rows$.label_chr[1]
     spec <- track_table_row(layout, rows$.label_track[1])
-    scope <- repel_column_scope(layout, chr, spec, rows$.label_column[1], object$columns)
+    scope <- track_column_region(layout, chr, spec, rows$.label_column[1], object$columns)
     p <- project_positions_checked(layout, rows$.label_chr, rows$.label_position)
     anchor <- offset_chr_points_signed(layout, rows$.label_chr, p,
       rep(if (spec$side == "right") layout$chromosome_width / 2 else -layout$chromosome_width / 2, nrow(rows)))

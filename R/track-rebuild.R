@@ -1,5 +1,11 @@
 # Rebuild source components after a named track changes.
 
+copy_ideogram_layer <- function(layer) {
+  # ggproto retains its parent; force it before a caller reuses a loop variable.
+  force(layer)
+  ggplot2::ggproto(NULL, layer)
+}
+
 record_ideogram_aesthetics <- function(layer) {
   layer$ideogram_aesthetic_names <- list(mapping = names(layer$mapping),
     aes_params = names(layer$aes_params), defaults = names(layer$geom$default_aes))
@@ -51,12 +57,8 @@ ggplot_add.ggideogram_track_scope <- function(object, plot, ...) {
     previous <- specs[[id]]
     for (arg in object$geometry_args) previous[arg] <- object[arg]
     supplied <- object$supplied_args
-    if ("side" %in% supplied && !"gap" %in% supplied) {
-      previous$gap <- object$gap
-    }
-    if ("side" %in% supplied && previous$side != "overlay" && !"offset" %in% supplied) {
-      previous$offset <- 0
-    }
+    if ("width" %in% supplied) previous$auto_width <- object$auto_width
+    if ("gap" %in% supplied) previous$auto_gap <- object$auto_gap
     for (arg in intersect(supplied, c("chr", "clip"))) previous[arg] <- object[arg]
     if ("label" %in% supplied) {
       previous$label <- if (is.null(object$label)) NULL else {
@@ -155,6 +157,11 @@ rebuild_ideogram <- function(plot, spec, id = NULL, replace = FALSE) {
         rebuilt$layers[[before + j]] <-
           preserve_ideogram_aesthetics(rebuilt$layers[[before + j]], previous[[j]])
       }
+    } else if (!is.null(layer$ideogram_axis_spec)) {
+      axes <- do.call(chromosome_axis_layers,
+        c(list(layout = ideogram_plot_layout(rebuilt)), layer$ideogram_axis_spec))
+      fresh <- preserve_ideogram_aesthetics(axes[[layer$ideogram_axis_part]], layer)
+      rebuilt <- reserve_chromosome_axis_space(rebuilt + fresh, list(fresh))
     } else {
       rebuilt <- rebuilt + layer
     }

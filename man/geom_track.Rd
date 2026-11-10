@@ -10,7 +10,7 @@ geom_track(
   geom = NULL,
   track = NULL,
   side = c("right", "left", "overlay", "outer", "inner"),
-  width = 3,
+  width = NULL,
   gap = NULL,
   value_scale = c("per_track", "global", "per_chr"),
   limits = NULL,
@@ -42,8 +42,10 @@ inside the chromosome body.}
 
 \item{width, gap}{Track width and gap in chromosome-body-width units. The
 default width is 6 for gene-model tracks, 3 for other beside tracks,
-and 1 inside the body; gap is 0.2 beside
-and 0 inside. Native geom widths
+and 1 inside the body; gap is 0.2 beside and 0 inside. Use \code{NULL}
+to restore either default. Automatic dimensions follow the final side
+and contents. Explicit dimensions and offsets are retained on edits;
+adjust them if they conflict with the new side. Native geom widths
 belong to the layer, e.g. geom = ggplot2::geom_col(width = 1e6).}
 
 \item{value_scale}{Auto range: per_track (default), per_chr, or global.}
@@ -63,17 +65,27 @@ chromosome body. Beside tracks use zero.}
 \item{label}{Optional title string or a list with text, size (mm), colour,
 family, fontface and gap (em). A list can adjust the existing title's
 style without repeating its text. Titles sit beside the start endpoint
-in linear layouts and inside the closing gap in circular layouts.}
+in linear layouts and inside the closing gap in circular layouts.
+In linear layouts, titles at a shared start align at their track-facing
+edge and clear any value axes at that end.}
 
 \item{axis}{\code{FALSE}, \code{TRUE}, or a list of local value-axis arguments.
 \code{position} accepts \code{"auto"} (default), \code{"start"}, \code{"end"}, or \code{"gap"}.
 Auto places shared circular value axes in the closing gap; linear and
 explicitly chromosome-specific axes keep their end placement. A gap
 axis with per-chromosome ranges must select one chromosome with \code{chr}.
-Tick text defaults to 2.2 mm; \code{size}, \code{family}, \code{colour}, \code{tick_length}
-(mm) and \code{label_gap} (em) can be set independently of track width.}
+Automatic axes skip chromosomes without a resolved value range. Use
+\code{labels = NULL} to hide all tick text. Empty strings or \code{NA} hide individual
+labels. Ticks remain visible in both cases.
+\code{gap} sets the distance from the track endpoint to the value-axis spine,
+in body-width units (default 0.2). Circular axes use at most half the
+adjacent sector gap, measured along the chromosome centerline.
+Tick text defaults to one third of the default bp-axis text size.
+\code{size}, \code{family}, \code{colour}, \code{tick_length} (mm) and \code{label_gap} (em)
+can be set independently of track width.}
 
-\item{chr}{Optional chromosome identifiers to select from the source data.}
+\item{chr}{Optional chromosome keys from the source karyotype. Known keys
+outside the current view are not drawn.}
 
 \item{clip}{Tile clipping: \code{"auto"} clips overlay tiles to the chromosome
 silhouette, \code{"on"} requires an overlay track, \code{"off"} leaves tiles intact.}
@@ -93,6 +105,11 @@ and a unique \code{track} identifier, or put it in a named \code{ggideogram(trac
 Within a track, \code{x} is original genomic bp and \code{y} is the measured value,
 including in vertical and circular layouts. Ordinary layers inherit the
 track's data and mapping; their own data and mappings can override them.
+Locus annotations can inherit \code{x} as their bp position. Interval annotations
+use \code{start} and \code{end}, and neither annotation uses the track's \code{y} mapping.
+Put layers that should overlap in the same track. Two overlay tracks must
+occupy separate bands on any chromosome they share. In horizontal local
+synteny plots, tracks restricted to different chromosomes can reuse space.
 }
 \details{
 Pass an ordinary layer to \code{geom}, or several layers to \code{layers}. Compatible

@@ -105,3 +105,37 @@ test_that("automatic annotations filter complete source tables and retain mapped
   expect_equal(b$data[[i]]$colour, "blue")
   expect_no_warning(ggplot2::ggplotGrob(q))
 })
+test_that("chromosome-scoped tracks share lanes and curved ribbons stay in the corridor", {
+  k <- data.frame(Chr = c("A", "B", "C"), Start = 0, End = 100)
+  d <- data.frame(Chr = rep(k$Chr, each = 2), Pos = c(10, 90), Value = c(0, 1))
+  edges <- data.frame(a = c("A", "B"), b = c("B", "C"), start = 5, end = 15,
+    start2 = 85, end2 = 95, strand = c("+", "-"))
+  signal <- function(keys, side, width) geom_track(chr = keys, side = side, width = width,
+    data = d, ggplot2::aes(chr = Chr, x = Pos, y = Value), geom = ggplot2::geom_line())
+  p <- ggideogram(k, orientation = "horizontal", max_chr_length = 100, chromosome_gap = 2,
+    tracks = list(outer_a = signal("A", "left", 5), inner_a = signal("A", "right", 1),
+      inner_b = signal("B", "left", 2), inner_c = signal("C", "left", 3),
+      shared = signal(c("B", "C"), "left", 1))) +
+    geom_chrlink(ggplot2::aes(chr1 = a, chr2 = b, start1 = start, end1 = end,
+      start2 = start2, end2 = end2, orientation = strand), edges, curvature = 1)
+  for (plot in list(p, p + geom_track(track = "inner_b", width = 5))) {
+    layout <- ideogram_plot_layout(plot)
+    spec <- function(id) track_table_row(layout, id)
+    expect_equal(spec("outer_a")$low_offset, spec("inner_b")$low_offset)
+    expect_equal(spec("inner_b")$low_offset, spec("inner_c")$low_offset)
+    expect_gt(abs(spec("shared")$low_offset), max(abs(spec("inner_b")$high_offset),
+      abs(spec("inner_c")$high_offset)))
+    layer <- Filter(function(layer) inherits(layer$geom, "GeomPolygon"), plot$layers)
+    ribbon <- utils::tail(layer, 1)[[1]]$data
+    for (i in seq_len(nrow(edges))) {
+      rows <- ribbon[ribbon$.pair_id == i, ]
+      y <- layout$chrom$.axis_start_y[match(c(edges$a[i], edges$b[i]), layout$chrom$.chr)]
+      near <- y[1] - layout$chromosome_width / 2 - annotation_extent(layout, edges$a[i], "right")
+      far <- y[2] + layout$chromosome_width / 2 + annotation_extent(layout, edges$b[i], "left")
+      expect_equal(range(rows$.pair_y), c(far, near))
+      expect_equal(unique(rows$.pair_start1), edges$start[i])
+      expect_equal(unique(rows$.pair_orientation), edges$strand[i])
+    }
+    expect_no_warning(ggplot2::ggplotGrob(plot))
+  }
+})

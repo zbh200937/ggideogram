@@ -144,6 +144,9 @@ test_that("direct marker lanes displace bp axes independent of addition order", 
       expect_equal(get_tick(first), get_tick(last))
       expect_equal(first$coordinates$layout$bounds, last$coordinates$layout$bounds)
       delta <- get_tick(first)[1, c("x", "y")] - get_tick(before)[1, c("x", "y")]
+      body_shift <- first$coordinates$layout$chrom[1, c(".axis_start_x", ".axis_start_y")] -
+        before$coordinates$layout$chrom[1, c(".axis_start_x", ".axis_start_y")]
+      delta <- as.numeric(delta) - as.numeric(body_shift)
       expect_equal(sqrt(sum(delta^2)), 1)
       expect_no_error(ggplot2::ggplotGrob(first))
       expect_no_error(ggplot2::ggplotGrob(last))
@@ -162,4 +165,104 @@ test_that("long perimeter labels reserve physical space and remain theme-overrid
   expect_gte(margin[2], grid::convertWidth(grid::grobWidth(text), "mm", valueOnly = TRUE) + 5)
   overridden <- p + ggplot2::theme(plot.margin = ggplot2::margin(10, 10, 10, 10))
   expect_equal(overridden$theme$plot.margin, ggplot2::margin(10, 10, 10, 10))
+})
+
+test_that("track spacing and both axes use independent gaps after relayout", {
+  tracks <- list(first = geom_track(gap = 0, width = 1, limits = c(0, 1), axis = TRUE),
+    second = geom_track(gap = 0, width = 1))
+  for (orientation in c("vertical", "horizontal", "circular")) {
+    p <- ggideogram(axis_kar, orientation = orientation, tracks = tracks, min_gap = 0.6,
+      axis = "A", axis_side = "right", axis_gap = 0.35, show_names = FALSE)
+    q <- p + geom_track(track = "first", width = 2, axis = list(gap = 0.8)) +
+      geom_track(track = "second", gap = 0.9)
+    for (plot in list(p, q)) {
+      layout <- ideogram_plot_layout(plot)
+      edited <- layout$tracks$width[1] == 2
+      expect_equal(layout$tracks$low_offset[2] - layout$tracks$high_offset[1],
+        if (edited) 0.9 else 0.6)
+      ticks <- Filter(function(layer) inherits(layer$geom, "GeomIdeogramTick") &&
+        !is.null(layer$ideogram_axis_spec), plot$layers)[[1]]$data
+      origin <- layout$chrom[1, ]
+      cross <- if (orientation == "vertical") abs(ticks$x[1] - origin$.axis_start_x) else
+        abs(ticks$y[1] - origin$.axis_start_y)
+      expect_equal(cross - layout$tracks$high_offset[2], 0.35)
+      spine <- Filter(function(layer) inherits(layer$stat, "StatTrackAxis") &&
+        layer$stat_params$axis_part == 1L, plot$layers)[[1]]$data
+      distance <- switch(orientation,
+        vertical = origin$.axis_end_y - spine$y[1],
+        horizontal = spine$x[1] - origin$.axis_end_x,
+        circular = atan2(spine$x[1], spine$y[1]) * layout$circular$radius)
+      expect_equal(distance, if (edited) 0.8 else 0.2)
+    }
+  }
+  tight <- ideogram_layout(axis_kar, tracks = tracks, chromosome_gap = 0, min_gap = 0)
+  expect_equal(tight$tracks$low_offset[2], tight$tracks$high_offset[1])
+  expect_equal(tight$chromosome_gap, 0)
+  expect_error(ggideogram(axis_kar, orientation = "circular", radius = 1,
+    axis = TRUE, axis_side = "inner", axis_gap = 0.5), "inner bp axis reaches the circle center")
+})
+
+test_that("rotating bp labels preserves ticks and their physical clearance", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  base <- ggideogram(axis_kar[1, ], orientation = "horizontal", show_names = FALSE)
+  flat <- base + geom_chr(component = "axis", breaks = c(200, 400), side = "right")
+  tilted <- base + geom_chr(component = "axis", breaks = c(200, 400), side = "right",
+    angle = 45, tick_length = 2, label_gap = 0.5, size = 3, check_overlap = TRUE)
+  plain_layers <- utils::tail(flat$layers, 2)
+  angled_layers <- utils::tail(tilted$layers, 2)
+  expect_equal(plain_layers[[1]]$data, angled_layers[[1]]$data)
+  built <- ggplot2::ggplot_build(tilted)
+  text <- angled_layers[[2]]$geom$draw_panel(utils::tail(built$data, 1)[[1]],
+    built$layout$panel_params[[1]], built$layout$coord,
+    tick_length = 2, label_gap = 0.5, check_overlap = TRUE)
+  expect_equal(text$rot, c(45, 45))
+  expect_true(text$check.overlap)
+  expect_equal(text$hjust, c(0.5, 0.5))
+  grid::pushViewport(grid::viewport(height = grid::unit(30, "mm")))
+  on.exit(grid::popViewport(), add = TRUE, after = FALSE)
+  coordinates <- built$layout$coord$transform(utils::tail(built$data, 1)[[1]],
+    built$layout$panel_params[[1]])
+  glyph <- grid::textGrob("200 bp", gp = grid::gpar(fontsize = 3 * ggplot2::.pt))
+  half <- (grid::grobWidth(glyph) + grid::grobHeight(glyph)) / (2 * sqrt(2))
+  expect_equal(grid::convertHeight(grid::unit(coordinates$y[1], "native") -
+      text$y[1] - half, "mm", valueOnly = TRUE), 3.5)
+  spacing <- tilted$theme$legend.box.spacing
+  expect_gt(grid::convertHeight(spacing, "mm", valueOnly = TRUE), 6)
+  expect_equal(grid::convertHeight(spacing, "mm", valueOnly = TRUE),
+    grid::convertHeight(tilted$theme$plot.margin[3], "mm", valueOnly = TRUE))
+})
+
+test_that("bp text avoids neighboring tracks at the final panel size", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  k <- transform(axis_kar, End = 100000)
+  draw_text <- function(orientation, space, breaks = NULL, check_overlap = NULL) {
+    plot <- ggideogram(k, orientation = orientation, ncol = 2, axis = "B", axis_size = 4, axis_units = "bp",
+      axis_breaks = breaks, axis_check_overlap = check_overlap,
+      show_names = FALSE, chromosome_gap = 0,
+      tracks = list(signal = geom_track(side = "right", width = 3)))
+    b <- ggplot2::ggplot_build(plot)
+    i <- which(vapply(plot$layers, function(layer) inherits(layer$geom, "GeomIdeogramAxisText"),
+      logical(1)))
+    layer <- b$plot$layers[[i]]
+    params <- layer$computed_geom_params
+    tree <- do.call(layer$geom$draw_panel, c(list(data = b$data[[i]],
+      panel_params = b$layout$panel_params[[1]], coord = b$layout$coord),
+      params[intersect(names(params), layer$geom$parameters())]))
+    width <- if (orientation == "vertical") space else 100
+    height <- if (orientation == "horizontal") space else 100
+    grid::pushViewport(grid::viewport(width = grid::unit(width, "mm"), height = grid::unit(height, "mm")))
+    on.exit(grid::popViewport())
+    grid::makeContent(tree)$children[[1]]$label
+  }
+  for (orientation in c("vertical", "horizontal")) {
+    expect_true(any(draw_text(orientation, 10) == ""))
+    expect_true(all(nzchar(draw_text(orientation, 250))))
+    expect_warning(explicit <- draw_text(orientation, 10, c(20000, 40000)),
+      "space reserved for an adjacent chromosome")
+    expect_equal(explicit, c("20000 bp", "40000 bp"))
+    expect_no_warning(checked <- draw_text(orientation, 10, c(20000, 40000), TRUE))
+    expect_true(any(checked == ""))
+  }
 })

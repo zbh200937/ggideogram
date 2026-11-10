@@ -1,5 +1,52 @@
 # ggideogram 0.5.0
 
+- `min_gap` sets a minimum clearance for beside tracks. The bp-axis
+  `axis_gap` and the track value-axis `axis = list(gap = ...)` control
+  independent distances.
+- `axis_angle` rotates bp tick labels. `axis_check_overlap` controls label
+  suppression at draw time, including for explicit breaks. Tick marks remain
+  visible, and rotated label bounds are used for collision checks.
+- Connections automatically draw translucent bands for intervals and lines for
+  point endpoints. Explicit connection types still take precedence.
+- Forward and reversed bands between chromosomes use the same default edges.
+  Linear layouts use straight edges and circular layouts use curved edges.
+- Track value-axis text defaults to one third of the default bp-axis text size.
+  Track titles at shared starts in linear layouts align and clear nearby axes.
+  Chromosome names join the same alignment when the label boxes fit.
+
+- Automatic track width follows the final side and contents, and `width = NULL`
+  or `gap = NULL` restores automatic sizing. Track edits retain explicit
+  dimensions; chromosome selections are checked against the source karyotype.
+- Automatic value axes skip chromosomes without a resolved range. Blank
+  axis labels hide text without removing ticks, including in circular gaps.
+- Point and interval annotations in a track share its source and styling
+  without inheriting unrelated value mappings. Equivalent starting angles
+  produce the same circular layout and label positions.
+- Ordered labels minimize displacement along the chromosome or sector when
+  there is room. Linear synteny bands expand the source table once and sample
+  only curved bands.
+- Separate overlay tracks cannot overlap on the same chromosome, and untracked
+  markers have their own space before beside tracks. Local synteny reuses space
+  for tracks assigned to different chromosomes and keeps automatic ribbons
+  between adjacent chromosomes out of their tracks.
+
+- Insets check physical and mixed-unit viewports in the final panel, including
+  collisions across layers and with neighboring tracks. Reusing a grob at a
+  different size recalculates the viewport bounds.
+- Empty or out-of-view text annotations no longer fail or allocate an unused
+  label track. Spread and repel labels share source validation and selection;
+  label columns and inset checks reuse the same track boundaries.
+- Centered track titles, tick labels and chromosome names reserve transverse
+  text overhang even when their anchors lie just inside the panel boundary.
+
+- Track titles clear value-axis labels at the same endpoint. Removing or
+  shortening annotations releases their automatic margins and heading space,
+  while explicitly supplied theme spacing is retained.
+- Untracked locus markers reserve space between neighboring chromosomes.
+  Changing their gap rebuilds dependent components through the shared layout.
+- Physical text spacing is maintained in one module; adding components no
+  longer changes the name-spacing parameters of an existing plot.
+
 - Chromosome axes retain default and named labels when ggalign reorders or
   groups observations. Complete ggalign layouts, compositions and nested
   insets enter `geom_locus_inset()` as standard grobs via `ggalignGrob()`.
@@ -37,9 +84,8 @@
   GFFex retains start counts through the same engine. Summary units are not
   inferred from value-column names. Metadata reads only the exact na.rm
   argument, preserving lazy evaluation of other arguments passed to FUN.
-- Package and gallery defaults now share 2.2 mm track value text and a
-  6 mm legend gap. Explicit axis and theme settings remain available;
-  circular component updates preserve explicitly chosen legend gaps.
+- Package and gallery defaults share a 6 mm legend gap. Circular component
+  updates preserve explicitly chosen legend gaps.
 
 - Ordinary beside tracks now default to 3 chromosome body widths. Gene-model
   and overlay defaults remain 6 and 1; explicit widths take priority.

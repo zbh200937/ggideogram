@@ -30,6 +30,7 @@ ideogram_layout(karyotype, ...)
   gap_angle = NULL,
   opening_angle = NULL,
   clockwise = TRUE,
+  min_gap = 0.2,
   ...
 )
 }
@@ -51,6 +52,9 @@ units. Circular gaps use \code{gap_angle}.}
 body-width units. Circular geometry uses \code{radius}.}
 
 \item{row_gap}{Gap between linear chromosome rows, in body-width units.}
+
+\item{min_gap}{Minimum spacing in layout units for beside tracks. Set to
+zero to use each track's declared gap directly.}
 
 \item{orientation}{\code{"vertical"}, \code{"horizontal"}, or \code{"circular"}.}
 

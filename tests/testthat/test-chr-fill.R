@@ -64,3 +64,16 @@ test_that('native track labels accept exact ends after large chromosome separati
   expect_error(ggideogram(k, tracks = specs) + geom_track_text(data = d, track = 'a',
     ggplot2::aes(chr = Chr, position = Pos, value = Value), label = 'A'), 'outside')
 })
+test_that('overlay tracks collide only when their bands and chromosomes intersect', {
+  k <- data.frame(Chr = c('A', 'B'), Start = 0, End = 100)
+  track_a <- geom_track(side = 'overlay', width = 0.5, chr = 'A', limits = c(0, 1))
+  track_b <- geom_track(side = 'overlay', width = 0.5, chr = 'B', limits = c(0, 1))
+  for (orientation in c('horizontal', 'vertical', 'circular')) {
+    p <- ggideogram(k, orientation = orientation, tracks = list(a = track_a, b = track_b))
+    expect_error(p + geom_track(track = 'b', chr = 'A'), 'Overlay tracks `a` and `b` overlap on .*A')
+    q <- p + geom_track(track = 'b', chr = 'A', offset = 0.35, width = 0.2)
+    expect_no_warning(ggplot2::ggplotGrob(q))
+    expect_error(project_chr_track(p, data.frame(Chr = 'B', Pos = 20, V = .5),
+      'Chr', 'Pos', 'V', track = 'a'), 'not assigned to chromosome .*B')
+  }
+})

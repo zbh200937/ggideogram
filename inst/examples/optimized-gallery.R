@@ -184,7 +184,7 @@ p_nodes <- ggideogram(chr_view(semantic, '1', 23150000, 23540000),
     aes(chr1 = Chr1, start1 = Start1, end1 = End1,
       chr2 = Chr2, start2 = Start2, end2 = End2, orientation = Orientation),
     fill = '#CC6677', alpha = .22, colour = NA) +
-  geom_chrlink(data = pairs, nodes = nodes, aes(from = Gene1, to = Gene2),
+  geom_chrlink(data = pairs, nodes = nodes, aes(from = Gene1, to = Gene2), type = 'point',
     colour = '#4477AA', linewidth = .23, alpha = .9) +
   geom_locus(data = node_source, aes(chr = Chr, position = Mid),
     side = 'right', gap = 0, size = 1.4, colour = '#4477AA') + style() +

@@ -155,41 +155,18 @@ ggplot_add.ggideogram_pair_component <- function(object, plot, ...) {
       xend = .data$.pair_xend, yend = .data$.pair_yend))
     geom <- ggplot2::geom_segment
   } else {
+    a <- pair_endpoint_offset(layout, d$.pair_chr1, first, second, object$side1, object$gap[1])
+    b <- pair_endpoint_offset(layout, d$.pair_chr2, second, first, object$side2, object$gap[2])
     ends <- list()
     for (j in 1:2) for (edge in c('from', 'to')) {
       point <- project_positions_checked(layout, d[[paste0('.pair_chr', j)]], d[[paste0('.pair_', edge, j)]])
       center <- if (j == 1) first else second
-      other <- if (j == 1) second else first
-      shifted <- pair_endpoint_offset(layout, d[[paste0('.pair_chr', j)]], center, other,
-        object[[paste0('side', j)]], object$gap[j])
+      shifted <- if (j == 1) a else b
       point$x <- point$x + shifted$x - center$x
       point$y <- point$y + shifted$y - center$y
       ends[[paste0(edge, j)]] <- point
     }
-    normal <- chromosome_right_normal(layout, layout$chrom[match_layout_chr(layout, d$.pair_chr1), , drop = FALSE])
-    curve_normal <- linear_pair_curve_normal(layout, d$.pair_chr1, first,
-      pair_endpoint_offset(layout, d$.pair_chr1, first, second, object$side1, object$gap[1]),
-      pair_endpoint_offset(layout, d$.pair_chr2, second, first, object$side2, object$gap[2]))
-    parts <- lapply(seq_len(nrow(d)), function(i) {
-      x <- vapply(ends[c('from1', 'from2', 'to2', 'to1')], function(p) p$x[i], numeric(1))
-      y <- vapply(ends[c('from1', 'from2', 'to2', 'to1')], function(p) p$y[i], numeric(1))
-      if (object$bend != 0) {
-        x <- c(x[1], mean(x[1:2]) + object$bend * normal$nx[i], x[2:3],
-          mean(x[3:4]) + object$bend * normal$nx[i], x[4])
-        y <- c(y[1], mean(y[1:2]) + object$bend * normal$ny[i], y[2:3],
-          mean(y[3:4]) + object$bend * normal$ny[i], y[4])
-      } else if (d$.pair_curvature[i] != 0) {
-        path1 <- linear_link_curve(c(x[1], y[1]), c(x[2], y[2]),
-          d$.pair_curvature[i], object$curve_points, curve_normal[i, ])
-        path2 <- linear_link_curve(c(x[3], y[3]), c(x[4], y[4]),
-          d$.pair_curvature[i], object$curve_points, curve_normal[i, ])
-        x <- c(path1$x, path2$x); y <- c(path1$y, path2$y)
-      }
-      result <- d[rep(i, length(x)), , drop = FALSE]
-      result$.pair_x <- x; result$.pair_y <- y
-      result
-    })
-    d <- do.call(rbind, parts)
+    d <- linear_pair_polygons(d, ends, object, layout, first, a, b)
     mapping <- combine_track_mapping(mapping, ggplot2::aes(x = .data$.pair_x,
       y = .data$.pair_y, group = .data$.pair_id))
     geom <- ggplot2::geom_polygon
@@ -200,7 +177,59 @@ ggplot_add.ggideogram_pair_component <- function(object, plot, ...) {
   add_chr_pair_native_layer(plot, object, mapping, d, geom, 'identity')
 }
 
+linear_pair_polygons <- function(data, ends, object, layout, center, a, b) {
+  ends <- ends[c('from1', 'from2', 'to2', 'to1')]
+  x <- do.call(rbind, lapply(ends, `[[`, 'x'))
+  y <- do.call(rbind, lapply(ends, `[[`, 'y'))
+  if (object$bend != 0) {
+    normal <- chromosome_right_normal(layout,
+      layout$chrom[match_layout_chr(layout, data$.pair_chr1), , drop = FALSE])
+    bend_edges <- function(m, delta) rbind(m[1, ], (m[1, ] + m[2, ]) / 2 + delta,
+      m[2, ], m[3, ], (m[3, ] + m[4, ]) / 2 + delta, m[4, ])
+    x <- bend_edges(x, object$bend * normal$nx)
+    y <- bend_edges(y, object$bend * normal$ny)
+  }
+
+  # Straight blocks need only four vertices. Sample the curved blocks alone,
+  # then expand the source table once, in its original drawing order.
+  curved <- data$.pair_curvature != 0
+  counts <- ifelse(curved, 2L * object$curve_points, nrow(x))
+  index <- rep(seq_len(nrow(data)), counts)
+  result <- data[index, , drop = FALSE]
+  straight <- !curved[index]
+  result$.pair_x <- numeric(length(index))
+  result$.pair_y <- numeric(length(index))
+  result$.pair_x[straight] <- as.vector(x[, !curved, drop = FALSE])
+  result$.pair_y[straight] <- as.vector(y[, !curved, drop = FALSE])
+  if (any(curved)) {
+    normal <- linear_pair_curve_normal(layout, data$.pair_chr1, center, a, b)
+    auto_corridor <- isTRUE(layout$microsynteny) && is.null(object$gap) &&
+      object$side1 == 'auto' && object$side2 == 'auto'
+    adjacent <- if (auto_corridor) {
+      abs(layout$index[data$.pair_chr1] - layout$index[data$.pair_chr2]) == 1L
+    } else rep(FALSE, nrow(data))
+    last_vertex <- cumsum(counts)
+    for (i in which(curved)) {
+      corridor <- if (adjacent[i]) range(y[1:2, i]) else NULL
+      from <- linear_link_curve(c(x[1, i], y[1, i]), c(x[2, i], y[2, i]),
+        data$.pair_curvature[i], object$curve_points, normal[i, ], corridor)
+      to <- linear_link_curve(c(x[3, i], y[3, i]), c(x[4, i], y[4, i]),
+        data$.pair_curvature[i], object$curve_points, normal[i, ], corridor)
+      rows <- seq.int(last_vertex[i] - counts[i] + 1L, last_vertex[i])
+      result$.pair_x[rows] <- c(from$x, to$x)
+      result$.pair_y[rows] <- c(from$y, to$y)
+    }
+  }
+  result
+}
+
 add_chr_pair_native_layer <- function(plot, object, mapping, data, geom, stat) {
+  if (object$type == "interval") {
+    defaults <- list(fill = ideogram_colour("synteny"), alpha = 0.35)
+    supplied <- union(names(object$params), names(mapping))
+    if (isTRUE(object$inherit.aes)) supplied <- union(supplied, names(plot$mapping))
+    object$params <- c(defaults[!names(defaults) %in% supplied], object$params)
+  }
   add <- function(rows, params) {
     if (nrow(rows)) plot <<- plot + do.call(geom, c(list(mapping = mapping, data = rows,
       stat = stat, position = object$position, na.rm = object$na.rm,
@@ -233,9 +262,7 @@ linear_pair_curvature <- function(object, d) {
   if (object$bend != 0) return(rep(0, nrow(d)))
   if (!is.null(object$curvature)) return(rep(object$curvature, nrow(d)))
   if (object$bend_explicit) return(rep(0, nrow(d)))
-  curved <- d$.pair_chr1 == d$.pair_chr2 |
-    (object$type == 'interval' & d$.pair_orientation == '-')
-  ifelse(curved, 0.25, 0)
+  ifelse(d$.pair_chr1 == d$.pair_chr2, 0.25, 0)
 }
 
 linear_pair_curve_normal <- function(layout, chr, center, a, b) {
@@ -251,9 +278,10 @@ linear_pair_curve_normal <- function(layout, chr, center, a, b) {
   normal
 }
 
-linear_link_curve <- function(a, b, curvature, points, normal) {
+linear_link_curve <- function(a, b, curvature, points, normal, corridor = NULL) {
   t <- seq(0, 1, length.out = if (curvature == 0) 2 else points)
   control <- (a + b) / 2 + curvature * sqrt(sum((b - a)^2)) * normal
+  if (!is.null(corridor)) control[2] <- min(corridor[2], max(corridor[1], control[2]))
   data.frame(x = (1 - t)^2 * a[1] + 2 * t * (1 - t) * control[1] + t^2 * b[1],
     y = (1 - t)^2 * a[2] + 2 * t * (1 - t) * control[2] + t^2 * b[2])
 }

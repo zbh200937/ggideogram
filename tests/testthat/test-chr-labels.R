@@ -10,6 +10,15 @@ draw_chr_labels_test <- function(plot, mm = 120) {
     positions = do.call(rbind, lapply(states, function(state) state$cache$positions)))
 }
 
+test_that('dense label placement minimises displacement within sector bounds', {
+  centre <- ordered_label_positions(c(40, 40, 40, 90), c(3, 5, 2, 4), 0, 100)
+  expect_true(centre$fits)
+  expect_equal(centre$position, c(40 - 23 / 3, 40 + 1 / 3, 40 + 22 / 3, 90))
+  edge <- ordered_label_positions(rep(99, 3), rep(5, 3), 0, 100)
+  expect_true(edge$fits)
+  expect_equal(edge$position, c(75, 85, 95))
+})
+
 chr_labels_test_anchors <- function(state) {
   layout <- state$coord$layout
   d <- state$data
@@ -285,4 +294,27 @@ test_that('text spreading accepts native constructors and owned layer data and s
   expect_identical(native$data, d)
   expect_equal(native$aes_params$size, 3.1)
   expect_error(geom_locus(geom = 'point', position = 'spread'), 'text geom')
+})
+
+test_that('invisible labels leave multi-track layout unchanged', {
+  source <- as_ideogram_data(data.frame(Chr = 'A', Start = 0, End = 100))
+  view <- chr_view(source, 'A', 40, 60)
+  outside <- data.frame(Chr = 'A', Pos = c(10, 90), Label = c('G1', 'G2'))
+  blank <- data.frame(Chr = 'A', Pos = c(49, 51), Label = c('', NA_character_))
+  for (orientation in c('vertical', 'horizontal', 'circular')) {
+    base <- ggideogram(view, orientation = orientation,
+      tracks = list(signal = geom_track(side = 'left', width = 3)))
+    for (data in list(outside, blank, outside[FALSE, ])) {
+      p <- base + geom_locus(data = data,
+        ggplot2::aes(chr = Chr, position = Pos, label = Label),
+        geom = 'text', position = 'spread')
+      expect_equal(p$coordinates$layout$tracks, base$coordinates$layout$tracks)
+      expect_equal(p$coordinates$layout$bounds, base$coordinates$layout$bounds)
+      expect_length(p$layers, length(base$layers))
+      expect_no_error(ggplot2::ggplotGrob(p))
+    }
+  }
+  expect_error(base + geom_locus(data = transform(outside, Pos = c(10, 101)),
+    ggplot2::aes(chr = Chr, position = Pos, label = Label),
+    geom = 'text', position = 'spread'), 'source chromosome bounds')
 })

@@ -40,6 +40,8 @@ ideogram_layout.data.frame <- function(karyotype, ...) {
 #' @param max_chr_length Linear display length of the longest chromosome, in
 #'   body-width units. Circular geometry uses `radius`.
 #' @param row_gap Gap between linear chromosome rows, in body-width units.
+#' @param min_gap Minimum spacing in layout units for beside tracks. Set to
+#'   zero to use each track's declared gap directly.
 #' @param orientation `"vertical"`, `"horizontal"`, or `"circular"`.
 #' @param radius Circular chromosome-center radius in body-width units.
 #' @param start_angle Circular starting angle, clockwise from the top, in degrees.
@@ -90,6 +92,7 @@ ideogram_layout.ideogram_data <- function(
     gap_angle = NULL,
     opening_angle = NULL,
     clockwise = TRUE,
+    min_gap = 0.2,
     ...) {
   check_unused_args(...)
   orientation <- match.arg(orientation)
@@ -99,9 +102,8 @@ ideogram_layout.ideogram_data <- function(
   check_nonnegative_layout(chromosome_gap, "chromosome_gap")
   check_positive_layout(max_chr_length, "max_chr_length")
   check_nonnegative_layout(row_gap, "row_gap")
+  check_nonnegative_layout(min_gap, "min_gap")
   curve_points <- validate_curve_points(curve_points)
-  track_geometry <- resolve_track_geometry(tracks, chromosome_width)
-
   k <- karyotype$karyotype
   if (!is.null(karyotype$chr_selection)) k <- k[match(karyotype$chr_selection, k$.chr), , drop = FALSE]
   if (!is.null(karyotype$view)) {
@@ -114,9 +116,12 @@ ideogram_layout.ideogram_data <- function(
   }
   if (orientation == "circular") {
     if (!is.null(ncol)) stopf("Circular layouts use one sector ring; combine separate plots for multiple rings.")
+    track_geometry <- resolve_track_geometry(tracks, chromosome_width,
+      karyotype$karyotype$.chr, k$.chr, min_gap = min_gap)
     return(circular_ideogram_layout(karyotype, k, tracks, track_geometry,
       chromosome_width, radius, start_angle, gap_angle, opening_angle, clockwise,
-      scale_length, order_by, genome_order, homolog_order, reverse_chr, curve_points))
+      scale_length, order_by, genome_order, homolog_order, reverse_chr, curve_points,
+      min_gap))
   }
   chromosome_count <- nrow(k)
   slots <- chromosome_layout_slots(k, ncol, order_by, genome_order, homolog_order)
@@ -125,6 +130,14 @@ ideogram_layout.ideogram_data <- function(
   row <- slots$row
   column <- slots$col
   row_count <- max(row) + 1L
+  compact_tracks <- is_microsynteny_layout(orientation, row_count, chromosome_count, karyotype$pair_edges)
+  track_geometry <- resolve_track_geometry(tracks, chromosome_width,
+    karyotype$karyotype$.chr, k$.chr, compact = compact_tracks, min_gap = min_gap)
+  axis_gaps <- vapply(tracks, function(spec) {
+    if (is.list(spec$axis)) return(track_axis_gap(spec$axis$gap))
+    if (isTRUE(spec$axis)) track_axis_gap() else 0
+  }, numeric(1))
+  row_gap <- max(row_gap, 3 * axis_gaps)
 
   biological_length <- k$.end - k$.start
   if (scale_length == "global") {
@@ -237,6 +250,7 @@ ideogram_layout.ideogram_data <- function(
       chromosome_width = chromosome_width,
       chromosome_gap = chromosome_gap,
       row_gap = row_gap,
+      min_gap = min_gap,
       max_chr_length = max_chr_length,
       curve_points = curve_points,
       orientation = orientation,
@@ -245,6 +259,7 @@ ideogram_layout.ideogram_data <- function(
       length_comparable = identical(scale_length, "global"),
       track_layout = tracks %||% track_layout(),
       tracks = track_geometry$table,
+      track_owners = track_geometry$owners,
       track_ranges = initialize_track_ranges(
         track_geometry$table, chrom$.chr),
       track_extent = c(left = track_geometry$left,

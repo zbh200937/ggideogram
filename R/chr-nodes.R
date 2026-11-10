@@ -3,9 +3,9 @@
 #' Nodes have unique identifiers and retain every input column. A point node
 #' maps `position` in original bp. An interval node maps one-based closed
 #' `start` and `end`; its point anchor is `(start - 1 + end) / 2`, while the
-#' complete interval remains available to [geom_chrlink()] with
-#' `type = "interval"`. Different
-#' identifiers may occupy the same position.
+#' complete interval is drawn by default in [geom_chrlink()]. Use
+#' `type = "point"` for midpoint connections. Different identifiers may
+#' occupy the same position.
 #'
 #' The full source table can be used in local views. Source chromosome names
 #' and bounds are checked when a connection is added to an ideogram, before

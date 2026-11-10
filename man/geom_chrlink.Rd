@@ -7,7 +7,7 @@
 geom_chrlink(
   mapping = NULL,
   data = NULL,
-  type = c("point", "interval"),
+  type = c("auto", "point", "interval"),
   nodes = NULL,
   ...
 )
@@ -18,13 +18,18 @@ Direct point mappings are chr1/position1/chr2/position2; interval mappings
 are chr1/start1/end1/chr2/start2/end2, with optional orientation (+/-).
 ID mappings are from/to and use the supplied nodes table.}
 
-\item{type}{Point connections or interval bands.}
+\item{type}{\code{"auto"} (default) draws a band for interval mappings or
+interval nodes and a line for points. Use \code{"point"} or \code{"interval"} to
+choose explicitly. Point connections between interval nodes use their
+midpoints. Bands use translucent fill by default.}
 
 \item{nodes}{Optional source node table from \code{\link[=chr_nodes]{chr_nodes()}}.}
 
-\item{...}{Endpoint side1/side2 (auto faces the other chromosome), gap
-(NULL reserves annotation clearance; a number sets the body-edge offset),
-bend/curvature, curve_points,
+\item{...}{Endpoint side1/side2. Auto faces the other chromosome in linear
+layouts and attaches to the innermost track boundary in circular layouts.
+\code{gap = NULL} uses automatic clearance. A number sets an offset from the
+body edge or, for circular auto sides, from that inner boundary. Circular
+endpoint offsets must leave a positive radius. Also accepts bend, curvature, curve_points,
 orientation for intervals, and native colour/fill/alpha/linewidth/arrow.}
 }
 \value{
@@ -32,8 +37,13 @@ An additive native connection or band component.
 }
 \description{
 Endpoints can be mapped directly, or resolved by their IDs from \code{\link[=chr_nodes]{chr_nodes()}}
-using \code{aes(from = ..., to = ...)}. Same-chromosome local relations and
-reversed interval relations default to smooth arcs. Set curvature = 0 for
-straight connections. Curves use native segments; interval bands use native
-polygons and retain their original genomic bounds.
+using \code{aes(from = ..., to = ...)}. Cross-chromosome bands are straight in
+linear layouts and curved in circular layouts by default, for both forward
+and reversed intervals. Local links on the same chromosome default to arcs.
+Set \code{curvature = 0} for straight edges or use a positive value up to 1 for
+curved edges. Point links use native segments. Interval bands use native polygons
+and retain their original genomic bounds.
+In horizontal local synteny plots, automatic endpoints clear the tracks
+and bp axes declared in \code{ggideogram()} on each facing side. Default ribbons between adjacent
+chromosomes stay in the space between those endpoints.
 }

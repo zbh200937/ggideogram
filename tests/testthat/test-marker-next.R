@@ -105,16 +105,47 @@ test_that("marker side and gap are projected by the shared coordinate", {
   expect_gt(right_xy$x, 0.5)
   expect_lt(left_xy$x, 0.5)
   expect_equal(right_xy$y, left_xy$y)
-  # Each side now reserves its own marker extent in the panel bounds.
+  # Each side reserves a lane; compare offsets from each layout's body.
   right_range <- right_built$layout$panel_params[[1]]$x.range
   left_range <- left_built$layout$panel_params[[1]]$x.range
-  expect_equal(
-    right_xy$x * diff(right_range) + right_range[1] -
-      (left_xy$x * diff(left_range) + left_range[1]),
-    2 * (right$coordinates$layout$chromosome_width / 2 + 0.2),
-    tolerance = 1e-8
-  )
+  left_centre <- project_chr_point(left, data.frame(Chr = "A", Pos = 300), "Chr", "Pos")
+  distance <- right$coordinates$layout$chromosome_width / 2 + 0.2
+  expect_equal(right_xy$x * diff(right_range) + right_range[1] - centre$.x, distance)
+  expect_equal(left_xy$x * diff(left_range) + left_range[1] - left_centre$.x, -distance)
   expect_equal(centre$.position, 300)
+})
+
+test_that("untracked marker lanes separate neighboring chromosomes after relayout", {
+  k <- data.frame(Chr = c("A", "B", "C"), Start = 0, End = c(100, 80, 90))
+  d <- data.frame(Chr = k$Chr, Pos = 50)
+  for (orientation in c("horizontal", "vertical")) for (side in c("left", "right")) {
+    p <- ggideogram(k, orientation = orientation, axis = TRUE)
+    source <- p$coordinates$layout
+    q <- p + geom_locus(data = d, ggplot2::aes(chr = Chr, position = Pos),
+      side = side, gap = 6, size = 2)
+    r <- q + geom_track(track = "extra", side = side, width = 2)
+    for (plot in list(q, r)) {
+      built <- ggplot2::ggplot_build(plot)
+      index <- which(vapply(plot$layers, function(l) inherits(l$geom, "GeomPoint"), logical(1)))
+      point <- transform_ideogram_semantics(plot$coordinates$layout, built$data[[index]])
+      g <- plot$coordinates$layout$chrom
+      cross <- if (orientation == "vertical") "x" else "y"
+      low <- g[[paste0(".", cross, "_min")]]
+      high <- g[[paste0(".", cross, "_max")]]
+      for (i in seq_len(nrow(point))) {
+        others <- g$.chr != point$ideogram_chr[i]
+        expect_false(any(point[[cross]][i] >= low[others] & point[[cross]][i] <= high[others]))
+      }
+      expect_equal(diff(sort(g[[paste0(".axis_start_", cross)]])),
+        rep(g[1, paste0(".", cross, "_max")] - g[1, paste0(".", cross, "_min")] +
+          plot$coordinates$layout$track_extent[[side]] + plot$coordinates$layout$chromosome_gap, 2))
+      expect_identical(plot$layers[[index]]$data, d)
+      expect_true(inherits(plot$layers[[index]]$geom, "GeomPoint"))
+    }
+    extra <- track_table_row(r$coordinates$layout, "extra")
+    expect_equal(abs(extra$low_offset), r$coordinates$layout$chromosome_width / 2 + 12 + .2)
+    expect_identical(p$coordinates$layout, source)
+  }
 })
 
 test_that("horizontal marker sides are a deterministic rotation", {

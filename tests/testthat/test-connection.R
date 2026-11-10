@@ -1,5 +1,46 @@
 pair_kar <- data.frame(Chr = c('A', 'B', 'C'), Start = 0, End = c(100, 80, 60))
 
+test_that('circular links do not wrap across the centre after endpoint offsets', {
+  p <- ggideogram(pair_kar, orientation = 'circular', radius = 10,
+    tracks = list(inner = geom_track(side = 'inner', width = 3)))
+  d <- data.frame(a = 'A', b = 'B', p = 20, q = 30)
+  m <- ggplot2::aes(chr1 = a, chr2 = b, position1 = p, position2 = q)
+  expect_error(p + geom_chrlink(m, d, gap = c(1, 7)), 'reaches or crosses the circle center')
+  expect_no_warning(ggplot2::ggplotGrob(p + geom_chrlink(m, d, gap = c(1, 2))))
+})
+
+test_that("public links use translucent interval bands by default", {
+  base <- ggideogram(pair_kar[1:2, ], orientation = "horizontal")
+  d <- data.frame(a = "A", b = "B", lo = 10, hi = 20, left = 30, right = 40)
+  interval <- ggplot2::aes(chr1 = a, start1 = lo, end1 = hi,
+    chr2 = b, start2 = left, end2 = right)
+  layer <- function(plot) utils::tail(plot$layers, 1)[[1]]
+  band <- layer(base + geom_chrlink(interval, d))
+  expect_s3_class(band$geom, "GeomPolygon")
+  expect_equal(band$aes_params$alpha, 0.35)
+  expect_equal(band$aes_params$fill, ideogram_colour("synteny"))
+  expect_equal(unique(band$data$.pair_start1), 10)
+  expect_equal(unique(band$data$.pair_end2), 40)
+  styled <- layer(base + geom_chrlink(interval, d, alpha = 1, fill = "red"))
+  expect_equal(styled$aes_params$alpha, 1)
+  expect_equal(styled$aes_params$fill, "red")
+  mapped <- layer(base + geom_chrlink(ggplot2::aes(chr1 = a, start1 = lo, end1 = hi,
+    chr2 = b, start2 = left, end2 = right, fill = a, alpha = lo), d))
+  expect_null(mapped$aes_params$fill)
+  expect_null(mapped$aes_params$alpha)
+
+  nodes <- chr_nodes(data.frame(id = c("x", "y"), chr = c("A", "B"),
+    start = c(10, 30), end = c(20, 40)),
+    ggplot2::aes(id = id, chr = chr, start = start, end = end))
+  edges <- data.frame(a = "x", b = "y")
+  ids <- ggplot2::aes(from = a, to = b)
+  expect_s3_class(layer(base + geom_chrlink(ids, edges, nodes = nodes))$geom, "GeomPolygon")
+  points <- layer(base + geom_chrlink(ids, edges, nodes = nodes, type = "point"))
+  expect_s3_class(points$geom, "GeomSegment")
+  expect_equal(points$data$.pair_start1, 14.5)
+  expect_equal(points$data$.pair_start2, 34.5)
+})
+
 test_that('paired points use native segments and preserve both original positions', {
   d <- data.frame(Chr1 = c('A', 'A'), Pos1 = c(10, 25), Chr2 = c('B', 'A'), Pos2 = c(30, 75))
   for (orientation in c('vertical', 'horizontal')) {
@@ -30,19 +71,28 @@ test_that('synteny preserves closed widths and explicit reverse correspondence',
   d <- data.frame(Chr1 = 'A', Start1 = c(11, 40), End1 = c(20, 40),
     Chr2 = 'B', Start2 = c(31, 50), End2 = c(40, 50), Direction = c('+', '-'))
   for (orientation in c('vertical', 'horizontal')) {
-    p <- ggideogram(pair_kar, orientation = orientation) + geom_chr_synteny(data = d,
-      ggplot2::aes(chr1 = Chr1, start1 = Start1, end1 = End1,
-        chr2 = Chr2, start2 = Start2, end2 = End2, orientation = Direction, fill = Direction))
+    base <- ggideogram(pair_kar, orientation = orientation)
+    mapping <- ggplot2::aes(chr1 = Chr1, start1 = Start1, end1 = End1,
+      chr2 = Chr2, start2 = Start2, end2 = End2, orientation = Direction, fill = Direction)
+    p <- base + geom_chrlink(mapping, d)
     layer <- utils::tail(p$layers, 1)[[1]]
     expect_identical(class(layer$geom)[1], 'GeomPolygon')
     pairs <- layer$data[!duplicated(layer$data$.pair_id), , drop = FALSE]
-    expect_equal(as.integer(table(layer$data$.pair_id)), c(4L, 64L))
+    expect_equal(as.integer(table(layer$data$.pair_id)), c(4L, 4L))
     expect_equal(pairs$.pair_from2, c(30, 50))
     expect_equal(pairs$.pair_to2, c(40, 49))
     expect_equal(pairs$.pair_to1 - pairs$.pair_from1, c(10, 1))
-    expect_equal(pairs$.pair_curvature, c(0, 0.25))
+    expect_equal(pairs$.pair_curvature, c(0, 0))
     expect_equal(unique(layer$data$Start1), d$Start1)
     expect_no_error(ggplot2::ggplotGrob(p))
+    q <- base + geom_chrlink(mapping, d, curvature = 0.25, curve_points = 9)
+    curved <- utils::tail(q$layers, 1)[[1]]$data
+    expect_equal(as.integer(table(curved$.pair_id)), c(18L, 18L))
+    expect_equal(unique(curved$.pair_curvature), 0.25)
+    fields <- c(".pair_from1", ".pair_to1", ".pair_from2", ".pair_to2")
+    expect_equal(curved[!duplicated(curved$.pair_id), fields], pairs[fields],
+      ignore_attr = TRUE)
+    expect_no_error(ggplot2::ggplotGrob(q))
   }
 })
 

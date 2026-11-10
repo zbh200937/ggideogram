@@ -174,6 +174,7 @@ ggplot_add.ggideogram_gene_component <- function(object, plot, ...) {
   }
   if (!length(visible)) return(plot)
   backbone <- do.call(rbind, visible)
+  check_track_chromosomes(layout, object$track, backbone$.model_chr)
   blocks <- do.call(rbind, blocks)
   lane_count <- max(table(backbone$.model_chr))
   # Share one lane pitch across chromosomes in this track.

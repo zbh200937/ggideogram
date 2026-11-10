@@ -1,0 +1,154 @@
+text_space_fixture <- function(orientation, label = NULL, axis = FALSE, reverse = FALSE) {
+  k <- data.frame(Chr = c("A", "B"), Start = 0, End = c(100, 80))
+  d <- data.frame(Chr = rep(k$Chr, each = 3), Pos = rep(c(20, 40, 60), 2),
+    Value = rep(0:2, 2))
+  ggideogram(k, orientation = orientation, reverse_chr = if (reverse) k$Chr else character(),
+    tracks = list(signal = geom_track(
+    data = d, ggplot2::aes(chr = Chr, x = Pos, y = Value),
+    geom = ggplot2::geom_line(), label = label, axis = axis)))
+}
+
+test_that("removing track text restores the same space as a fresh construction", {
+  for (orientation in c("horizontal", "vertical", "circular")) {
+    p <- text_space_fixture(orientation, "A much longer track title",
+      list(position = "start", breaks = 0:2))
+    margin <- p$theme$plot.margin
+    q <- p + geom_track(track = "signal", label = NULL, axis = FALSE)
+    fresh <- text_space_fixture(orientation)
+    for (field in c("plot.margin", "legend.box.spacing")) {
+      expect_equal(grid::convertUnit(q$theme[[field]], "mm", valueOnly = TRUE),
+        grid::convertUnit(fresh$theme[[field]], "mm", valueOnly = TRUE))
+    }
+    for (field in c("plot.title", "plot.subtitle")) {
+      expect_equal(grid::convertUnit(q$theme[[field]]$margin, "mm", valueOnly = TRUE),
+        grid::convertUnit(fresh$theme[[field]]$margin, "mm", valueOnly = TRUE))
+    }
+    expect_identical(p$theme$plot.margin, margin)
+    expect_identical(q$coordinates$layout$data, p$coordinates$layout$data)
+  }
+})
+
+test_that("explicit theme spacing survives removal of automatic text space", {
+  p <- text_space_fixture("horizontal", "A much longer track title") +
+    ggplot2::theme(plot.margin = ggplot2::margin(12, 13, 14, 15, unit = "mm"),
+      plot.title = ggplot2::element_text(colour = "red",
+        margin = ggplot2::margin(1, 2, 18, 4, unit = "mm")))
+  q <- p + geom_track(track = "signal", label = NULL)
+  expect_equal(grid::convertUnit(q$theme$plot.margin, "mm", valueOnly = TRUE), c(12, 13, 14, 15))
+  expect_equal(grid::convertUnit(q$theme$plot.title$margin, "mm", valueOnly = TRUE), c(1, 2, 18, 4))
+  expect_identical(q$theme$plot.title$colour, "red")
+})
+
+test_that("track titles clear the rendered tick labels at either source endpoint", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  for (orientation in c("horizontal", "vertical")) for (reverse in c(FALSE, TRUE)) {
+    p <- text_space_fixture(orientation, "Signal",
+      list(position = if (reverse) "end" else "start", breaks = 0:2), reverse = reverse)
+    for (mm in list(c(120, 70), c(180, 120))) {
+      grid::pushViewport(grid::viewport(width = grid::unit(mm[1], "mm"),
+        height = grid::unit(mm[2], "mm")))
+      b <- ggplot2::ggplot_build(p)
+      draw <- function(index) {
+        layer <- b$plot$layers[[index]]
+        do.call(layer$geom$draw_panel, c(list(data = b$data[[index]],
+          panel_params = b$layout$panel_params[[1]], coord = b$layout$coord),
+          layer$computed_geom_params[intersect(names(layer$computed_geom_params), layer$geom$parameters())]))
+      }
+      title <- draw(which(vapply(p$layers, function(l)
+        !is.null(l$ideogram_track_title), logical(1))))
+      ticks <- draw(which(vapply(p$layers, function(l)
+        inherits(l$stat, "StatTrackAxis") && l$stat_params$axis_part == 3L, logical(1))))
+      dimension <- if (orientation == "horizontal") "width" else "height"
+      extent <- vapply(seq_along(ticks$label), function(i) {
+        g <- grid::textGrob(ticks$label[i], gp = ticks$gp)
+        grid::convertUnit(if (dimension == "width") grid::grobWidth(g) else
+          grid::grobHeight(g), "mm", valueOnly = TRUE)
+      }, numeric(1))
+      if (orientation == "horizontal") {
+        title_near <- grid::convertX(title$x, "mm", valueOnly = TRUE)
+        tick_far <- grid::convertX(ticks$x, "mm", valueOnly = TRUE) - extent
+        expect_lt(title_near, min(tick_far))
+      } else {
+        title_near <- grid::convertY(title$y, "mm", valueOnly = TRUE)
+        tick_far <- grid::convertY(ticks$y, "mm", valueOnly = TRUE) + extent
+        expect_gt(title_near, max(tick_far))
+      }
+      grid::popViewport()
+    }
+  }
+})
+
+test_that("track titles share their start edge even with different axis and label settings", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  for (orientation in c("horizontal", "vertical")) {
+    k <- data.frame(Chr = c("A", "B"), Start = 0, End = c(100, 80))
+    p <- ggideogram(k, orientation = orientation, ncol = 2, reverse_chr = "B",
+      tracks = list(
+        density = geom_track(chr = "A", limits = c(0, 1000), label = "Density",
+          axis = list(position = "start", gap = 0.5, breaks = c(0, 1000), size = 2)),
+        coverage = geom_track(chr = "B", limits = c(0, 1), axis = TRUE,
+          label = list(text = "Coverage", size = 3.1, gap = 0.75))))
+    q <- p + geom_track(track = "density", axis = list(gap = 1.2))
+    for (plot in list(p, q)) {
+      built <- ggplot2::ggplot_build(plot)
+      titles <- which(vapply(plot$layers, function(layer)
+        !is.null(layer$ideogram_track_title), logical(1)))
+      positions <- vapply(titles, function(i) {
+        layer <- built$plot$layers[[i]]
+        params <- layer$computed_geom_params
+        grob <- do.call(layer$geom$draw_panel, c(list(data = built$data[[i]],
+          panel_params = built$layout$panel_params[[1]], coord = built$layout$coord),
+          params[intersect(names(params), layer$geom$parameters())]))
+        if (orientation == "horizontal") grid::convertX(grob$x, "mm", TRUE)
+        else grid::convertY(grob$y, "mm", TRUE)
+      }, numeric(1))
+      expect_length(positions, 2)
+      expect_equal(unname(positions[1]), unname(positions[2]))
+    }
+  }
+})
+
+test_that("adding an axis does not mutate the source plot's name spacing", {
+  p <- text_space_fixture("horizontal", "Signal")
+  name <- which(vapply(p$layers, function(l) inherits(l$geom, "GeomChromosomeName"), logical(1)))
+  before <- p$layers[[name]]$geom_params
+  q <- p + geom_track_axis("signal", position = "start", breaks = 0:2)
+  expect_identical(p$layers[[name]]$geom_params, before)
+  expect_no_warning(ggplot2::ggplotGrob(q))
+})
+
+test_that("adding a selected bp axis preserves an unrelated track title's space", {
+  p <- text_space_fixture("horizontal", "Signal", list(position = "start", breaks = 0:2))
+  title_space <- function(plot) {
+    title <- Filter(function(layer) !is.null(layer$ideogram_track_title), plot$layers)[[1]]
+    title$geom_params$text_clearance
+  }
+  q <- p + geom_chr(chr = "B", component = "axis", side = "right", breaks = c(0, 80))
+  expect_equal(title_space(q), title_space(p))
+  expect_no_warning(ggplot2::ggplotGrob(q))
+})
+
+test_that("a centered title near the panel edge remains inside the exported image", {
+  skip_if_not_installed("ragg")
+  p <- ggideogram(data.frame(Chr = c("A", "B"), Start = 0, End = 100),
+    show_names = FALSE, tracks = list(
+      signal = geom_track(side = "left", width = 1,
+        label = list(text = "Transcriptional abundance", colour = "#CC00CC")),
+      annotations = geom_track(width = 25)))
+  for (width in c(100, 160)) {
+    capture <- ragg::agg_capture(width = width, height = 100,
+      units = "mm", res = 100, background = "white")
+    print(p)
+    pixels <- capture()
+    grDevices::dev.off()
+    rgb <- grDevices::col2rgb(pixels)
+    title <- matrix(rgb[1, ] > 150 & rgb[3, ] > 150 & rgb[2, ] < 100,
+      nrow = nrow(pixels))
+    columns <- which(title, arr.ind = TRUE)[, "col"]
+    expect_gt(length(columns), 0)
+    expect_gt(min(columns), 1)
+    expect_lt(max(columns), ncol(pixels))
+  }
+})

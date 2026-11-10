@@ -179,9 +179,11 @@ test_that('circular locus text stays in its sector with nodes, an inset and late
         limits = limits, data = d,
         ggplot2::aes(chr = Key, x = Mid, y = Value, colour = Genome),
         layers = list(ggplot2::geom_line(linewidth = .35), ggplot2::geom_point(size = 1.8))),
-        child_space = geom_track(side = 'right', width = 20))) +
+        # At this device size a 24 x 22 mm rectangle needs clearance at its
+        # corners as well as at the radial anchor.
+        child_space = geom_track(side = 'right', width = 30))) +
       geom_chrlink(data = edges, nodes = nodes, ggplot2::aes(from = From, to = To),
-        side1 = 'right', side2 = 'right', gap = 0, curvature = 0, linewidth = .25) +
+        type = 'point', side1 = 'right', side2 = 'right', gap = 0, curvature = 0, linewidth = .25) +
       geom_locus(data = d, ggplot2::aes(chr = Key, position = Mid),
         side = 'right', gap = 0, size = 1.4) +
       geom_locus(data = d[1, ], ggplot2::aes(chr = Key, position = Mid),

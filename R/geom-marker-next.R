@@ -177,25 +177,11 @@ ggplot_add.LayerChrMarker <- function(object, plot, ...) {
   # An untracked marker is centred in a symmetric lane: `gap` from the
   # body edge to its centre and the same distance beyond the centre.
   extent <- 2 * spec$gap
-  layout$marker_extent[[spec$side]] <- max(
-    layout$marker_extent[[spec$side]], extent)
-  point <- offset_chr_points(layout, layout$chrom$.chr,
-    list(x = layout$chrom$.axis_start_x, y = layout$chrom$.axis_start_y),
-    side = spec$side, distance = layout$chromosome_width / 2 + extent)
-  layout <- include_ideogram_coordinates(layout, point$x, point$y)
-  plot <- update_plot_ideogram_layout(plot, layout)
-  axis_layers <- list()
-  for (index in seq_along(plot$layers)) {
-    layer <- plot$layers[[index]]
-    if (is.null(layer$ideogram_axis_spec)) next
-    replacement <- do.call(chromosome_axis_layers,
-      c(list(layout = layout), layer$ideogram_axis_spec))
-    plot$layers[[index]] <- replacement[[layer$ideogram_axis_part]]
-    for (field in c("ideogram_base", "ideogram_scope", "ideogram_scope_slot",
-                    "ideogram_aesthetic_names", "ideogram_recipe_id", "ideogram_recipe")) {
-      plot$layers[[index]][[field]] <- layer[[field]]
-    }
-    axis_layers <- c(axis_layers, list(plot$layers[[index]]))
-  }
-  reserve_chromosome_axis_space(plot, axis_layers)
+  if (extent <= layout$marker_extent[[spec$side]]) return(plot)
+  base <- layout$base_spec
+  base$tracks <- base$tracks %||% track_layout()
+  space <- layout$marker_extent
+  space[[spec$side]] <- extent
+  attr(base$tracks, "marker_extent") <- space
+  rebuild_ideogram(plot, base)
 }

@@ -172,6 +172,7 @@ marker_track_offsets <- function(layout, track_id, data = NULL) {
     stopf("One marker layer can target only one declared track.")
   }
   spec <- track_table_row(layout, track_id[1])
+  check_track_chromosomes(layout, track_id[1], data$ideogram_chr)
   use_inner_edge <- !is.null(data) &&
     "ideogram_inset_track_edge" %in% names(data) &&
     all(data$ideogram_inset_track_edge %in% TRUE)

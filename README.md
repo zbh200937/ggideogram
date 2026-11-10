@@ -85,7 +85,9 @@ p_circular
 `side = "left"` means left in a vertical layout, above in a horizontal layout, and inward in a circular layout; `"right"` selects the opposite side. Circular layouts also accept `"inner"` / `"outer"`. Use `"overlay"` for tracks inside chromosome bodies. Track `width` and `gap` are measured in chromosome body widths; native point sizes, text sizes and line widths retain ggplot2's physical sizing.
 
 Chromosome names align with the body by default; `name_align = "tracks"` centers
-endpoint names across the body and its tracks. For horizontal chromosome stacks,
+endpoint names across the body and its tracks. At a shared start, chromosome
+and track names align along their plot-facing edge when the label boxes fit.
+For horizontal chromosome stacks,
 use `chromosome_gap` to separate chromosomes; `row_gap` separates groups created
 by wrapping with `ncol`.
 
@@ -103,6 +105,10 @@ compact, balanced rows; the default row gap is 6 layout units.
 
 Local bp axes choose round positions within the original genomic range. Use
 `axis_n` to reduce their density or `axis_breaks` to supply exact positions.
+On narrow horizontal plots, try `axis_angle = 45` for diagonal tick labels.
+Automatic breaks hide labels that collide at the output size. For explicit
+breaks, set `axis_check_overlap = TRUE` to hide colliding labels while
+retaining their tick marks.
 Complete themes such as `theme_classic()` preserve the chromosome axes without
 displaying the internal layout coordinates.
 
@@ -114,9 +120,18 @@ Ordinary beside tracks default to a width of 3 chromosome body widths; gene-mode
 
 For example, `p + geom_track(track = "density", width = 4, gap = 0.5)` adjusts space, `label = list(size = 2.8)` changes the title size, and `axis = list(n = 2)` adjusts the number of value-axis ticks.
 
-Track tick text defaults to 2.2 mm, and `theme_ideogram()` provides a 6 mm
-legend gap. Circular plots may reserve more space for outward text. Both
-settings can be adjusted independently of track geometry:
+Set `width = NULL` or `gap = NULL` to restore automatic sizing. Automatic widths follow the side and the track's contents; explicit dimensions stay in effect when moving a track. When moving a track inside the chromosome, reset an explicit beside gap with `gap = NULL` or `gap = 0`.
+
+`ggideogram(min_gap = 0.2)` sets a minimum spacing for beside tracks. Set
+`min_gap = 0` and `geom_track(gap = 0)` to allow tracks to touch.
+The bp axis uses its own `axis_gap = 0.3` beyond the outermost same-side track
+or marker lane. Each track's value axis leaves `axis = list(gap = 0.2)`
+at its endpoint by default. These distances are in layout units.
+
+Track tick text defaults to one third of the default bp tick size. Track titles
+at aligned starts in a linear plot share an edge and clear the value axes.
+`theme_ideogram()` provides a 6 mm legend gap and can reserve more space for
+text below the panel. Axis text and legend spacing can be adjusted independently:
 
 ```r
 p + geom_track(track = "density", axis = list(size = 2.2, label_gap = 0.35)) +
@@ -133,6 +148,8 @@ p + geom_track(track = "density", axis = list(size = 2.2, label_gap = 0.35)) +
 | Chromosome arrangement | `ggideogram(orientation, ncol, reverse_chr)` | Display direction and grid arrangement |
 | Plot proportions | `layout_aspect`, `max_chr_length`, `chromosome_gap`, `row_gap`; circular `radius`, `opening_angle` | Optional fixed panel width-to-height ratio and layout dimensions; opening angle in degrees |
 | Track allocation | `geom_track(width, gap, side)` | Chromosome body widths |
+| Axis placement | `ggideogram(axis_gap)`, `geom_track(axis = list(gap = ...))` | Distance to the bp axis or the track's value axis in body-width units |
+| BP tick labels | `axis_n`, `axis_angle`, `axis_check_overlap` | Target intervals, label angle in degrees, overlap handling |
 | Quantitative comparison | `limits`, `value_scale`, `transform`, `reverse` | Raw value range, sharing, transformation and display direction |
 | Track title / ticks | `label = list(...)`, `axis = list(...)` | Text size in mm; title/label gaps in em; tick length in mm |
 | Marks and lines | Native `geom_*(size, linewidth, alpha, ...)` | Standard ggplot2 styling |
@@ -234,17 +251,25 @@ blocks <- read.delim(system.file("extdata",
 blocks <- blocks[blocks$Chr1 != blocks$Chr2, ]
 
 p_links <- ggideogram(arabidopsis, orientation = "circular") +
-  geom_chrlink(type = "interval", data = blocks,
+  geom_chrlink(data = blocks,
     mapping = aes(chr1 = Chr1, start1 = Start1, end1 = End1,
       chr2 = Chr2, start2 = Start2, end2 = End2,
-      orientation = Orientation, fill = Orientation),
-    alpha = 0.4, colour = NA) +
+      orientation = Orientation, fill = Orientation)) +
   scale_fill_manual(values = c("+" = "#4477AA", "-" = "#CC6677"),
     name = "Block order")
 p_links
 ```
 
-`type = "point"` connects two loci; `type = "interval"` preserves interval widths at both ends. You can also build a node table with unique IDs using `chr_nodes()`, then connect nodes through `aes(from, to)`. For multiple genomes, `chr_key()` distinguishes genome, chromosome and assembly identities; see the [multi-genome examples](inst/examples/multi-genome-gallery.R).
+`geom_chrlink()` draws translucent bands from interval endpoints and lines from
+point endpoints. Across chromosomes, linear layouts use straight bands and
+circular layouts use curved bands. Set `curvature = 0` for straight edges or
+`curvature = 0.25` for a consistent curve setting across a set of bands.
+For dense gene-pair data, use the genomic bounds of known
+collinear blocks to show one band per block. Node tables from `chr_nodes()`
+use the same default through `aes(from, to)`. Specify `type = "point"` to
+connect interval nodes by their midpoints. For multiple genomes, `chr_key()`
+distinguishes genome, chromosome and assembly identities. See the
+[multi-genome examples](inst/examples/multi-genome-gallery.R).
 
 ## Insets and plot composition
 
@@ -372,6 +397,14 @@ Connection endpoints face their partner independently, including both sides of
 the middle chromosome. Automatic annotations go outside the comparison, with
 middle-chromosome text represented by small diamonds. Explicit `side` or `track`
 keeps the requested annotation placement.
+
+For multiple tracks, assign `chr` explicitly and place tracks on the outside
+when possible: `side = "left"` above the top chromosome and `side = "right"`
+below the bottom chromosome. Leave `geom_chrlink()` endpoint sides and `gap`
+at their defaults. If a track belongs between chromosomes, the connection
+starts beyond that track. Same-side tracks on different chromosomes can share
+an offset; tracks on the same chromosome keep separate bands. Layers meant
+to overlap belong in one named track. See the [rice comparison](inst/examples/combined-gallery.R).
 
 Chromosome windows use their actual bp lengths with the default global scaling.
 With `axis = TRUE`, two chromosomes have separate original genomic axes on

@@ -84,7 +84,8 @@ test_that('small openings report capacity without moving titles across tracks', 
   expect_match(r$warnings, 'exceed the closing gap')
   expect_false(r$state$cache$fits)
   expect_equal(z$label, c('Count', '0', '1', 'Cover', '0', '1'))
-  expect_equal(z$size, c(2.8, 2.2, 2.2, 2.8, 2.2, 2.2))
+  expect_equal(z$size, rep(c(ideogram_text_size("track"),
+    rep(ideogram_text_size("bp") / 3, 2)), 2))
   expect_equal((z$x - z$original_x) * -z$ny + (z$y - z$original_y) * z$nx,
     rep(0, nrow(z)), tolerance = 1e-10)
   expect_true(all(z$shift <= 2 * z$size))
@@ -107,4 +108,19 @@ test_that('rotated openings and track replay preserve original anchors', {
   z <- after$positions
   expect_equal((z$x - z$original_x) * -z$ny + (z$y - z$original_y) * z$nx,
     rep(0, nrow(z)), tolerance = 1e-10)
+})
+
+test_that('blank circular axis labels leave their ticks without occupying gap space', {
+  skip_if_not(capabilities('cairo'))
+  base <- circular_gap_test_plot(opening_angle = 70)
+  for (labels in list(c('', '1'), c(NA_character_, ''), NULL)) {
+    p <- base + geom_track(track = 'count', axis = list(breaks = c(0, 1), labels = labels))
+    r <- draw_circular_gap_test(p, 160)
+    expect_length(r$warnings, 0)
+    ticks <- which(vapply(p$layers, function(layer)
+      identical(layer$ideogram_scope, 'count') && inherits(layer$geom, 'GeomIdeogramTick'), logical(1)))
+    expect_equal(nrow(r$built$data[[ticks]]), 2)
+    expect_equal(r$positions$label[r$positions$track == 'count' & !r$positions$title],
+      as.character(labels[!is.na(labels) & nzchar(labels)]))
+  }
 })

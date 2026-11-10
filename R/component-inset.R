@@ -47,10 +47,18 @@ GeomChrInset <- ggplot2::ggproto(
     if (!nrow(coordinates)) return(grid::nullGrob())
     justification <- inset_justification(
       coord, coordinates, placement, hjust, vjust)
-    check_inset_overlap(
-      coord, panel_params, coordinates, width, height,
-      justification$hjust, justification$vjust,
-      placement = placement, action = overlap)
+    entry <- c(list(id = coordinates$ideogram_inset_layer[[1]],
+      data = coordinates, width = width, height = height,
+      placement = placement, action = overlap), justification)
+    registry <- panel_params$ideogram_insets
+    index <- which(vapply(registry$entries, function(x) identical(x$id, entry$id), logical(1)))
+    if (!length(index)) index <- length(registry$entries) + 1L
+    registry$entries[[index]] <- entry
+    previous <- utils::head(registry$entries, index - 1L)
+    if (inset_uses_npc(entry)) {
+      check_inset_overlap(coord, panel_params, entry,
+        Filter(inset_uses_npc, previous))
+    }
 
     children <- lapply(seq_len(nrow(coordinates)), function(index) {
       child <- coordinates$plot[[index]]
@@ -76,9 +84,39 @@ GeomChrInset <- ggplot2::ggproto(
         )
       )
     })
-    do.call(grid::grobTree, children)
+    grid::gTree(children = do.call(grid::gList, children), entry = entry,
+      registry = registry, index = index, coord = coord, panel = panel_params,
+      cl = "chr_inset_render")
   }
 )
+
+inset_uses_npc <- function(entry) {
+  grid::unitType(entry$width) == "npc" && grid::unitType(entry$height) == "npc"
+}
+
+inset_rectangle <- function(entry, physical = FALSE) {
+  width <- if (physical) grid::convertWidth(entry$width, "npc", TRUE) else as.numeric(entry$width)
+  height <- if (physical) grid::convertHeight(entry$height, "npc", TRUE) else as.numeric(entry$height)
+  data.frame(left = entry$data$x - entry$hjust * width,
+    right = entry$data$x + (1 - entry$hjust) * width,
+    bottom = entry$data$y - entry$vjust * height,
+    top = entry$data$y + (1 - entry$vjust) * height)
+}
+
+#' @method makeContent chr_inset_render
+#' @importFrom grid makeContent
+#' @export
+makeContent.chr_inset_render <- function(x) {
+  previous <- utils::head(x$registry$entries, x$index - 1L)
+  if (!inset_uses_npc(x$entry)) {
+    check_inset_overlap(x$coord, x$panel, x$entry, previous, physical = TRUE)
+  } else {
+    physical <- Filter(function(entry) !inset_uses_npc(entry), previous)
+    if (length(physical)) check_inset_overlap(x$coord, x$panel, x$entry,
+      physical, physical = TRUE, check_regions = FALSE)
+  }
+  x
+}
 
 #' @noRd
 geom_chr_inset <- function(
@@ -189,32 +227,17 @@ inset_justification <- function(coord, data, placement, hjust, vjust) {
   )
 }
 
-check_inset_overlap <- function(
-    coord, panel_params, data, width, height, hjust, vjust,
-    placement, action) {
-  if (action == "allow" || grid::unitType(width) != "npc" ||
-      grid::unitType(height) != "npc") {
-    return(invisible(FALSE))
-  }
-  width <- as.numeric(width)
-  height <- as.numeric(height)
-  rectangle <- data.frame(
-    left = data$x - hjust * width,
-    right = data$x + (1 - hjust) * width,
-    bottom = data$y - vjust * height,
-    top = data$y + (1 - vjust) * height
-  )
+check_inset_overlap <- function(coord, panel_params, entry, previous,
+    physical = FALSE, check_regions = TRUE) {
+  if (entry$action == "allow") return(invisible(FALSE))
+  rectangle <- inset_rectangle(entry, physical)
   collision <- character()
-  registry <- panel_params$ideogram_insets
-  entries <- if (is.environment(registry)) registry$entries else NULL
-  layer_id <- data$ideogram_inset_layer[[1]]
-  # Replace this layer's record when an already-built plot is rendered again.
-  entries <- Filter(function(entry) !identical(entry$id, layer_id), entries)
-  previous <- do.call(rbind, lapply(entries, `[[`, "rectangle"))
+  previous <- do.call(rbind, lapply(previous, inset_rectangle, physical = physical))
   current <- rectangle
   rectangle <- rbind(previous, current)
   if (nrow(rectangle) > 1L) {
     pairs <- utils::combn(seq_len(nrow(rectangle)), 2)
+    pairs <- pairs[, pairs[2, ] > nrow(rectangle) - nrow(current), drop = FALSE]
     overlap <- apply(pairs, 2, function(pair) {
       first <- rectangle[pair[1], ]
       second <- rectangle[pair[2], ]
@@ -229,11 +252,8 @@ check_inset_overlap <- function(
     }
   }
 
-  if (is.environment(registry)) {
-    registry$entries <- c(entries, list(list(id = layer_id, rectangle = current)))
-  }
   rectangle <- current
-  if (placement == "beside" && is_circular_layout(coord$layout)) {
+  if (check_regions && entry$placement == "beside" && is_circular_layout(coord$layout)) {
     body <- chromosome_polygon_data(coord$layout, coord$layout$curve_points)
     body <- coord$transform(body, panel_params)
     polygons <- split(body, body$.chr)
@@ -245,7 +265,7 @@ check_inset_overlap <- function(
         break
       }
     }
-  } else if (placement == "beside") {
+  } else if (check_regions && entry$placement == "beside") {
     body_min <- coord$transform(
       data.frame(x = coord$layout$chrom$.x_min,
                  y = coord$layout$chrom$.y_min), panel_params)
@@ -266,13 +286,29 @@ check_inset_overlap <- function(
       }
     }
   }
+  if (check_regions && entry$placement == "beside") {
+    tracks <- coord$layout$tracks
+    tracks <- tracks[tracks$side != "overlay" &
+      !tracks$id %in% entry$data$ideogram_marker_track, , drop = FALSE]
+    for (track in tracks$id) {
+      spec <- track_table_row(coord$layout, track)
+      for (chr in track_chromosomes(coord$layout, track)) {
+        region <- track_column_region(coord$layout, chr, spec)
+        polygon <- ggplot2::CoordCartesian$transform(region$polygon, panel_params)
+        hit <- vapply(seq_len(nrow(rectangle)), function(i)
+          rectangle_polygon_overlap(rectangle[i, ], polygon), logical(1))
+        if (any(hit)) collision <- c(collision,
+          sprintf("inset %d overlaps track %s on chromosome %s", which(hit)[1], track, chr))
+      }
+    }
+  }
   if (!length(collision)) return(invisible(FALSE))
 
   message <- paste0(
     "Inset viewport collision: ", paste(collision, collapse = "; "), ".\n",
-    "  Declare a wider inset track, reduce the `npc` size, or set ",
+    "  Declare a wider inset track, reduce the viewport size, or set ",
     "`overlap = \"allow\"` intentionally.")
-  if (action == "error") stop(message, call. = FALSE)
+  if (entry$action == "error") stop(message, call. = FALSE)
   warning(message, call. = FALSE)
   invisible(TRUE)
 }

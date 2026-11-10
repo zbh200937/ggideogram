@@ -26,7 +26,9 @@
 #' @param chromosome_gap Clear space between chromosome columns, in body-width
 #'   units. `NULL` uses 8 when constructing a vertical plot with a bp axis,
 #'   9 for linked horizontal two/three-chromosome comparisons, and 3 otherwise.
-#'   An explicit value is retained.
+#'   The gap may increase to fit a facing bp axis.
+#' @param min_gap Minimum spacing for beside tracks, in layout units. Set to
+#'   zero to use each track's declared gap directly.
 #' @param start_angle Circular starting angle, clockwise from the top, in degrees.
 #'   `NULL` keeps the closing gap above and to the right: its left boundary is
 #'   the vertical radius at 12 o'clock, for either arrangement direction.
@@ -49,6 +51,8 @@
 #'   outer label ring.
 #' @param name_align Linear endpoint names align with the chromosome `"body"`
 #'   by default; `"tracks"` centers them across the body and its tracks.
+#'   Names and track titles at a shared start align at their near edge when
+#'   the panel has enough space for both.
 #' @param axis `FALSE`, `TRUE`, or a chromosome vector selecting local base-pair
 #'   axes.
 #' @param axis_side Axis side; `"auto"` uses left for linear plots and outer
@@ -61,12 +65,11 @@
 #' @param link_layout Automatically center the shared chromosome of a
 #'   three-chromosome comparison, or `"input"` to retain input order.
 #'   Explicit `chr` ordering takes precedence.
-#' @param axis_width Layout space reserved beyond an axis spine for connection
-#'   clearance in local horizontal comparisons, in body-width units.
+#' @param axis_width Layout space reserved beyond a bp axis spine where it
+#'   faces a neighboring chromosome or a local connection corridor.
 #' @param axis_breaks Explicit breaks, a function receiving `c(start, end)`, or
 #'   `NULL` for round automatic breaks in the original coordinate range.
-#'   Automatic labels that collide on the output device are suppressed.
-#'   Explicit breaks retain all labels. Circular automatic breaks omit the
+#'   Circular automatic breaks omit the
 #'   terminal endpoint to keep adjacent seam labels separate.
 #' @param axis_n Maximum target automatic break intervals.
 #' @param axis_units Label unit.
@@ -76,6 +79,10 @@
 #'   into this clearance.
 #' @param axis_tick_length Tick length in millimetres.
 #' @param axis_label_gap Axis-label clearance beyond the tick tip, in em.
+#' @param axis_angle Rotation of bp tick labels in degrees from horizontal.
+#' @param axis_check_overlap Whether to omit overlapping bp tick labels while
+#'   retaining the ticks. `NULL` checks automatic breaks and keeps labels for
+#'   explicitly supplied breaks.
 #' @param axis_size,axis_colour,axis_linewidth Axis text size, colour and line
 #'   width in ordinary ggplot2 units.
 #' @param cytoband_scheme,cytoband_palette,cytoband_bleach Cytoband palette
@@ -142,7 +149,8 @@ ggideogram <- function(
     base_family = "",
     chr = NULL,
     name_align = c("body", "tracks"),
-    link_layout = c("auto", "input"), axis_width = 4, layout_aspect = NULL) {
+    link_layout = c("auto", "input"), axis_width = 4, layout_aspect = NULL,
+    min_gap = 0.2, axis_angle = 0, axis_check_overlap = NULL) {
   orientation <- match.arg(orientation)
   scale_length <- match.arg(scale_length)
   order_by <- match.arg(order_by)
@@ -220,15 +228,28 @@ ggideogram <- function(
     order_by = order_by, genome_order = genome_order,
     homolog_order = homolog_order, reverse_chr = reverse_chr,
     radius = radius, start_angle = start_angle, gap_angle = gap_angle,
-    opening_angle = opening_angle, clockwise = clockwise
+    opening_angle = opening_angle, clockwise = clockwise, min_gap = min_gap
   )
   layout_for <- function(columns = ncol, length = max_chr_length %||% 40) {
     args <- layout_args
     args$ncol <- columns
     args$max_chr_length <- length
     result <- do.call(ideogram_layout, args)
+    if (orientation != "circular" && !is_microsynteny(result) && result$ncol > 1L &&
+        !identical(axis, FALSE)) {
+      chr <- result$chrom
+      step <- if (axis_side == "right") 1L else -1L
+      facing <- paste(chr$.row, chr$.col + step) %in% paste(chr$.row, chr$.col)
+      selected <- isTRUE(axis) | chr$.chr %in% axis
+      required <- axis_gap + axis_width
+      if (any(selected & facing) && result$chromosome_gap < required) {
+        args$chromosome_gap <- required
+        result <- do.call(ideogram_layout, args)
+      }
+    }
     result$base_spec <- base_spec
     result$data <- semantic
+    result$marker_extent <- attr(tracks, "marker_extent")
     result$microsynteny <- is_microsynteny(result)
     if (result$microsynteny) result <- pack_microsynteny(result)
     result
@@ -265,7 +286,7 @@ ggideogram <- function(
     labels = TRUE, gap = axis_gap, tick_length = axis_tick_length,
     label_gap = axis_label_gap, size = axis_size,
     family = base_family, colour = axis_colour,
-    linewidth = axis_linewidth
+    linewidth = axis_linewidth, angle = axis_angle, check_overlap = axis_check_overlap
   )
 
   for (i in seq_along(layers)) layers[[i]]$ideogram_base <- TRUE

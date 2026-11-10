@@ -58,7 +58,10 @@ ggideogram(
   name_align = c("body", "tracks"),
   link_layout = c("auto", "input"),
   axis_width = 4,
-  layout_aspect = NULL
+  layout_aspect = NULL,
+  min_gap = 0.2,
+  axis_angle = 0,
+  axis_check_overlap = NULL
 )
 }
 \arguments{
@@ -77,7 +80,7 @@ grouped layouts retain their natural arrangement.}
 \item{chromosome_gap}{Clear space between chromosome columns, in body-width
 units. \code{NULL} uses 8 when constructing a vertical plot with a bp axis,
 9 for linked horizontal two/three-chromosome comparisons, and 3 otherwise.
-An explicit value is retained.}
+The gap may increase to fit a facing bp axis.}
 
 \item{max_chr_length}{Display length of the longest chromosome in layout
 units. NULL uses 40.}
@@ -124,8 +127,7 @@ correspond to left/right.}
 
 \item{axis_breaks}{Explicit breaks, a function receiving \code{c(start, end)}, or
 \code{NULL} for round automatic breaks in the original coordinate range.
-Automatic labels that collide on the output device are suppressed.
-Explicit breaks retain all labels. Circular automatic breaks omit the
+Circular automatic breaks omit the
 terminal endpoint to keep adjacent seam labels separate.}
 
 \item{axis_n}{Maximum target automatic break intervals.}
@@ -141,6 +143,12 @@ into this clearance.}
 
 \item{axis_label_gap}{Axis-label clearance beyond the tick tip, in em.}
 
+\item{axis_angle}{Rotation of bp tick labels in degrees from horizontal.}
+
+\item{axis_check_overlap}{Whether to omit overlapping bp tick labels while
+retaining the ticks. \code{NULL} checks automatic breaks and keeps labels for
+explicitly supplied breaks.}
+
 \item{axis_size, axis_colour, axis_linewidth}{Axis text size, colour and line
 width in ordinary ggplot2 units.}
 
@@ -154,19 +162,24 @@ controls passed to \code{\link[=cytoband_colours]{cytoband_colours()}}.}
 \item{chr}{Optional chromosome identifiers to select, in display order.}
 
 \item{name_align}{Linear endpoint names align with the chromosome \code{"body"}
-by default; \code{"tracks"} centers them across the body and its tracks.}
+by default; \code{"tracks"} centers them across the body and its tracks.
+Names and track titles at a shared start align at their near edge when
+the panel has enough space for both.}
 
 \item{link_layout}{Automatically center the shared chromosome of a
 three-chromosome comparison, or \code{"input"} to retain input order.
 Explicit \code{chr} ordering takes precedence.}
 
-\item{axis_width}{Layout space reserved beyond an axis spine for connection
-clearance in local horizontal comparisons, in body-width units.}
+\item{axis_width}{Layout space reserved beyond a bp axis spine where it
+faces a neighboring chromosome or a local connection corridor.}
 
 \item{layout_aspect}{Linear panel width divided by height. NULL uses the
 actual available panel in standalone plots, compositions and insets.
 A number explicitly fixes this ratio and also guides automatic row
 selection. Circular plots always preserve equal coordinate units.}
+
+\item{min_gap}{Minimum spacing for beside tracks, in layout units. Set to
+zero to use each track's declared gap directly.}
 }
 \value{
 A standard ggplot object whose coordinate object owns the single

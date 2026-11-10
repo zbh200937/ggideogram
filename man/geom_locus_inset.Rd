@@ -20,7 +20,10 @@ to "beside", side to "right" (outer for circles), gap to 0.25 body widths,
 clip to "on", overlap to "error". Beside plots attach their inner edge
 to the true anchor. Map position or 1-based closed start/end (midpoint
 \code{(start - 1 + end) / 2}) and, without plot, a plot
-list-column. hjust/vjust can override placement-aware justification.}
+list-column. hjust/vjust can override placement-aware justification.
+Collision checks cover other insets and, for beside placement, chromosome
+bodies and other declared tracks. Physical sizes are checked when drawn in
+the final host panel; changing output size can therefore reveal a collision.}
 }
 \value{
 An additive positioned-plot component.

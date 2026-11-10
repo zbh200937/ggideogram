@@ -59,18 +59,20 @@ test_that("endpoint names align with bodies by default and tracks by request", {
     expect_equal(name_data(p)[[axis]], g[[paste0(".axis_start_", axis)]])
     q <- ggideogram(k, orientation = orientation, name_align = "tracks",
       tracks = list(labels = geom_track(side = "right", width = 16, gap = 0)))
-    expect_equal(abs(name_data(q)[[axis]] - name_data(p)[[axis]]), rep(8, 2))
+    expect_equal(abs(name_data(q)[[axis]] - name_data(p)[[axis]]), rep(8.1, 2))
   }
 })
 
-test_that("vertical bp axes get default space and retain explicit spacing", {
+test_that("vertical bp axes reserve room in narrow chromosome gaps", {
   k <- data.frame(Chr = c("A", "B", "C"), Start = 0, End = c(100, 90, 80))
   base <- ggideogram(k)
   p <- ggideogram(k, axis = TRUE)
   expect_equal(ideogram_plot_layout(base)$chromosome_gap, 3)
   expect_equal(ideogram_plot_layout(p)$chromosome_gap, 8)
   explicit <- ggideogram(k, axis = TRUE, chromosome_gap = 4)
-  expect_equal(ideogram_plot_layout(explicit)$chromosome_gap, 4)
+  expect_equal(ideogram_plot_layout(explicit)$chromosome_gap, 4.3)
+  tight <- ggideogram(k, axis = TRUE, chromosome_gap = 4, min_gap = 0)
+  expect_equal(ideogram_plot_layout(tight)$chromosome_gap, 4.3)
   updated <- p + geom_track(track = "signal")
   expect_equal(ideogram_plot_layout(updated)$chromosome_gap, 8)
 })
@@ -116,7 +118,8 @@ test_that("track text inherits font family and rebuilt axes keep their margins",
       expect_true(all(vapply(text, function(x) identical(x$aes_params$family, "serif"), logical(1))))
       axes <- Filter(function(x) grepl("^axis:", x$ideogram_scope_slot %||% ""), text)
       expect_gt(length(axes), 0)
-      expect_true(all(vapply(axes, function(x) identical(x$aes_params$size, 2.2), logical(1))))
+      expect_true(all(vapply(axes, function(x)
+        identical(x$aes_params$size, ideogram_text_size("bp") / 3), logical(1))))
       expect_gte(grid::convertUnit(plot$theme$legend.box.spacing, "mm", valueOnly = TRUE), 6)
       if (orientation == "horizontal") {
         axis <- Filter(function(x) inherits(x$stat, "StatTrackAxis"), text)[[1]]

@@ -1,5 +1,18 @@
 # Value-axis components in declared chromosome tracks.
 
+track_axis_gap <- function(gap = NULL) {
+  gap <- gap %||% 0.2
+  check_nonnegative_layout(gap, "axis gap")
+  gap
+}
+
+circular_gap_axis_arc <- function(layout, gap) {
+  circle <- layout$circular
+  room <- circle$opening_angle * pi / 180 * circle$radius
+  direction <- if (circle$clockwise) 1 else -1
+  circle$label_gap$left_arc + direction * min(gap, room / 2)
+}
+
 #' @noRd
 geom_track_axis <- function(
     track,
@@ -13,7 +26,7 @@ geom_track_axis <- function(
     size = ideogram_text_size("value"),
     colour = ideogram_colour("axis"),
     linewidth = ideogram_linewidth("axis"),
-    family = NULL) {
+    family = NULL, gap = NULL) {
   position <- match.arg(position)
   if (!isTRUE(chr) && (!is.character(chr) || !length(chr))) {
     stopf("`chr` must be `TRUE` or a non-empty chromosome vector.")
@@ -31,7 +44,7 @@ geom_track_axis <- function(
       track = track, chr = chr, position = position, breaks = breaks,
       n = n, labels = labels, tick_length = tick_length,
       label_gap = label_gap, size = size, colour = colour,
-      linewidth = linewidth, family = family
+      linewidth = linewidth, family = family, gap = track_axis_gap(gap)
     ),
     class = "ggideogram_track_axis_component"
   )
@@ -46,7 +59,7 @@ ggplot_add.ggideogram_track_axis_component <- function(
   object_name <- ggplot_add_object_name(..., fallback = "track_axis")
   track_table_row(layout, object$track)
   chromosomes <- if (isTRUE(object$chr)) {
-    layout$chrom$.chr
+    track_chromosomes(layout, object$track)
   } else {
     as.character(object$chr)
   }
@@ -56,6 +69,8 @@ ggplot_add.ggideogram_track_axis_component <- function(
           if (length(unknown) > 1L) "s" else "",
           format_chr_rows(unknown))
   }
+  check_track_chromosomes(layout, object$track, chromosomes)
+  if (!length(chromosomes)) return(plot)
   layers <- build_track_axis_layers(layout, object, chromosomes)
   if (length(layers) && inherits(layers[[3]]$geom, "GeomCircularGapText")) {
     layout$circular_gap_axes[[object$track]] <- object
@@ -80,8 +95,8 @@ StatTrackAxis <- ggplot2::ggproto(
     result <- layers[[params$axis_part]]$data
     panels <- unique(data$PANEL)
     do.call(rbind, lapply(panels, function(panel) {
-      result$PANEL <- panel
-      result$group <- -1L
+      result$PANEL <- rep(panel, nrow(result))
+      result$group <- rep(-1L, nrow(result))
       result
     }))
   }
@@ -91,6 +106,7 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
   object$family <- object$family %||% layout$base_spec$base_family %||% ""
   spec <- track_table_row(layout, object$track)
   position <- object$position
+  gap <- track_axis_gap(object$gap)
   if (position == "auto") position <- if (is_circular_layout(layout) &&
       spec$value_scale != "per_chr" && isTRUE(object$chr)) "gap" else "end"
   in_gap <- position == "gap"
@@ -98,8 +114,8 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
   if (in_gap && spec$value_scale == "per_chr" && length(chromosomes) > 1L) {
     stopf("A gap axis with `value_scale = \"per_chr\"` must select one chromosome.")
   }
-  if (in_gap) chromosomes <- if (isTRUE(object$chr))
-    layout$chrom$.chr[if (layout$circular$clockwise) nrow(layout$chrom) else 1L] else chromosomes[1L]
+  if (in_gap) chromosomes <- if (isTRUE(object$chr) && layout$circular$clockwise)
+    utils::tail(chromosomes, 1L) else chromosomes[1L]
   spine <- list()
   ticks <- list()
   text <- list()
@@ -130,6 +146,7 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
     } else {
       object$labels
     }
+    if (is.null(label)) label <- rep("", length(breaks))
     if (length(label) != length(breaks)) {
       stopf("Track-axis `labels` must match the number of breaks.")
     }
@@ -146,13 +163,27 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
     axis_length <- sqrt(dx^2 + dy^2)
     direction <- if (position == "end") 1 else -1
     if (in_gap) {
-      arc <- layout$circular$label_gap$left_arc
+      arc <- circular_gap_axis_arc(layout, gap)
       ends <- circular_xy(layout, rep(arc, 2), ends$y)
       at <- circular_xy(layout, rep(arc, length(breaks)), at$y)
-      theta <- layout$circular$label_gap$left_angle * pi / 180
+      theta <- circular_theta(layout, arc)
       dx <- cos(theta); dy <- -sin(theta); axis_length <- direction <- 1
       if (abs(dx) < 1e-12) dx <- 0
       if (abs(dy) < 1e-12) dy <- 0
+    } else {
+      if (is_circular_layout(layout)) {
+        # Source start/end can reverse; choose the sector gap on the display side.
+        after <- direction * dx > 0
+        keys <- names(layout$circular$gap_angle)
+        i <- match(chr, keys)
+        adjacent <- if (after) i else if (i == 1L) length(keys) else i - 1L
+        room <- layout$circular$gap_angle[adjacent] * pi / 180 * layout$circular$radius
+        end_gap <- min(gap, room / 2)
+      } else end_gap <- gap
+      sx <- direction * dx / axis_length * end_gap
+      sy <- direction * dy / axis_length * end_gap
+      ends$x <- ends$x + sx; ends$y <- ends$y + sy
+      at$x <- at$x + sx; at$y <- at$y + sy
     }
     spine[[index]] <- data.frame(
       x = ends$x[1], y = ends$y[1],
@@ -163,18 +194,18 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
       nx = rep(direction * dx / axis_length, length(breaks)),
       ny = rep(direction * dy / axis_length, length(breaks))
     )
-    text[[index]] <- data.frame(
-      x = at$x, y = at$y, label = as.character(label),
-      nx = rep(direction * dx / axis_length, length(breaks)),
-      ny = rep(direction * dy / axis_length, length(breaks))
-    )
+    # An empty label suppresses only the text, leaving its value tick intact.
+    label <- as.character(label)
+    show <- !is.na(label) & nzchar(trimws(label))
+    text[[index]] <- cbind(ticks[[index]][show, , drop = FALSE], label = label[show])
   }
   spine <- do.call(rbind, spine)
   ticks <- do.call(rbind, ticks)
   text <- do.call(rbind, text)
   if (is.null(spine) || !nrow(spine)) return(list())
   if (in_gap) {
-    spine$ideogram_cartesian <- ticks$ideogram_cartesian <- text$ideogram_cartesian <- TRUE
+    spine$ideogram_cartesian <- ticks$ideogram_cartesian <- TRUE
+    text$ideogram_cartesian <- rep(TRUE, nrow(text))
   }
   layers <- list(
     ggplot2::geom_segment(
