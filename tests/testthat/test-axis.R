@@ -266,3 +266,48 @@ test_that("bp text avoids neighboring tracks at the final panel size", {
     expect_true(any(checked == ""))
   }
 })
+test_that("track axis text adapts to the viewport and explicit size stays fixed", {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off())
+  k <- data.frame(Chr = "A", Start = 0, End = 100)
+  for (orientation in c("horizontal", "vertical")) {
+    p <- ggideogram(k, orientation = orientation, show_names = FALSE,
+      tracks = list(signal = geom_track(width = 4, limits = c(0, 100),
+        axis = list(breaks = c(0, 100)))))
+    text_grob <- function(plot) {
+      b <- ggplot2::ggplot_build(plot)
+      i <- which(vapply(b$plot$layers, function(layer)
+        inherits(layer$stat, "StatTrackAxis") && layer$stat_params$axis_part == 3L,
+        logical(1)))
+      layer <- b$plot$layers[[i]]
+      params <- layer$computed_geom_params
+      do.call(layer$geom$draw_panel, c(list(data = b$data[[i]],
+        panel_params = b$layout$panel_params[[1]], coord = b$layout$coord),
+        params[intersect(names(params), layer$geom$parameters())]))
+    }
+    sizes_at <- function(grob, across) {
+      horizontal <- orientation == "horizontal"
+      grid::pushViewport(grid::viewport(
+        width = grid::unit(if (horizontal) 100 else across, "mm"),
+        height = grid::unit(if (horizontal) across else 100, "mm")))
+      on.exit(grid::popViewport())
+      if (inherits(grob, "ideogram_track_axis_text")) grob <- grid::makeContent(grob)$children[[1]]
+      grob$gp$fontsize / ggplot2::.pt
+    }
+    automatic <- text_grob(p)
+    narrow <- sizes_at(automatic, 8)
+    wide <- sizes_at(automatic, 100)
+    expect_length(narrow, 2)
+    expect_true(all(wide > narrow))
+    expect_true(all(narrow >= 1.8 & wide <= 2.8))
+    thin <- p + geom_track(track = "signal", width = 0.6)
+    expect_true(all(sizes_at(text_grob(thin), 30) < sizes_at(automatic, 30)))
+    dense <- p + geom_track(track = "signal", axis = list(breaks = c(0, 1, 100)))
+    expect_true(all(sizes_at(text_grob(dense), 100) < wide[1]))
+    fixed <- p + geom_track(track = "signal", axis = list(size = 2.2))
+    expect_equal(sizes_at(text_grob(fixed), 8), rep(2.2, 2))
+    expect_equal(sizes_at(text_grob(fixed), 100), rep(2.2, 2))
+    reset <- fixed + geom_track(track = "signal", axis = list(size = NULL))
+    expect_equal(sizes_at(text_grob(reset), 100), wide)
+  }
+})

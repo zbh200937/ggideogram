@@ -18,9 +18,10 @@ track_title_axis_clearance <- function(plot, title) {
     data <- parts[[3]]$data
     extent <- grid::unit(object$tick_length, "mm")
     if (nrow(data)) {
-      dimensions <- circular_text_dimensions(data$label, object$size,
+      size <- parts[[3]]$aes_params$size
+      dimensions <- circular_text_dimensions(data$label, size,
         object$family %||% layout$base_spec$base_family %||% "")
-      extent <- extent + grid::unit(object$label_gap * object$size, "mm") +
+      extent <- extent + grid::unit(object$label_gap * size, "mm") +
         abs(title$data$nx) * dimensions$width + abs(title$data$ny) * dimensions$height
     }
     clearance <- max(clearance, extent)
@@ -102,11 +103,12 @@ linear_name_axis_clearance <- function(plot, name_layer) {
       data <- data[same_end, , drop = FALSE]
       end_gap[i] <- max(end_gap[i], (data$x - names$x[i]) * names$nx[i] +
         (data$y - names$y[i]) * names$ny[i])
-      dimensions <- circular_text_dimensions(data$label, object$size,
+      size <- parts[[3]]$aes_params$size
+      dimensions <- circular_text_dimensions(data$label, size,
         object$family, object$fontface %||% 1)
       extent <- abs(names$nx[i]) * dimensions$width + abs(names$ny[i]) * dimensions$height
       clearance[i] <- max(clearance[i], extent +
-        grid::unit(object$tick_length + object$label_gap * object$size, "mm"))
+        grid::unit(object$tick_length + object$label_gap * size, "mm"))
     }
   }
 

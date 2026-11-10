@@ -2,7 +2,7 @@
 
 ideogram_text_size <- function(role) {
   bp <- 2.8
-  unname(c(chromosome = 3.2, label = 3, track = 2.8, bp = bp, value = bp / 3)[role])
+  unname(c(chromosome = 3.2, label = 3, track = 2.8, bp = bp, value = bp)[role])
 }
 
 ideogram_colour <- function(role) {

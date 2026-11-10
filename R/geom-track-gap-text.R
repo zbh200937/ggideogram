@@ -5,9 +5,11 @@ GeomCircularGapText <- ggplot2::ggproto("GeomCircularGapText", GeomIdeogramAxisT
     mapping
   }),
   draw_panel = function(data, panel_params, coord, tick_length = 1.5,
-      label_gap = 0.25, gap_track = NULL, gap_title = FALSE, na.rm = FALSE) {
+      label_gap = 0.25, gap_track = NULL, gap_title = FALSE, na.rm = FALSE,
+      track_axis_width = NULL) {
     text <- GeomIdeogramAxisText$draw_panel(data, panel_params, coord,
-      tick_length = tick_length, label_gap = label_gap, na.rm = na.rm)
+      tick_length = tick_length, label_gap = label_gap, na.rm = na.rm,
+      track_axis_width = track_axis_width)
     xy <- coord$transform(data, panel_params)
     registry <- panel_params$ideogram_labels
     if (!is.environment(registry)) registry <- new.env(parent = emptyenv())
@@ -36,8 +38,15 @@ resolve_circular_gap_text <- function(state) {
     grid::convertHeight(grid::unit(1, "npc"), "mm", TRUE))
   device <- c(grDevices::dev.cur(), grDevices::dev.size("in"), mm)
   if (!is.null(state$cache) && identical(state$device, device)) return(state$cache)
-  rows <- lapply(seq_along(state$entries), function(id) {
-    e <- state$entries[[id]]
+  entries <- lapply(state$entries, function(entry) {
+    if (inherits(entry$text, "ideogram_track_axis_text")) {
+      entry$text <- grid::makeContent(entry$text)$children[[1]]
+      entry$data$size <- entry$text$gp$fontsize / ggplot2::.pt
+    }
+    entry
+  })
+  rows <- lapply(seq_along(entries), function(id) {
+    e <- entries[[id]]
     text <- e$text
     dimensions <- chromosome_text_dimensions(e$data)
     x <- grid::convertX(text$x, "mm", TRUE)
@@ -110,8 +119,8 @@ resolve_circular_gap_text <- function(state) {
   texts <- segments <- leaders <- vector("list", length(state$entries))
   identity <- ggplot2::ggproto(NULL, ggplot2::CoordCartesian,
     transform = function(data, panel_params) data)
-  for (id in seq_along(state$entries)) {
-    e <- state$entries[[id]]
+  for (id in seq_along(entries)) {
+    e <- entries[[id]]
     z <- positions[positions$id == id, , drop = FALSE]
     text <- e$text
     text$x <- grid::unit(z$x / mm[1], "native")

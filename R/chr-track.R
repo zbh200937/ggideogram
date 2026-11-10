@@ -71,9 +71,10 @@ ggideogram_track_spec <- function(...) track(...)
 #'   `gap` sets the distance from the track endpoint to the value-axis spine,
 #'   in body-width units (default 0.2). Circular axes use at most half the
 #'   adjacent sector gap, measured along the chromosome centerline.
-#'   Tick text defaults to one third of the default bp-axis text size.
-#'   `size`, `family`, `colour`, `tick_length` (mm) and `label_gap` (em)
-#'   can be set independently of track width.
+#'   With `size = NULL` (default), tick text uses 1.8–2.8 mm based on the
+#'   rendered axis length and label spacing. A numeric `size` fixes the
+#'   physical text size. Set `family`, `colour`, `tick_length` (mm) and
+#'   `label_gap` (em) independently.
 #' @param chr Optional chromosome keys from the source karyotype. Known keys
 #'   outside the current view are not drawn.
 #' @param clip Tile clipping: `"auto"` clips overlay tiles to the chromosome

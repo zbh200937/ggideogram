@@ -10,7 +10,8 @@
   point endpoints. Explicit connection types still take precedence.
 - Forward and reversed bands between chromosomes use the same default edges.
   Linear layouts use straight edges and circular layouts use curved edges.
-- Track value-axis text defaults to one third of the default bp-axis text size.
+- Track value-axis text adapts to the rendered axis length and label spacing.
+  An explicit `axis$size` fixes its physical size.
   Track titles at shared starts in linear layouts align and clear nearby axes.
   Chromosome names join the same alignment when the label boxes fit.
 

@@ -14,17 +14,18 @@ draw_circular_gap_test <- function(plot, mm = 120) {
     boxes = state$cache$boxes, warnings = warnings)
 }
 
-circular_gap_test_plot <- function(clockwise = TRUE, reverse = FALSE, track_width = 4, track_gap = 1.5, ...) {
+circular_gap_test_plot <- function(clockwise = TRUE, reverse = FALSE,
+    track_width = 4, track_gap = 1.5, axis_size = NULL, ...) {
   k <- data.frame(Chr = 'A', Start = 1000, End = 100000)
   d <- data.frame(Chr = 'A', Pos = c(1000, 50500, 100000),
     Value = c(0, .5, 1), ID = c('source-a', 'source-b', 'source-c'))
   scopes <- list(
     count = geom_track(side = 'outer', width = track_width, gap = track_gap, limits = c(0, 1),
       data = d, mapping = ggplot2::aes(chr = Chr, x = Pos, y = Value),
-      geom = ggplot2::geom_line(), label = 'Count', axis = TRUE),
+      geom = ggplot2::geom_line(), label = 'Count', axis = list(size = axis_size)),
     coverage = geom_track(side = 'outer', width = track_width, gap = track_gap, limits = c(0, 1),
       data = d, mapping = ggplot2::aes(chr = Chr, x = Pos, y = Value),
-      geom = ggplot2::geom_point(), label = 'Cover', axis = TRUE))
+      geom = ggplot2::geom_point(), label = 'Cover', axis = list(size = axis_size)))
   ggideogram(k, orientation = 'circular', show_names = FALSE,
     tracks = scopes, clockwise = clockwise,
     reverse_chr = if (reverse) 'A' else character(), ...)
@@ -39,10 +40,10 @@ circular_gap_test_overlap <- function(a, b) {
   }))
 }
 
-test_that('gap labels keep their track radii and physical text dimensions', {
+test_that('gap labels keep their track radii and explicit physical text dimensions', {
   skip_if_not(capabilities('cairo'))
   for (clockwise in c(FALSE, TRUE)) for (reverse in c(FALSE, TRUE)) {
-    p <- circular_gap_test_plot(clockwise, reverse, opening_angle = 70)
+    p <- circular_gap_test_plot(clockwise, reverse, axis_size = 2.2, opening_angle = 70)
     results <- lapply(c(120, 200), function(mm) draw_circular_gap_test(p, mm))
     for (r in results) {
       z <- r$positions
@@ -75,6 +76,16 @@ test_that('gap labels keep their track radii and physical text dimensions', {
   }
 })
 
+test_that('automatic gap labels grow when the same track has more physical room', {
+  skip_if_not(capabilities('cairo'))
+  p <- circular_gap_test_plot(track_width = 2, opening_angle = 70)
+  small <- draw_circular_gap_test(p, 80)$positions
+  large <- draw_circular_gap_test(p, 240)$positions
+  expect_equal(large$label, small$label)
+  expect_true(all(large$size[!large$title] > small$size[!small$title]))
+  expect_equal(large$size[large$title], small$size[small$title])
+})
+
 test_that('small openings report capacity without moving titles across tracks', {
   skip_if_not(capabilities('cairo'))
   p <- circular_gap_test_plot(track_width = 2, track_gap = .2, opening_angle = 2)
@@ -84,8 +95,8 @@ test_that('small openings report capacity without moving titles across tracks', 
   expect_match(r$warnings, 'exceed the closing gap')
   expect_false(r$state$cache$fits)
   expect_equal(z$label, c('Count', '0', '1', 'Cover', '0', '1'))
-  expect_equal(z$size, rep(c(ideogram_text_size("track"),
-    rep(ideogram_text_size("bp") / 3, 2)), 2))
+  expect_equal(z$size[z$title], rep(ideogram_text_size("track"), 2))
+  expect_true(all(z$size[!z$title] >= 1.8 & z$size[!z$title] <= 2.8))
   expect_equal((z$x - z$original_x) * -z$ny + (z$y - z$original_y) * z$nx,
     rep(0, nrow(z)), tolerance = 1e-10)
   expect_true(all(z$shift <= 2 * z$size))

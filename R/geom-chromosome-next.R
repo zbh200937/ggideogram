@@ -316,7 +316,8 @@ GeomIdeogramAxisText <- ggplot2::ggproto(
   draw_key = ggplot2::draw_key_blank,
   draw_panel = function(
       data, panel_params, coord, tick_length = 1.5, label_gap = 0.25,
-      check_overlap = FALSE, na.rm = FALSE, text_clearance = NULL) {
+      check_overlap = FALSE, na.rm = FALSE, text_clearance = NULL,
+      track_axis_width = NULL) {
     coordinates <- coord$transform(data, panel_params)
     direction_length <- sqrt(coordinates$nx^2 + coordinates$ny^2)
     coordinates$nx <- coordinates$nx / direction_length
@@ -361,6 +362,10 @@ GeomIdeogramAxisText <- ggplot2::ggproto(
         lineheight = coordinates$lineheight
       )
     )
+    if (!is.null(track_axis_width)) {
+      return(adaptive_track_axis_grob(text, coordinates, coord, panel_params,
+        track_axis_width, label_gap))
+    }
     layout <- coord$layout
     if (is.null(layout) || is_circular_layout(layout) || all(is.na(data$axis_chr))) return(text)
     axis_text_clearance_grob(text, data, coord, panel_params, check_overlap)

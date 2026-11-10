@@ -51,9 +51,10 @@ test_that("track titles clear the rendered tick labels at either source endpoint
       b <- ggplot2::ggplot_build(p)
       draw <- function(index) {
         layer <- b$plot$layers[[index]]
-        do.call(layer$geom$draw_panel, c(list(data = b$data[[index]],
+        grob <- do.call(layer$geom$draw_panel, c(list(data = b$data[[index]],
           panel_params = b$layout$panel_params[[1]], coord = b$layout$coord),
           layer$computed_geom_params[intersect(names(layer$computed_geom_params), layer$geom$parameters())]))
+        if (inherits(grob, "ideogram_track_axis_text")) grid::makeContent(grob)$children[[1]] else grob
       }
       title <- draw(which(vapply(p$layers, function(l)
         !is.null(l$ideogram_track_title), logical(1))))

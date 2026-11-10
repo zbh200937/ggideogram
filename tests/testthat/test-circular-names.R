@@ -154,9 +154,10 @@ test_that('linear endpoint names clear same-end value axes in physical units', {
       b <- ggplot2::ggplot_build(p)
       draw <- function(i) {
         layer <- b$plot$layers[[i]]
-        do.call(layer$geom$draw_panel, c(list(data = b$data[[i]],
+        grob <- do.call(layer$geom$draw_panel, c(list(data = b$data[[i]],
           panel_params = b$layout$panel_params[[1]], coord = b$plot$coordinates),
           layer$computed_geom_params[intersect(names(layer$computed_geom_params), layer$geom$parameters())]))
+        if (inherits(grob, "ideogram_track_axis_text")) grid::makeContent(grob)$children[[1]] else grob
       }
       boxes <- function(grob) lapply(seq_along(grob$label), function(i) {
         at <- function(x) x[(i - 1L) %% length(x) + 1L]

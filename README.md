@@ -128,8 +128,10 @@ The bp axis uses its own `axis_gap = 0.3` beyond the outermost same-side track
 or marker lane. Each track's value axis leaves `axis = list(gap = 0.2)`
 at its endpoint by default. These distances are in layout units.
 
-Track tick text defaults to one third of the default bp tick size. Track titles
-at aligned starts in a linear plot share an edge and clear the value axes.
+Track tick text automatically uses 1.8–2.8 mm based on the rendered axis
+length and spacing between labels. Set `axis = list(size = ...)` for a fixed
+size in mm, or use `size = NULL` to restore automatic sizing. Track titles at
+aligned starts in a linear plot share an edge and clear the value axes.
 `theme_ideogram()` provides a 6 mm legend gap and can reserve more space for
 text below the panel. Axis text and legend spacing can be adjusted independently:
 

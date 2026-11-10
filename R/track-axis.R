@@ -23,7 +23,7 @@ geom_track_axis <- function(
     labels = scales::label_number(),
     tick_length = 1.5,
     label_gap = 0.25,
-    size = ideogram_text_size("value"),
+    size = NULL,
     colour = ideogram_colour("axis"),
     linewidth = ideogram_linewidth("axis"),
     family = NULL, gap = NULL) {
@@ -37,7 +37,7 @@ geom_track_axis <- function(
   }
   check_nonnegative_layout(tick_length, "tick_length")
   check_nonnegative_layout(label_gap, "label_gap")
-  check_positive_layout(size, "size")
+  if (!is.null(size)) check_positive_layout(size, "size")
   check_nonnegative_layout(linewidth, "linewidth")
   structure(
     list(
@@ -198,6 +198,7 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
     label <- as.character(label)
     show <- !is.na(label) & nzchar(trimws(label))
     text[[index]] <- cbind(ticks[[index]][show, , drop = FALSE], label = label[show])
+    if (is.null(object$size)) text[[index]]$track_axis_index <- rep(index, sum(show))
   }
   spine <- do.call(rbind, spine)
   ticks <- do.call(rbind, ticks)
@@ -236,10 +237,11 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
       params = list(
         tick_length = object$tick_length,
         label_gap = object$label_gap,
-        size = object$size, colour = object$colour,
+        size = object$size %||% ideogram_text_size("value"), colour = object$colour,
         family = object$family, na.rm = FALSE)
     )
   )
+  if (is.null(object$size)) layers[[3]]$geom_params$track_axis_width <- spec$width
   if (in_gap) layers[[3]]$geom_params$gap_track <- object$track
   for (part in seq_along(layers)) {
     layers[[part]]$stat <- StatTrackAxis
@@ -248,4 +250,49 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
       chromosomes = chromosomes, axis_part = part)
   }
   layers
+}
+
+adaptive_track_axis_grob <- function(text, coordinates, coord, panel, width, label_gap) {
+  corners <- coord$transform(data.frame(x = c(0, width), y = c(0, width),
+    ideogram_cartesian = TRUE), panel)
+  grid::gTree(text = text, coordinates = coordinates, label_gap = label_gap,
+    span = c(diff(corners$x), diff(corners$y)), cl = "ideogram_track_axis_text")
+}
+
+#' @method makeContent ideogram_track_axis_text
+#' @export
+makeContent.ideogram_track_axis_text <- function(x) {
+  text <- x$text
+  data <- x$coordinates
+  panel_mm <- c(grid::convertWidth(grid::unit(1, "npc"), "mm", TRUE),
+    grid::convertHeight(grid::unit(1, "npc"), "mm", TRUE))
+  glyphs <- chromosome_text_dimensions(data)
+  width <- grid::convertWidth(glyphs$width, "mm", TRUE)
+  height <- grid::convertHeight(glyphs$height, "mm", TRUE)
+  min_size <- 1.8
+  size <- rep(min_size, nrow(data))
+  for (rows in split(seq_len(nrow(data)), data$track_axis_index)) {
+    first <- rows[1]
+    # The value spine runs perpendicular to the outward tick direction.
+    spine <- c(-data$ny[first], data$nx[first]) * x$span * panel_mm
+    length_mm <- sqrt(sum(spine^2))
+    if (length_mm == 0) next
+    limit <- length_mm / 3
+    if (length(rows) > 1L) {
+      along <- spine / length_mm
+      position <- data$x[rows] * panel_mm[1] * along[1] +
+        data$y[rows] * panel_mm[2] * along[2]
+      extent <- width[rows] * abs(along[1]) + height[rows] * abs(along[2])
+      extent <- extent[order(position)] / data$size[first]
+      pitch <- diff(sort(position))
+      pair_extent <- (utils::head(extent, -1) + utils::tail(extent, -1)) / 2
+      limit <- min(limit, 0.8 * pitch / pmax(pair_extent, .Machine$double.eps))
+    }
+    size[rows] <- max(min_size, min(data$size[first], limit))
+  }
+  delta <- grid::unit(x$label_gap * (size - data$size), "mm")
+  text$gp$fontsize <- size * ggplot2::.pt
+  text$x <- text$x + data$nx * delta
+  text$y <- text$y + data$ny * delta
+  grid::setChildren(x, grid::gList(text))
 }
