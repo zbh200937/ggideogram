@@ -25,25 +25,50 @@ geom_chr_labels <- function(mapping = NULL, data = NULL, track = NULL,
     class = "ggideogram_labels_component")
 }
 
-declare_chr_labels_track <- function(plot, object) {
+declare_chr_labels_track <- function(plot, object, data = NULL) {
   layout <- ideogram_plot_layout(plot)
   if (!is.null(object$track)) {
     spec <- track_table_row(layout, object$track)
     if (spec$side == "overlay") stopf("Ordered labels require a beside track.")
     return(list(plot = plot, track = object$track))
   }
-  source <- list(data = object$data, mapping = object$mapping,
-    side = object$side, width = object$width, gap = object$gap)
-  existing <- names(Filter(function(spec) identical(spec$.labels_source, source),
-    layout$base_spec$tracks %||% list()))
-  if (length(existing)) return(list(plot = plot, track = existing[1]))
-  id <- "chr_labels"
-  while (id %in% layout$tracks$id) id <- paste0(id, "_")
   width <- object$width %||% if (is_circular_layout(layout)) {
     if (object$side == "left") 14 else 32
   } else if (layout$orientation == "vertical") 16 else if (isTRUE(layout$microsynteny)) 4 else 8
+  source <- list(data = object$data, mapping = object$mapping,
+    side = object$side, width = object$width, gap = object$gap)
+  specs <- layout$base_spec$tracks %||% list()
+  existing <- names(Filter(function(spec) {
+    identical(spec$.labels_source, source) ||
+      any(vapply(spec$.labels_sources %||% list(), identical, logical(1), source))
+  }, specs))
+  if (length(existing)) return(list(plot = plot, track = existing[1]))
+  d <- data %||% prepare_chr_label_data(object, layout)
+  chrs <- unique(as.character(mapped_fields(d, object$mapping, "chr", what = "mapping")$chr))
+  chrs <- intersect(layout$chrom$.chr, chrs)
+  compatible <- names(Filter(function(spec) {
+    !is.null(spec$.labels_source) &&
+      identical(spec$side, object$side) &&
+      identical(spec$width, width) &&
+      identical(spec$gap, object$gap) &&
+      !length(intersect(spec$.labels_chrs %||% character(), chrs))
+  }, specs))
+  if (length(compatible)) {
+    id <- compatible[1]
+    spec <- specs[[id]]
+    spec$.labels_sources <- c(spec$.labels_sources %||% list(spec$.labels_source), list(source))
+    spec$.labels_chrs <- unique(c(spec$.labels_chrs %||% character(), chrs))
+    base_spec <- layout$base_spec
+    base_spec$tracks[[id]] <- spec
+    plot <- rebuild_ideogram(plot, base_spec, id)
+    return(list(plot = plot, track = id))
+  }
+  id <- "chr_labels"
+  while (id %in% layout$tracks$id) id <- paste0(id, "_")
   spec <- geom_track(track = id, side = object$side, width = width, gap = object$gap)
   spec$.labels_source <- source
+  spec$.labels_sources <- list(source)
+  spec$.labels_chrs <- chrs
   plot <- ggplot_add.ggideogram_track_scope(spec, plot)
   list(plot = plot, track = id)
 }
@@ -89,7 +114,7 @@ ggplot_add.ggideogram_labels_component <- function(object, plot, ...) {
   if (isTRUE(ideogram_plot_layout(plot)$microsynteny) && isTRUE(object$auto_connection_height)) {
     object$connection_height <- 2
   }
-  declared <- declare_chr_labels_track(plot, object)
+  declared <- declare_chr_labels_track(plot, object, data)
   plot <- declared$plot; object$track <- declared$track
   layout <- ideogram_plot_layout(plot)
   prepare <- object
@@ -241,7 +266,9 @@ resolve_chr_labels <- function(state) {
     centres[, 2] <- baseline[, 2] + (0.5 - hjust) * width * sin(radians) +
       (0.5 - vjust) * height * cos(radians)
   }
-  if (length(bad)) warning(sprintf("Labels exceed the available display span or track width: %s.",
+  if (length(bad)) warning(sprintf(paste0(
+    "Labels exceed the available display span or track width: %s. ",
+    "Increase `label_width`, track `width`, or output dimensions."),
     paste(unique(bad), collapse = ", ")), call. = FALSE)
   data$x <- baseline[, 1] / mm[1]; data$y <- baseline[, 2] / mm[2]
   data$angle <- angle; data$hjust <- hjust; data$vjust <- vjust

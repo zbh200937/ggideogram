@@ -128,7 +128,7 @@ ggplot_add.ggideogram_repel_component <- function(object, plot, ...) {
   data <- prepare_chr_label_data(object, ideogram_plot_layout(plot))
   if (!nrow(data)) return(plot)
   if (is.null(object$track)) {
-    declared <- declare_chr_labels_track(plot, object)
+    declared <- declare_chr_labels_track(plot, object, data)
     plot <- declared$plot; object$track <- declared$track
   }
   layout <- ideogram_plot_layout(plot)

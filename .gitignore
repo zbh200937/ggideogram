@@ -10,8 +10,6 @@
 ..Rcheck/
 *.tar.gz
 *.Rout
-Rplots.pdf
-tests/testthat/Rplots.pdf
 
 # Local development state
 .claude/

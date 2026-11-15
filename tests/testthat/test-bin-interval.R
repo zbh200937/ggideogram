@@ -62,4 +62,9 @@ test_that('explicit window methods reject invalid biological ranges', {
   expect_error(bin_genome(d, k, method = 'weighted_mean'), 'numeric')
   expect_error(bin_genome(d, k, method = 'coverage', group = 'Chr'), 'conflict')
   expect_error(bin_genome(d, k, window = 1.5, method = 'coverage'), 'integer')
+
+  nonempty <- data.frame(Chr = 'A', Start = 1, End = 5, Sample = 's1', stringsAsFactors = FALSE)
+  c_full <- bin_genome(nonempty, k, window = 5, method = 'count', group = 'Sample')
+  c_empty <- bin_genome(nonempty[0, ], k, window = 5, method = 'count', group = 'Sample')
+  expect_identical(names(c_empty), names(c_full))
 })

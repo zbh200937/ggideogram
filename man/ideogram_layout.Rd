@@ -45,7 +45,8 @@ is required for a circular sector ring.}
 \item{chromosome_width}{Width of a chromosome body in layout units,
 default 1.2. The normalized reference unit is 1.}
 
-\item{chromosome_gap}{Clear gap between adjacent body columns, in body-width
+\item{chromosome_gap}{Clear spacing between adjacent chromosome cells
+(outside any beside tracks, marker lanes, and label bands), in body-width
 units. Circular gaps use \code{gap_angle}.}
 
 \item{max_chr_length}{Linear display length of the longest chromosome, in

@@ -55,4 +55,12 @@ test_that("ambiguous formats and invalid chromosome lengths are rejected", {
   expect_error(read_karyotype(sizes, chr = "B"), "Not in")
   expect_error(read_karyotype(sizes, chr = c("A", "A")), "unique")
   expect_error(read_karyotype(sizes, chr = character()), "non-empty")
+
+  empty_file <- tempfile(fileext = ".chrom.sizes")
+  blank_file <- tempfile(fileext = ".chrom.sizes")
+  on.exit(unlink(c(empty_file, blank_file)), add = TRUE)
+  file.create(empty_file)
+  writeLines(c("", "   "), blank_file)
+  expect_error(read_karyotype(empty_file), "no rows")
+  expect_error(read_karyotype(blank_file), "no rows")
 })

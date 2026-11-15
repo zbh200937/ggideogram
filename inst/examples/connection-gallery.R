@@ -1,12 +1,12 @@
-# Run: micromamba run -n multiomics Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/connection-gallery.R")'
+# Run: Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/connection-gallery.R")'
 # MCScanX's official Arabidopsis example, default analysis; see extdata provenance.
 library(ggideogram)
 library(ggplot2)
 source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
 blocks <- read.delim(system.file('extdata', 'arabidopsis-synteny-blocks.tsv', package = 'ggideogram'))
 pairs <- read.delim(system.file('extdata', 'arabidopsis-synteny-pairs.tsv', package = 'ggideogram'))
-pairs$Position1 <- (pairs$Start1 + pairs$End1) / 2
-pairs$Position2 <- (pairs$Start2 + pairs$End2) / 2
+pairs$Position1 <- (pairs$Start1 - 1 + pairs$End1) / 2
+pairs$Position2 <- (pairs$Start2 - 1 + pairs$End2) / 2
 k <- data.frame(Chr = c('1', '5'), Start = 0, End = c(30427671, 26975502))
 output <- 'work/api-optimization/examples/connection-gallery'
 colors <- c('+' = '#4477AA', '-' = '#CC6677')

@@ -63,7 +63,8 @@ geom_chr_interval <- function(
     track_position = 0.5,
     na.rm = FALSE,
     show.legend = NA,
-    inherit.aes = FALSE) {
+    inherit.aes = FALSE,
+    .geom = ggplot2::GeomSegment) {
   placement <- match.arg(placement)
   side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
@@ -76,7 +77,7 @@ geom_chr_interval <- function(
     data = data,
     mapping = mapping,
     stat = stat,
-    geom = ggplot2::GeomSegment,
+    geom = .geom,
     position = position,
     show.legend = show.legend,
     inherit.aes = inherit.aes,
@@ -89,7 +90,9 @@ geom_chr_interval <- function(
     ), list(...))
   )
   layer$position <- circular_segment_position(layer$position)
-  layer
+  if (placement != "beside") return(layer)
+  ggplot2::ggproto("LayerChrMarker", layer,
+    ideogram_marker_spec = list(side = side, gap = gap, track = track))
 }
 
 #' @noRd
@@ -130,5 +133,6 @@ geom_chr_text <- function(
     ), list(...))
   )
   layer$position <- locus_position(layer$position)
-  layer
+  ggplot2::ggproto("LayerChrMarker", layer,
+    ideogram_marker_spec = list(side = side, gap = gap, track = track))
 }

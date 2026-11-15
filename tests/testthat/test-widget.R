@@ -25,6 +25,16 @@ test_that('interactive points retain native geoms and complete source intervals'
   expect_error(as_ideogram_widget(p, transform(records, ID = 'a')), 'unique')
   expect_error(as_ideogram_widget(p, transform(records, Chr = 'B')), 'unknown source')
   expect_error(as_ideogram_widget(p, transform(records, End = 1100)), 'source chromosome bounds')
+  expect_error(as_ideogram_widget(p, transform(records, Start = c(0, 750))), 'closed integer')
+  expect_no_error(as_ideogram_widget(
+    p,
+    transform(records, Start = c(0, 750)),
+    end = NULL,
+    category = 'Category',
+    url = 'URL',
+    width = 120,
+    height = 50
+  ))
   expect_error(as_ideogram_widget(p, records, url = 'ID'), 'HTTP')
 })
 

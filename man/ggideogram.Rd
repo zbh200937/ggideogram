@@ -77,10 +77,11 @@ grouped layouts retain their natural arrangement.}
 \item{chromosome_width, row_gap, orientation, scale_length, order_by, genome_order, homolog_order, reverse_chr, radius, clockwise}{Passed to the dimensionless
 \code{\link[=ideogram_layout]{ideogram_layout()}} method.}
 
-\item{chromosome_gap}{Clear space between chromosome columns, in body-width
-units. \code{NULL} uses 8 when constructing a vertical plot with a bp axis,
-9 for linked horizontal two/three-chromosome comparisons, and 3 otherwise.
-The gap may increase to fit a facing bp axis.}
+\item{chromosome_gap}{Clear space between adjacent chromosome cells (outside
+any beside tracks, marker lanes, and label bands), in body-width units.
+\code{NULL} uses 8 when a vertical plot has a bp axis, 9 for linked horizontal
+two/three-chromosome comparisons, and 3 otherwise. The gap may increase to
+fit a facing bp axis.}
 
 \item{max_chr_length}{Display length of the longest chromosome in layout
 units. NULL uses 40.}

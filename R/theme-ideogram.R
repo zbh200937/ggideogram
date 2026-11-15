@@ -21,13 +21,28 @@ theme_ideogram <- function(
     base_family = "",
     plot_margin = ggplot2::margin(5.5, 5.5, 5.5, 5.5),
     ...) {
+  if (missing(plot_margin)) {
+    attr(plot_margin, "ideogram_auto_margin") <- TRUE
+  }
+  auto_margin <- function(t = 0, r = 0, b = 0, l = 0) {
+    m <- ggplot2::margin(t, r, b, l)
+    attr(m, "ideogram_auto_margin") <- TRUE
+    m
+  }
   spacing <- grid::unit(6, "mm")
   attr(spacing, "ideogram_auto_spacing") <- TRUE
   ggplot2::theme_void(base_size = base_size, base_family = base_family) +
     ggplot2::theme(
       plot.margin = plot_margin,
       panel.spacing = grid::unit(0, "pt"),
-      legend.box.spacing = spacing
+      legend.box.spacing = spacing,
+      plot.title = ggplot2::element_text(hjust = 0, margin = auto_margin(t = 5.5)),
+      plot.subtitle = ggplot2::element_text(hjust = 0, margin = auto_margin(t = 5.5)),
+      plot.caption = ggplot2::element_text(hjust = 1, margin = auto_margin(t = 5.5)),
+      axis.title.x = ggplot2::element_text(vjust = 1, margin = auto_margin(t = 2.75)),
+      axis.title.x.top = ggplot2::element_text(vjust = 0, margin = auto_margin(b = 2.75)),
+      axis.title.y = ggplot2::element_text(angle = 90, vjust = 1, margin = auto_margin(r = 2.75)),
+      axis.title.y.right = ggplot2::element_text(angle = -90, vjust = 1, margin = auto_margin(l = 2.75))
     ) +
     ggplot2::theme(...)
 }

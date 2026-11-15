@@ -200,7 +200,8 @@ resolve_track_geometry <- function(tracks, chromosome_width, source_chr, visible
     selected <- spec$chr
     labels <- spec$.labels_source
     if (!is.null(labels)) {
-      selected <- as.character(mapped_fields(labels$data, labels$mapping, "chr", what = "mapping")$chr)
+      selected <- spec$.labels_chrs %||%
+        as.character(mapped_fields(labels$data, labels$mapping, "chr", what = "mapping")$chr)
     }
     intersect(visible_chr, selected %||% visible_chr)
   })

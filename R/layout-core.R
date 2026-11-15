@@ -35,7 +35,8 @@ ideogram_layout.data.frame <- function(karyotype, ...) {
 #'   is required for a circular sector ring.
 #' @param chromosome_width Width of a chromosome body in layout units,
 #'   default 1.2. The normalized reference unit is 1.
-#' @param chromosome_gap Clear gap between adjacent body columns, in body-width
+#' @param chromosome_gap Clear spacing between adjacent chromosome cells
+#'   (outside any beside tracks, marker lanes, and label bands), in body-width
 #'   units. Circular gaps use `gap_angle`.
 #' @param max_chr_length Linear display length of the longest chromosome, in
 #'   body-width units. Circular geometry uses `radius`.

@@ -69,6 +69,27 @@ test_that("annotation gzip input is supported", {
   writeLines("chr1\t0\t10", con)
   close(con)
   expect_equal(read_chr_features(path)$Start, 1)
+
+  bed_path <- tempfile(fileext = ".bed")
+  gff_path <- tempfile(fileext = ".gff3")
+  on.exit(unlink(c(bed_path, gff_path)), add = TRUE)
+  writeLines(c(
+    "track name=demo",
+    "browser position chr1:1-100",
+    "track\t0\t100\tf1",
+    "browser\t10\t20\tf2"
+  ), bed_path)
+  bed_feat <- read_chr_features(bed_path)
+  expect_equal(bed_feat$Chr, c("track", "browser"))
+  expect_equal(bed_feat$Start, c(1, 11))
+
+  writeLines(c(
+    "##gff-version 3",
+    "chr1\tsrc\tgene\t1\t50\t.\t+\t.\tID=g1;Name=50%identity;Parent=a%2Cb%zz"
+  ), gff_path)
+  gff_feat <- read_chr_features(gff_path)
+  expect_identical(gff_feat$Name, "50%identity")
+  expect_identical(gff_feat$Parent, "a,b%zz")
 })
 
 test_that("assemblies are checked on matched chromosomes with explicit genome keys", {

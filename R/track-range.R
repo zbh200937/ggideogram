@@ -160,7 +160,7 @@ require_explicit_track_limits <- function(layout, track_id, component) {
   spec <- track_table_row(layout, track_id)
   if (is.null(spec$limits[[1]]) && !track_id %in% (layout$scope_fixed_tracks %||% character())) {
     stopf(paste0(
-      "`%s` requires explicit `limits` in `track(%s = ...)` because its ",
+      "`%s` requires explicit `limits` in `geom_track(%s = ...)` because its ",
       "standard ggplot2 Stat/Geom reconstructs coordinates before drawing."),
       component, "limits")
   }

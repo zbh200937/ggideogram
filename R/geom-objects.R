@@ -58,7 +58,7 @@ geom_chr <- function(mapping = NULL, data = NULL, chr = NULL,
 #' @param mode Draw one lane per gene or transcript.
 #' @param ... Gene styling: optional lane_order (complete identifier vector),
 #'   block_height = 0.35 (fraction of one lane), native grid::arrow() or NULL,
-#'   labels = TRUE, label_size = 3 (mm), label_gap = 0.3 (em),
+#'   labels = TRUE, label_size = 3 (mm), label_gap = 0.3 (fraction of label box),
 #'   label_colour = "#202020", label_family = NULL (inherits `base_family`),
 #'   label_fontface = "plain" (use "italic" for gene symbols), and standard
 #'   aesthetics. Intron arrows follow strand; arrow_min_bp, arrow_spacing_bp
@@ -148,7 +148,8 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
     if (geom == "interval" && !is.null(track)) args$placement <- "beside"
     return(wrap(do.call(fun, args)))
   }
-  prototype <- locus_native_layer(geom, list(...),
+  dots <- list(...)
+  prototype <- locus_native_layer(geom, dots,
     if (missing(position)) NULL else position)
   if (!inherits(prototype, "Layer")) stopf("`geom` must be a point, text, or segment layer.")
   if (!inherits(prototype$stat, "StatIdentity")) {
@@ -157,18 +158,24 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
   mapping <- scope_mapping(mapping, prototype$mapping)
   data <- scope_layer_data(prototype$data, data)
   if (!is.null(mapping$x) && is.null(mapping$position)) mapping$position <- mapping$x
+  na_rm <- isTRUE(dots$na.rm %||% prototype$geom_params$na.rm %||% prototype$stat_params$na.rm)
+  inherit_aes <- if ("inherit.aes" %in% names(dots)) isTRUE(dots$inherit.aes) else FALSE
   if (inherits(prototype$geom, "GeomSegment") && all(c("start", "end") %in% names(mapping))) {
     base <- geom_chr_interval(mapping, data, track = track, side = side,
-      gap = gap, placement = if (is.null(track)) "overlay" else "beside", track_position = track_position)
+      gap = gap, placement = if (is.null(track)) "overlay" else "beside",
+      track_position = track_position, na.rm = na_rm, inherit.aes = inherit_aes,
+      .geom = prototype$geom)
   } else if (inherits(prototype$geom, "GeomPoint") || inherits(prototype$geom, "GeomText")) {
     base <- geom_chr_marker(mapping, data, track = track, side = side, gap = gap,
-      track_position = track_position)
+      track_position = track_position, na.rm = na_rm, inherit.aes = inherit_aes,
+      .geom = prototype$geom)
   } else stopf("`geom` must be a point/text layer, or an interval segment layer.")
   base$geom <- prototype$geom
   base$position <- if (inherits(base$stat, "StatChrInterval")) {
     circular_segment_position(prototype$position)
   } else locus_position(prototype$position)
   base$geom_params <- prototype$geom_params
+  base$geom_params$na.rm <- na_rm
   base$aes_params <- prototype$aes_params
   if (inherits(prototype$geom, "GeomText") && is.null(base$aes_params$size) && is.null(mapping$size)) {
     base$aes_params$size <- ideogram_text_size("label")
@@ -340,20 +347,59 @@ ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
       paste(visual, collapse = ", "))
   }
   if (!inherits(plot$coordinates$layout, "ideogram_layout_v2")) {
+    has_body <- "body" %in% object$components
     has_fill <- "fill" %in% object$components
-    data <- if (has_fill) plot$data else object$data %||% plot$data
-    mapping <- if (has_fill) plot$mapping else object$mapping %||% plot$mapping
+    use_plot_karyotype <- has_fill && (has_body || !is.null(object$data))
+    data <- if (use_plot_karyotype) plot$data else object$data %||% plot$data
+    mapping <- if (use_plot_karyotype) plot$mapping else object$mapping %||% plot$mapping
     if (!length(mapping)) mapping <- NULL
+    gg_formals <- setdiff(names(formals(ggideogram)),
+      c("data", "mapping", "chr", "show_names", "axis"))
+    components <- object$components
+    if (isTRUE(object$names) && !"name" %in% components) components <- c(components, "name")
+    if (!identical(object$axis, FALSE) && !"axis" %in% components) components <- c(components, "axis")
+    accepted_comp <- unique(unlist(lapply(components, chromosome_component_parameters)))
+    unused <- setdiff(names(object$params), union(gg_formals, accepted_comp))
+    if (length(unused)) stopf("Unsupported chromosome component parameter%s: %s.",
+      if (length(unused) > 1L) "s" else "", paste(unused, collapse = ", "))
+    extra <- setdiff(components, "body")
+    style_shared <- c("fill", "colour", "linewidth", "alpha", "linetype")
+    ctor_keep <- if (has_body) gg_formals else setdiff(gg_formals, style_shared)
+    name_only_params <- intersect(names(object$params),
+      setdiff(names(formals(geom_chr_name)), gg_formals))
+    name_via_ctor <- !"name" %in% object$components && !length(name_only_params) &&
+      (if (!is.null(object$names)) isTRUE(object$names) else has_body)
+    axis_only_params <- intersect(names(object$params),
+      setdiff(names(formals(geom_chr_axis)), gg_formals))
+    axis_via_ctor <- !"axis" %in% object$components && !identical(object$axis, FALSE) &&
+      !length(axis_only_params)
+    if (name_via_ctor) extra <- setdiff(extra, "name")
+    if (axis_via_ctor) extra <- setdiff(extra, "axis")
+    ctor_params <- object$params[intersect(names(object$params), ctor_keep)]
     args <- c(list(data = data, mapping = mapping, chr = object$chr,
-      axis = object$axis, show_names = object$names %||% TRUE), object$params)
+      axis = if (axis_via_ctor) object$axis else FALSE,
+      show_names = name_via_ctor), ctor_params)
     result <- do.call(ggideogram, args)
-    if (has_fill) {
-      fill <- object
-      fill$components <- "fill"; fill$names <- FALSE; fill$axis <- FALSE
-      constructor_args <- setdiff(names(formals(ggideogram)),
-        c("fill", "colour", "linewidth"))
-      fill$params <- fill$params[!names(fill$params) %in% constructor_args]
-      result <- result + new_ideogram_object(fill)
+    if (!has_body) result$layers <- list()
+    if (length(extra)) {
+      rest <- object
+      rest$components <- extra
+      rest$names <- FALSE
+      rest$axis <- FALSE
+      if (!"fill" %in% extra) {
+        rest$data <- NULL
+        rest$mapping <- NULL
+      }
+      drop_ctor <- setdiff(ctor_keep,
+        unique(unlist(lapply(extra, chromosome_component_parameters))))
+      if (has_body && "fill" %in% extra) {
+        drop_ctor <- union(drop_ctor, setdiff(gg_formals, c("fill", "colour", "linewidth")))
+      }
+      rest$params <- rest$params[!names(rest$params) %in% drop_ctor]
+      if ("axis" %in% extra && !is.logical(object$axis) && is.null(rest$chr)) {
+        rest$params$chr <- object$axis
+      }
+      result <- result + new_ideogram_object(rest)
     }
     for (layer in plot$layers) result <- result + layer
     result$scales <- plot$scales; result$labels <- plot$labels
@@ -362,18 +408,20 @@ ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
     return(result)
   }
   original <- ideogram_plot_layout(plot)
-  selected <- original
   chr <- object$chr
   if (isTRUE(chr)) chr <- NULL
   if (!is.null(object$data) && is.null(chr) && !"fill" %in% object$components) {
     chr <- as_ideogram_data(object$data, object$mapping)$karyotype$.chr
   }
   if (!is.null(chr)) {
-    if (any(!chr %in% selected$chrom$.chr)) stopf("Unknown selected chromosome: %s.", format_chr_rows(setdiff(chr, selected$chrom$.chr)))
-    selected$chrom <- selected$chrom[match(chr, selected$chrom$.chr), , drop = FALSE]
-    selected$index <- stats::setNames(seq_len(nrow(selected$chrom)), selected$chrom$.chr)
+    chr <- validate_chr(chr, "chr")
+    if (!length(chr) || anyDuplicated(chr)) {
+      stopf("`chr` must select unique chromosomes.")
+    }
+    if (any(!chr %in% original$chrom$.chr)) {
+      stopf("Unknown selected chromosome: %s.", format_chr_rows(setdiff(chr, original$chrom$.chr)))
+    }
   }
-  plot <- update_plot_ideogram_layout(plot, selected)
   components <- object$components
   if (isTRUE(object$names) && !"name" %in% components) components <- c(components, "name")
   if (isTRUE(object$axis) && !"axis" %in% components) components <- c(components, "axis")
@@ -381,6 +429,40 @@ ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
   unused <- setdiff(names(object$params), accepted)
   if (length(unused)) stopf("Unsupported chromosome component parameter%s: %s.",
     if (length(unused) > 1L) "s" else "", paste(unused, collapse = ", "))
+  if ("axis" %in% components && !is.null(original$base_spec) &&
+      original$orientation != "circular" && !isTRUE(original$microsynteny)) {
+    base_spec <- original$base_spec
+    auto_gap <- is.null(base_spec$chromosome_gap) ||
+      isTRUE(attr(base_spec$chromosome_gap, "ideogram_auto_gap"))
+    target_gap <- original$chromosome_gap
+    if (auto_gap && original$orientation == "vertical") {
+      target_gap <- max(target_gap, 8)
+    }
+    if (original$ncol > 1L) {
+      raw_side <- object$params$side %||% "auto"
+      eff_side <- if (raw_side == "auto") "left" else canonical_chr_side(raw_side)
+      step <- if (eff_side == "right") 1L else -1L
+      chr_tbl <- original$chrom
+      facing <- paste(chr_tbl$.row, chr_tbl$.col + step) %in%
+        paste(chr_tbl$.row, chr_tbl$.col)
+      axis_chr <- chr %||% object$params$chr %||% TRUE
+      sel <- isTRUE(axis_chr) | chr_tbl$.chr %in% axis_chr
+      req <- (object$params$gap %||% 0.3) + (base_spec$axis_width %||% 4)
+      if (any(sel & facing) && target_gap < req) target_gap <- req
+    }
+    if (target_gap > original$chromosome_gap) {
+      if (auto_gap) attr(target_gap, "ideogram_auto_gap") <- TRUE
+      base_spec$chromosome_gap <- target_gap
+      plot <- rebuild_ideogram(plot, base_spec)
+      original <- ideogram_plot_layout(plot)
+    }
+  }
+  selected <- original
+  if (!is.null(chr)) {
+    selected$chrom <- selected$chrom[match(chr, selected$chrom$.chr), , drop = FALSE]
+    selected$index <- stats::setNames(seq_len(nrow(selected$chrom)), selected$chrom$.chr)
+  }
+  plot <- update_plot_ideogram_layout(plot, selected)
   for (kind in components) {
     if (kind == "fill") {
       params <- object$params
@@ -398,6 +480,7 @@ ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
     accepted <- intersect(names(object$params), names(formals(fun)))
     parameters <- object$params[accepted]
     if (kind == "axis" && !is.null(chr)) parameters$chr <- chr
+    if (kind == "axis" && !"side" %in% names(object$params)) parameters$side <- "auto"
     plot <- plot + do.call(fun, parameters)
   }
   updated <- ideogram_plot_layout(plot)

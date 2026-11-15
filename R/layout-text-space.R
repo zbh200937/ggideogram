@@ -97,18 +97,24 @@ linear_name_axis_clearance <- function(plot, name_layer) {
     for (i in which(selected)) {
       parts <- build_track_axis_layers(layout, object, names$name_chr[i])
       if (!length(parts)) next
+      ticks <- parts[[2]]$data
+      same_tick <- ticks$nx * names$nx[i] + ticks$ny * names$ny[i] > 0.5
+      if (!any(same_tick)) next
+      ticks <- ticks[same_tick, , drop = FALSE]
+      end_gap[i] <- max(end_gap[i], (ticks$x - names$x[i]) * names$nx[i] +
+        (ticks$y - names$y[i]) * names$ny[i])
+      clearance[i] <- max(clearance[i], grid::unit(object$tick_length, "mm"))
       data <- parts[[3]]$data
       same_end <- data$nx * names$nx[i] + data$ny * names$ny[i] > 0.5
-      if (!any(same_end)) next
-      data <- data[same_end, , drop = FALSE]
-      end_gap[i] <- max(end_gap[i], (data$x - names$x[i]) * names$nx[i] +
-        (data$y - names$y[i]) * names$ny[i])
-      size <- parts[[3]]$aes_params$size
-      dimensions <- circular_text_dimensions(data$label, size,
-        object$family, object$fontface %||% 1)
-      extent <- abs(names$nx[i]) * dimensions$width + abs(names$ny[i]) * dimensions$height
-      clearance[i] <- max(clearance[i], extent +
-        grid::unit(object$tick_length + object$label_gap * size, "mm"))
+      if (any(same_end)) {
+        data <- data[same_end, , drop = FALSE]
+        size <- parts[[3]]$aes_params$size
+        dimensions <- circular_text_dimensions(data$label, size,
+          object$family, object$fontface %||% 1)
+        extent <- abs(names$nx[i]) * dimensions$width + abs(names$ny[i]) * dimensions$height
+        clearance[i] <- max(clearance[i], extent +
+          grid::unit(object$tick_length + object$label_gap * size, "mm"))
+      }
     }
   }
 
@@ -290,12 +296,29 @@ reserve_chromosome_axis_space <- function(plot, layers) {
   layout <- ideogram_plot_layout(plot)
   for (layer in layers) {
     data <- layer$data
-    layout <- include_ideogram_coordinates(layout, data$x, data$y, data$xend, data$yend)
+    is_cart <- "ideogram_cartesian" %in% names(data) && any(data$ideogram_cartesian %in% TRUE)
+    layout <- include_ideogram_coordinates(
+      layout, data$x, data$y, data$xend, data$yend, cartesian = is_cart)
     if (is_circular_layout(layout) && identical(layer$ideogram_axis_spec$side, "right")) {
-      layout$circular_name_axis <- layer$ideogram_axis_spec
-      if ("label" %in% names(data)) {
-        layout$circular_name_axis$label <- data$label
-        layout$circular_name_axis$label_x <- data$x
+      spec <- layer$ideogram_axis_spec
+      prev <- layout$circular_name_axis
+      if (is.null(prev)) {
+        layout$circular_name_axis <- spec
+        if ("label" %in% names(data)) {
+          layout$circular_name_axis$label <- as.character(data$label)
+          layout$circular_name_axis$label_x <- data$x
+        }
+      } else {
+        prev$gap <- max(prev$gap, spec$gap)
+        prev$tick_length <- max(prev$tick_length, spec$tick_length)
+        prev$label_gap <- max(prev$label_gap, spec$label_gap)
+        prev$size <- max(prev$size, spec$size)
+        prev$labels <- isTRUE(prev$labels) || isTRUE(spec$labels)
+        if ("label" %in% names(data)) {
+          prev$label <- c(prev$label %||% character(), as.character(data$label))
+          prev$label_x <- c(prev$label_x %||% numeric(), data$x)
+        }
+        layout$circular_name_axis <- prev
       }
     }
   }
@@ -310,6 +333,7 @@ reserve_chromosome_axis_space <- function(plot, layers) {
   reserve <- function(current, extent, at) {
     if (any(at)) max(current, extent[at]) else current
   }
+  tol <- if (is_circular_layout(layout)) 0 else layout$chromosome_width
   for (layer in layers) {
     data <- layer$data
     if (!nrow(data) || !all(c("nx", "ny") %in% names(data))) next
@@ -333,10 +357,10 @@ reserve_chromosome_axis_space <- function(plot, layers) {
       clearance <- grid::unit(tick + layer$geom_params$label_gap * size, "mm") +
         (layer$geom_params$text_clearance %||% grid::unit(0, "mm"))
     }
-    left <- data$x <= layout$bounds$x[1]
-    right <- data$x >= layout$bounds$x[2]
-    bottom <- data$y <= layout$bounds$y[1]
-    top <- data$y >= layout$bounds$y[2]
+    left <- data$x <= layout$bounds$x[1] + tol
+    right <- data$x >= layout$bounds$x[2] - tol
+    bottom <- data$y <= layout$bounds$y[1] + tol
+    top <- data$y >= layout$bounds$y[2] - tol
     needed[4] <- reserve(needed[4], width + clearance, left & data$nx < 0)
     needed[4] <- reserve(needed[4], width / 2, data$nx == 0)
     needed[2] <- reserve(needed[2], width + clearance, right & data$nx > 0)
@@ -387,14 +411,18 @@ reserve_chromosome_axis_space <- function(plot, layers) {
   needed <- grid::unit.pmax(needed, circular_text_space(plot))
   margin <- plot$theme$plot.margin %||% theme_ideogram()$plot.margin
   # Keep text measurements lazy so the eventual device supplies font metrics.
-  plot <- plot + ggplot2::theme(plot.margin = auto_text_space(margin, needed))
+  if (isTRUE(attr(margin, "ideogram_auto_margin"))) {
+    margin <- auto_text_space(margin, needed)
+    attr(margin, "ideogram_auto_margin") <- TRUE
+    plot <- plot + ggplot2::theme(plot.margin = margin)
+  }
   spacing <- plot$theme$legend.box.spacing
   if (isTRUE(attr(spacing, "ideogram_auto_spacing"))) {
     spacing <- auto_text_space(spacing, needed[3])
     attr(spacing, "ideogram_auto_spacing") <- TRUE
     plot <- plot + ggplot2::theme(legend.box.spacing = spacing)
   }
-  reserve_ideogram_heading_space(plot, needed[1])
+  reserve_ideogram_heading_space(plot, needed)
 }
 
 auto_text_space <- function(current, needed) {
@@ -405,20 +433,49 @@ auto_text_space <- function(current, needed) {
   result
 }
 
-reserve_ideogram_heading_space <- function(plot, needed) {
-  clearance <- grid::convertHeight(needed, "mm", valueOnly = TRUE)
-  heading_margin <- function(element) {
-    margin <- element$margin %||% ggplot2::margin(0, 0, 0, 0)
-    margin <- attr(margin, "ideogram_space_base") %||% margin
-    values <- grid::convertUnit(margin, "mm", valueOnly = TRUE)
-    values[3] <- max(values[3], clearance)
-    result <- ggplot2::margin(values[1], values[2], values[3], values[4], unit = "mm")
-    attr(result, "ideogram_space_base") <- margin
-    result
+as_ideogram_margin <- function(x) {
+  proto <- ggplot2::margin(0, 0, 0, 0, unit = "mm")
+  if ("S7_object" %in% class(proto)) {
+    attr(x, "S7_class") <- attr(proto, "S7_class")
   }
-  plot + ggplot2::theme(
-    plot.title = ggplot2::element_text(margin = heading_margin(plot$theme$plot.title)),
-    plot.subtitle = ggplot2::element_text(margin = heading_margin(plot$theme$plot.subtitle)))
+  class(x) <- unique(c(
+    setdiff(class(proto), c("simpleUnit", "unit", "unit_v2", "S7_object")),
+    class(x),
+    intersect("S7_object", class(proto))
+  ))
+  x
+}
+
+auto_element_margin <- function(element, side, needed) {
+  if (inherits(element, "element_blank")) return(NULL)
+  margin <- element$margin %||% ggplot2::margin(0, 0, 0, 0, unit = "mm")
+  base <- attr(margin, "ideogram_space_base") %||% margin
+  zero <- grid::unit(0, "mm")
+  pad <- list(zero, zero, zero, zero)
+  pad[[side]] <- needed
+  result <- as_ideogram_margin(grid::unit.pmax(base, do.call(grid::unit.c, pad)))
+  attr(result, "ideogram_space_base") <- base
+  ggplot2::element_text(margin = result)
+}
+
+reserve_ideogram_heading_space <- function(plot, needed) {
+  spec <- list(
+    plot.title = list(side = 3L, pad = needed[1]),
+    plot.subtitle = list(side = 3L, pad = needed[1]),
+    axis.title.x.top = list(side = 3L, pad = needed[1]),
+    axis.title.x = list(side = 1L, pad = needed[3]),
+    plot.caption = list(side = 1L, pad = needed[3]),
+    axis.title.y = list(side = 2L, pad = needed[4]),
+    axis.title.y.right = list(side = 4L, pad = needed[2])
+  )
+  updates <- list()
+  for (field in names(spec)) {
+    entry <- spec[[field]]
+    updated <- auto_element_margin(plot$theme[[field]], entry$side, entry$pad)
+    if (!is.null(updated)) updates[[field]] <- updated
+  }
+  if (!length(updates)) return(plot)
+  plot + do.call(ggplot2::theme, updates)
 }
 
 circular_text_space <- function(plot) {
@@ -429,14 +486,23 @@ circular_text_space <- function(plot) {
   axis <- layout$circular_name_axis
   if (!is.null(axis)) {
     axis_offset <- grid::unit(axis$tick_length, "mm")
+    theta_axis <- circular_theta(layout, axis$label_x %||% layout$chrom$.name_x)
     if (isTRUE(axis$labels) && length(axis$label)) {
-      dimensions <- rotated_text_dimensions(circular_text_dimensions(axis$label, axis$size, axis$family),
+      dimensions <- rotated_text_dimensions(
+        circular_text_dimensions(axis$label, axis$size, axis$family),
         axis$angle %||% 0)
-      theta <- circular_theta(layout, axis$label_x %||% layout$chrom$.name_x)
-      axis_offset <- axis_offset + max(abs(sin(theta)) * dimensions$width +
-        abs(cos(theta)) * dimensions$height) +
+      axis_offset <- axis_offset + max(abs(sin(theta_axis)) * dimensions$width +
+        abs(cos(theta_axis)) * dimensions$height) +
         grid::unit(axis$label_gap * axis$size, "mm")
     }
+    nx_a <- sin(theta_axis); ny_a <- cos(theta_axis)
+    axis_overhang <- list(
+      pmax(ny_a, 0) * axis_offset,
+      pmax(nx_a, 0) * axis_offset,
+      pmax(-ny_a, 0) * axis_offset,
+      pmax(-nx_a, 0) * axis_offset
+    )
+    for (i in seq_len(4)) needed[i] <- max(needed[i], max(axis_overhang[[i]]))
   }
   for (layer in plot$layers) {
     if (!inherits(layer$geom, "GeomCircularName")) next
@@ -455,6 +521,30 @@ circular_text_space <- function(plot) {
       pmax(nx, 0) * offset + half_x, pmax(-ny, 0) * offset + half_y,
       pmax(-nx, 0) * offset + half_x)
     for (i in seq_len(4)) needed[i] <- max(needed[i], max(overhang[[i]]))
+  }
+  max_r <- max(abs(unlist(layout$bounds)))
+  for (layer in Filter(function(l) isTRUE(l$ideogram_gene_label), plot$layers)) {
+    data <- layer$data
+    if (!nrow(data) || max_r - max(abs(data$.ly)) > layout$chromosome_width * 2) next
+    dimensions <- rotated_text_dimensions(
+      circular_text_dimensions(data$.model_label, layer$aes_params$size,
+        layer$aes_params$family %||% "", layer$aes_params$fontface %||% 1),
+      layer$aes_params$angle %||% 0)
+    theta <- circular_theta(layout, data$.lx)
+    dir <- if (layout$circular$clockwise) 1 else -1
+    tx <- -dir * cos(theta); ty <- dir * sin(theta)
+    reach <- pmax(abs(layer$aes_params$hjust), abs(1 - layer$aes_params$hjust))
+    ext_x <- abs(tx) * dimensions$width * reach + dimensions$height / 2
+    ext_y <- abs(ty) * dimensions$width * reach + dimensions$height / 2
+    xy <- circular_xy(layout, data$.lx, data$.ly)
+    at_top <- xy$y >= max_r - layout$chromosome_width * 2 | ty > 0.5
+    at_right <- xy$x >= max_r - layout$chromosome_width * 2 | tx > 0.5
+    at_bottom <- xy$y <= -max_r + layout$chromosome_width * 2 | ty < -0.5
+    at_left <- xy$x <= -max_r + layout$chromosome_width * 2 | tx < -0.5
+    if (any(at_top)) needed[1] <- max(needed[1], max(ext_y[at_top]))
+    if (any(at_right)) needed[2] <- max(needed[2], max(ext_x[at_right]))
+    if (any(at_bottom)) needed[3] <- max(needed[3], max(ext_y[at_bottom]))
+    if (any(at_left)) needed[4] <- max(needed[4], max(ext_x[at_left]))
   }
   needed
 }

@@ -131,11 +131,12 @@ attach_chr_component <- function(layout, object, name) {
       "intentional."), name, if (length(unique(chr[duplicated_key])) > 1L) "s" else "",
       format_chr_rows(unique(chr[duplicated_key])))
   }
-  if (object$relationship == "one-to-one" &&
-      !setequal(chr, layout$chrom$.chr)) {
+  if (object$relationship == "one-to-one") {
     missing <- setdiff(layout$chrom$.chr, chr)
-    stopf("One-to-one chromosome attachment `%s` is missing %s.",
-          name, format_chr_rows(missing))
+    if (length(missing)) {
+      stopf("One-to-one chromosome attachment `%s` is missing %s.",
+            name, format_chr_rows(missing))
+    }
   }
 
   attached <- object$data
@@ -171,7 +172,11 @@ attach_locus_component <- function(layout, object, name) {
       any(!is.finite(position))) {
     stopf("Locus attachment positions must be finite numeric coordinates.")
   }
-  project_positions_checked(layout, chr, position)
+  source <- layout$data$karyotype
+  src_idx <- match(chr, source$.chr)
+  if (any(position < source$.start[src_idx] | position > source$.end[src_idx])) {
+    stopf("Locus attachment positions are outside the source chromosome bounds.")
+  }
   key <- paste(chr, format(position, digits = 17, scientific = FALSE),
                sep = "\r")
   duplicated_key <- duplicated(key) | duplicated(key, fromLast = TRUE)
@@ -184,9 +189,13 @@ attach_locus_component <- function(layout, object, name) {
       "intentional."), name, if (length(detail) > 1L) "s" else "",
       paste0("`", detail, "`", collapse = ", "))
   }
-  attached <- object$data
-  attached$.chr <- chr
-  attached$.position <- as.numeric(position)
+  vis <- match(chr, layout$chrom$.chr)
+  keep <- !is.na(vis) & position >= layout$chrom$.start[vis] &
+    position <= layout$chrom$.end[vis]
+  attached <- object$data[keep, , drop = FALSE]
+  attached$.chr <- chr[keep]
+  attached$.position <- as.numeric(position[keep])
+  rownames(attached) <- NULL
   layout$attachments$locus[[name]] <- attached
   layout
 }
@@ -195,7 +204,7 @@ validate_attachment_chr <- function(layout, chr) {
   if (anyNA(chr) || any(!nzchar(chr))) {
     stopf("Attachment chromosome keys must be non-missing and non-empty.")
   }
-  unknown <- setdiff(unique(chr), layout$chrom$.chr)
+  unknown <- setdiff(unique(chr), layout$data$karyotype$.chr)
   if (length(unknown)) {
     stopf("Attachment contains unknown chromosome%s %s.",
           if (length(unknown) > 1L) "s" else "",

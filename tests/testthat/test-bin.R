@@ -166,6 +166,22 @@ test_that("bad arguments are named", {
   expect_error(bin_genome(d, kar, window = Inf), "positive integer")
   expect_error(bin_genome(d, data.frame(Chr = "A")), "needs columns Chr and End")
   expect_error(bin_genome(d, data.frame(Chr = "A", End = -1)), "End|end")
+
+  empty_df <- data.frame(Chr = character(0), Start = numeric(0), Q = numeric(0))
+  empty_summary <- bin_genome(empty_df, kar, window = 1000, value = "Q")
+  expect_true(is.numeric(empty_summary$Value))
+  expect_identical(typeof(empty_summary$Value), "double")
+  p <- ggideogram(kar) +
+    geom_track(
+      track = "q",
+      data = transform(empty_summary, Mid = (Start - 1 + End) / 2),
+      mapping = ggplot2::aes(chr = Chr, x = Mid, y = Value),
+      geom = ggplot2::geom_line(na.rm = TRUE)
+    )
+  expect_no_warning(expect_no_error(ggplot2::ggplotGrob(p)))
+
+  bad_val <- data.frame(Chr = "A", Start = 10, Label = "gene1", stringsAsFactors = FALSE)
+  expect_error(bin_genome(bad_val, kar, window = 1000, value = "Label"), "numeric `value` column")
 })
 
 test_that("bin_genome reproduces GFFex for the case GFFex covers", {

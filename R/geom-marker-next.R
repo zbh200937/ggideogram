@@ -1,14 +1,51 @@
 # Native point and segment marker layers for the dimensionless renderer.
 
+validate_and_filter_chr_marker <- function(data, ideogram_layout) {
+  if (!nrow(data) || !all(c("chr", "position") %in% names(data))) return(data)
+  chr <- validate_chr(data$chr, "chr")
+  pos <- validate_coordinate(data$position, "position")
+  if (!is.null(ideogram_layout)) {
+    source <- ideogram_layout$data$karyotype
+    i <- match(chr, source$.chr)
+    if (anyNA(i)) {
+      stopf("Unknown chromosome%s: %s.",
+            if (sum(is.na(i)) > 1L) "s" else "",
+            format_chr_rows(unique(chr[is.na(i)])))
+    }
+    if (any(pos < source$.start[i] | pos > source$.end[i])) {
+      stopf("Genomic position is outside its chromosome bounds.")
+    }
+    vis <- match(chr, ideogram_layout$chrom$.chr)
+    keep <- !is.na(vis) & pos >= ideogram_layout$chrom$.start[vis] &
+      pos <= ideogram_layout$chrom$.end[vis]
+    data <- data[keep, , drop = FALSE]
+    chr <- chr[keep]
+    pos <- pos[keep]
+  }
+  data$chr <- chr
+  data$position <- pos
+  data
+}
+
 StatChrMarker <- ggplot2::ggproto(
   "StatChrMarker", ggplot2::Stat,
   required_aes = c("chr", "position"),
+  compute_layer = function(self, data, params, layout) {
+    params$ideogram_layout <- layout$coord$layout
+    data <- validate_and_filter_chr_marker(data, params$ideogram_layout)
+    ggplot2::ggproto_parent(ggplot2::Stat, self)$compute_layer(data, params, layout)
+  },
   compute_panel = function(data, scales, side = "right", gap = 0.25,
                            track = NULL, component = "marker", track_position = 0.5,
-                           na.rm = FALSE) {
-    data$ideogram_chr <- as.character(data$chr)
-    data$ideogram_anchor_position <- data$position
-    data$ideogram_position <- data$position
+                           na.rm = FALSE, ideogram_layout = NULL) {
+    if (!nrow(data)) return(data.frame())
+    data <- validate_and_filter_chr_marker(data, ideogram_layout)
+    if (!nrow(data)) return(data.frame())
+    chr <- data$chr
+    pos <- data$position
+    data$ideogram_chr <- chr
+    data$ideogram_anchor_position <- pos
+    data$ideogram_position <- pos
     data$ideogram_side <- side
     data$ideogram_gap <- gap
     if (!is.null(track)) {
@@ -39,7 +76,8 @@ geom_chr_marker <- function(
     track_position = 0.5,
     na.rm = FALSE,
     show.legend = NA,
-    inherit.aes = FALSE) {
+    inherit.aes = FALSE,
+    .geom = ggplot2::GeomPoint) {
   side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
@@ -48,7 +86,7 @@ geom_chr_marker <- function(
     data = data,
     mapping = mapping,
     stat = stat,
-    geom = ggplot2::GeomPoint,
+    geom = .geom,
     position = position,
     show.legend = show.legend,
     inherit.aes = inherit.aes,

@@ -102,10 +102,25 @@ StatTrackAxis <- ggplot2::ggproto(
   }
 )
 
+auto_track_axis_breaks <- function(limits, n) {
+  breaks <- pretty(limits, n = n)
+  breaks <- breaks[breaks >= limits[1] & breaks <= limits[2]]
+  if (length(breaks) >= 2L || limits[2] <= limits[1]) return(breaks)
+  for (cand_n in unique(c(max(2L, ceiling(n) + 1L), 3L, 4L, 5L, 6L, 8L, 10L))) {
+    cand <- pretty(limits, n = cand_n)
+    cand <- cand[cand >= limits[1] & cand <= limits[2]]
+    if (length(cand) >= 2L) {
+      return(if (n <= 1 && length(cand) > 2L) c(cand[1L], cand[length(cand)]) else cand)
+    }
+  }
+  limits
+}
+
 build_track_axis_layers <- function(layout, object, chromosomes) {
   object$family <- object$family %||% layout$base_spec$base_family %||% ""
   spec <- track_table_row(layout, object$track)
-  position <- object$position
+  raw_position <- object$position
+  position <- raw_position
   gap <- track_axis_gap(object$gap)
   if (position == "auto") position <- if (is_circular_layout(layout) &&
       spec$value_scale != "per_chr" && isTRUE(object$chr)) "gap" else "end"
@@ -129,22 +144,32 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
         "  Add its data layer before an automatic-range axis, or declare ",
         "explicit track limits."), object$track, chr)
     }
-    breaks <- if (is.function(object$breaks)) {
-      object$breaks(limits)
-    } else if (is.null(object$breaks)) {
-      pretty(limits, n = object$n)
+    if (is.null(object$breaks)) {
+      breaks <- auto_track_axis_breaks(limits, object$n)
+      fixed_labels <- NULL
     } else {
-      object$breaks
+      raw_breaks <- if (is.function(object$breaks)) object$breaks(limits) else object$breaks
+      if (!is.numeric(raw_breaks) || anyNA(raw_breaks) || any(!is.finite(raw_breaks))) {
+        stopf("Track-axis `breaks` must resolve to finite numbers.")
+      }
+      keep <- raw_breaks >= limits[1] & raw_breaks <= limits[2]
+      if (!is.function(object$labels) && !is.null(object$labels)) {
+        if (length(object$labels) != length(raw_breaks)) {
+          stopf("Track-axis `labels` must match the number of breaks.")
+        }
+        fixed_labels <- object$labels[keep]
+      } else {
+        fixed_labels <- NULL
+      }
+      breaks <- raw_breaks[keep]
     }
-    if (!is.numeric(breaks) || anyNA(breaks) || any(!is.finite(breaks))) {
-      stopf("Track-axis `breaks` must resolve to finite numbers.")
-    }
-    breaks <- breaks[breaks >= limits[1] & breaks <= limits[2]]
     if (!length(breaks)) next
-    label <- if (is.function(object$labels)) {
+    label <- if (!is.null(fixed_labels)) {
+      fixed_labels
+    } else if (is.function(object$labels)) {
       object$labels(breaks)
     } else {
-      object$labels
+      NULL
     }
     if (is.null(label)) label <- rep("", length(breaks))
     if (length(label) != length(breaks)) {
@@ -152,7 +177,9 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
     }
 
     g <- layout$chrom[layout$index[[chr]], , drop = FALSE]
-    genomic_position <- if (position == "end") g$.end else g$.start
+    eff_pos <- if (raw_position == "auto" && !in_gap && !is_circular_layout(layout) &&
+        g$.direction < 0) "start" else position
+    genomic_position <- if (eff_pos == "end") g$.end else g$.start
     ends <- project_track_values_raw(
       layout, object$track, rep(chr, 2), rep(genomic_position, 2), limits)
     at <- project_track_values_raw(
@@ -161,7 +188,7 @@ build_track_axis_layers <- function(layout, object, chromosomes) {
     dx <- g$.axis_end_x - g$.axis_start_x
     dy <- g$.axis_end_y - g$.axis_start_y
     axis_length <- sqrt(dx^2 + dy^2)
-    direction <- if (position == "end") 1 else -1
+    direction <- if (eff_pos == "end") 1 else -1
     if (in_gap) {
       arc <- circular_gap_axis_arc(layout, gap)
       ends <- circular_xy(layout, rep(arc, 2), ends$y)

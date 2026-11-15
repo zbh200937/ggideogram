@@ -1,4 +1,4 @@
-# Run from the repository: micromamba run -n multiomics Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/circular-gallery.R")'
+# Run from the repository: Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/circular-gallery.R")'
 library(ggideogram)
 library(ggplot2)
 source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
@@ -61,8 +61,8 @@ spans <- rbind(data.frame(Chr = blocks$Chr1, Start = blocks$Start1, End = blocks
     End = blocks$End2, Direction = blocks$Orientation))
 representatives <- do.call(rbind, lapply(split(pairs, pairs$Block),
   function(d) d[ceiling(nrow(d) / 2), ]))
-representatives$Pos1 <- (representatives$Start1 + representatives$End1) / 2
-representatives$Pos2 <- (representatives$Start2 + representatives$End2) / 2
+representatives$Pos1 <- (representatives$Start1 - 1 + representatives$End1) / 2
+representatives$Pos2 <- (representatives$Start2 - 1 + representatives$End2) / 2
 p_synteny <- do.call(ggideogram, c(list(data = k, radius = 23,
   gap_angle = c('1' = 8, '5' = 40),
   tracks = track_layout(count = geom_track(side = "inner", width = 2.8, gap = 0.8, limits = c(0,

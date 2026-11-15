@@ -62,21 +62,29 @@ view_chr_data <- function(data, view, chr = "Chr", position = NULL,
   }
   window <- view$view
   ids <- validate_chr(projection_column(data, chr, "chr"), "chr")
-  result <- data[ids == window$chr, , drop = FALSE]
-  source <- view$karyotype[view$karyotype$.chr == window$chr, ]
+  src_idx <- match(ids, view$karyotype$.chr)
+  if (anyNA(src_idx)) {
+    stopf("Unknown chromosomes in view data: %s.",
+          format_chr_rows(unique(ids[is.na(src_idx)])))
+  }
   if (!is.null(position)) {
-    p <- validate_coordinate(projection_column(result, position, "position"), "position")
-    if (any(p < source$.start | p > source$.end)) {
+    p_all <- validate_coordinate(projection_column(data, position, "position"), "position")
+    if (any(p_all < view$karyotype$.start[src_idx] | p_all > view$karyotype$.end[src_idx])) {
       stopf("Point observations are outside the source chromosome bounds.")
     }
-    result <- result[p >= window$start & p <= window$end, , drop = FALSE]
+    keep <- ids == window$chr & p_all >= window$start & p_all <= window$end
+    result <- data[keep, , drop = FALSE]
   } else {
-    lo <- validate_coordinate(projection_column(result, start, "start"), "start")
-    hi <- validate_coordinate(projection_column(result, end, "end"), "end")
-    if (any(lo < 1 | lo > hi | lo != floor(lo) | hi != floor(hi) |
-            lo - 1 < source$.start | hi > source$.end)) {
+    lo_all <- validate_coordinate(projection_column(data, start, "start"), "start")
+    hi_all <- validate_coordinate(projection_column(data, end, "end"), "end")
+    if (any(lo_all < 1 | lo_all > hi_all | lo_all != floor(lo_all) | hi_all != floor(hi_all) |
+            lo_all - 1 < view$karyotype$.start[src_idx] | hi_all > view$karyotype$.end[src_idx])) {
       stopf("Intervals require closed integer coordinates inside the source chromosome bounds.")
     }
+    on_chr <- ids == window$chr
+    result <- data[on_chr, , drop = FALSE]
+    lo <- lo_all[on_chr]
+    hi <- hi_all[on_chr]
     keep <- hi > window$start & lo - 1 < window$end
     if (!".source_start" %in% names(result)) result$.source_start <- lo
     if (!".source_end" %in% names(result)) result$.source_end <- hi

@@ -156,6 +156,10 @@ test_that("axis physical dimensions reject relative and invalid units", {
     "absolute physical unit"
   )
   expect_error(
+    guide_chromosome_axis(axis_karyotype, axis_length = grid::unit(1, "lines")),
+    "absolute physical unit"
+  )
+  expect_error(
     guide_chromosome_axis(axis_karyotype, body_width = grid::unit(0, "mm")),
     "positive finite"
   )
@@ -163,4 +167,34 @@ test_that("axis physical dimensions reject relative and invalid units", {
     guide_chromosome_axis(axis_karyotype, label_gap = grid::unit(-1, "mm")),
     "non-negative finite"
   )
+})
+
+test_that("chromosome axis scales and guides never open a graphics device at construction", {
+  while (grDevices::dev.cur() > 1L) grDevices::dev.off()
+  old_opt <- options(device = function(...) stop("Unexpected graphics device opened"))
+  old_wd <- getwd()
+  ro_dir <- tempfile("axis_readonly_")
+  dir.create(ro_dir)
+  Sys.chmod(ro_dir, "0555")
+  on.exit({
+    setwd(old_wd)
+    Sys.chmod(ro_dir, "0755")
+    unlink(ro_dir, recursive = TRUE)
+    options(old_opt)
+  }, add = TRUE)
+  setwd(ro_dir)
+
+  sx <- scale_x_chromosome(
+    axis_karyotype,
+    axis_length = grid::unit(1, "cm") + grid::unit(8, "mm"),
+    body_width = grid::unit(5, "pt"),
+    label_gap = grid::unit(0.05, "in")
+  )
+  sy <- scale_y_chromosome(axis_karyotype)
+  g <- guide_chromosome_axis(axis_karyotype)
+  expect_identical(unname(grDevices::dev.cur()), 1L)
+  expect_length(list.files(ro_dir, all.files = TRUE, no.. = TRUE), 0L)
+  expect_s3_class(sx, "ScaleDiscretePosition")
+  expect_s3_class(sy, "ScaleDiscretePosition")
+  expect_s3_class(g, "GuideChromosomeAxis")
 })

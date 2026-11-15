@@ -81,4 +81,79 @@ test_that("views reject impossible windows and invalid source observations", {
                              position = "Pos"), "outside")
   empty <- view_chr_data(data.frame(Chr = "B", Start = 1, End = 2), view)
   expect_equal(nrow(empty), 0)
+  expect_error(
+    view_chr_data(data.frame(Chr = "TYPO", Pos = 250), view, position = "Pos"),
+    "Unknown chromosomes"
+  )
+  expect_error(
+    view_chr_data(data.frame(Chr = "B", Pos = 9999), view, position = "Pos"),
+    "outside"
+  )
+})
+
+test_that("full source tables validate against source karyotype then filter to chr_view", {
+  view <- chr_view(view_kar, "A", 200, 500)
+  pts <- data.frame(
+    Chr = c("A", "A", "A", "B"),
+    Pos = c(100, 320, 700, 400),
+    Label = c("up", "hit", "down", "other")
+  )
+  meta <- data.frame(Chr = c("A", "B"), Group = c("g1", "g2"))
+  child <- ggplot2::ggplot(data.frame(x = 1:2, y = 1:2), ggplot2::aes(x, y)) +
+    ggplot2::geom_point()
+  insets <- data.frame(Chr = c("A", "A", "B"), Start = c(150, 600, 100), End = c(260, 700, 200))
+
+  base <- ggideogram(view, tracks = list(ins = geom_track(width = 6)))
+  n0 <- length(base$layers)
+  p <- base +
+    chr_data(meta, by = c(chr = "Chr"), name = "meta") +
+    locus_data(pts, by = c(chr = "Chr", position = "Pos"), name = "pts") +
+    geom_locus(data = pts, ggplot2::aes(chr = Chr, position = Pos)) +
+    geom_locus(data = pts, ggplot2::aes(chr = Chr, position = Pos, label = Label),
+      geom = "text", position = "identity") +
+    geom_locus(data = pts, ggplot2::aes(chr = Chr, position = Pos), geom = "link") +
+    geom_locus_inset(
+      child,
+      data = insets,
+      ggplot2::aes(chr = Chr, start = Start, end = End),
+      track = "ins",
+      width = grid::unit(0.3, "npc"),
+      height = grid::unit(0.3, "npc")
+    )
+
+  built <- ggplot2::ggplot_build(p)
+  attached_pts <- get_ideogram_attachment(p, "pts", type = "locus")
+  expect_equal(nrow(attached_pts), 1L)
+  expect_equal(attached_pts$.position, 320)
+  expect_equal(built$data[[n0 + 1L]]$ideogram_position, 320)
+  expect_equal(built$data[[n0 + 2L]]$label, "hit")
+  expect_equal(nrow(built$data[[n0 + 3L]]), 1L)
+  expect_equal(built$data[[n0 + 4L]]$ideogram_inset_start, 201)
+  expect_equal(built$data[[n0 + 4L]]$ideogram_inset_end, 260)
+  expect_equal(built$data[[n0 + 4L]]$.source_start, 150)
+  expect_no_error(ggplot2::ggplotGrob(p))
+
+  bad_chr <- rbind(pts, data.frame(Chr = "TYPO", Pos = 300, Label = "bad"))
+  expect_error(
+    ggplot2::ggplot_build(ggideogram(view) + geom_locus(data = bad_chr, ggplot2::aes(chr = Chr, position = Pos))),
+    "Unknown chromosome"
+  )
+  bad_oob <- rbind(pts, data.frame(Chr = "B", Pos = 9999, Label = "oob"))
+  expect_error(
+    ggplot2::ggplot_build(ggideogram(view) + geom_locus(data = bad_oob, ggplot2::aes(chr = Chr, position = Pos))),
+    "outside its chromosome bounds"
+  )
+  expect_error(
+    ggideogram(view, tracks = list(ins = geom_track(width = 6))) +
+      geom_locus_inset(
+        child,
+        data = data.frame(Chr = "A", Pos = 300),
+        ggplot2::aes(chr = Chr, position = Pos),
+        placement = "center",
+        track = "ins",
+        width = grid::unit(0.2, "npc"),
+        height = grid::unit(0.2, "npc")
+      ),
+    "requires `placement = \"beside\"`"
+  )
 })

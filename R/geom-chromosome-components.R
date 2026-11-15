@@ -64,7 +64,7 @@ geom_chr_name <- function(
     size = ideogram_text_size("chromosome"),
     gap = 0.5,
     colour = ideogram_colour("text"),
-    family = "",
+    family = NULL,
     position = c("auto", "start", "end", "middle"),
     align = c("body", "tracks")) {
   check_positive_layout(size, "size")
@@ -79,7 +79,7 @@ geom_chr_name <- function(
 #' @noRd
 geom_chr_axis <- function(
     chr = TRUE,
-    side = c("left", "right", "inner", "outer"),
+    side = c("left", "right", "inner", "outer", "auto"),
     breaks = NULL,
     n = 6,
     units = c("auto", "bp", "kb", "Mb", "Gb"),
@@ -88,7 +88,7 @@ geom_chr_axis <- function(
     tick_length = 1.5,
     label_gap = 0.25,
     size = ideogram_text_size("bp"),
-    family = "",
+    family = NULL,
     colour = ideogram_colour("axis"),
     linewidth = ideogram_linewidth("axis"), angle = 0, check_overlap = NULL) {
   if (!isTRUE(chr) && (!is.character(chr) || !length(chr))) {
@@ -161,11 +161,14 @@ ggplot_add.ggideogram_chromosome_component <- function(
     },
     name = list(chromosome_name_layer(
       layout, parameters$size, parameters$gap,
-      parameters$family, parameters$colour, parameters$position, parameters$align)),
+      parameters$family %||% layout$base_spec$base_family %||% "",
+      parameters$colour, parameters$position, parameters$align)),
     axis = chromosome_axis_layers(
       layout,
       chr = parameters$chr,
-      side = parameters$side,
+      side = if (parameters$side == "auto" && !isTRUE(layout$microsynteny)) {
+        if (is_circular_layout(layout)) "right" else "left"
+      } else parameters$side,
       breaks = parameters$breaks,
       n = parameters$n,
       units = parameters$units,
@@ -174,7 +177,7 @@ ggplot_add.ggideogram_chromosome_component <- function(
       tick_length = parameters$tick_length,
       label_gap = parameters$label_gap,
       size = parameters$size,
-      family = parameters$family,
+      family = parameters$family %||% layout$base_spec$base_family %||% "",
       colour = parameters$colour,
       linewidth = parameters$linewidth,
       angle = parameters$angle %||% 0, check_overlap = parameters$check_overlap

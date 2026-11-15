@@ -8,8 +8,8 @@ pairs <- read.delim(system.file("extdata", "arabidopsis-synteny-pairs.tsv",
   package = "ggideogram"))
 pairs <- pairs[pairs$Chr1 != pairs$Chr2, ]
 pairs <- do.call(rbind, lapply(split(pairs, pairs$Block), function(d) d[ceiling(nrow(d) / 2), ]))
-pairs$Pos1 <- (pairs$Start1 + pairs$End1) / 2
-pairs$Pos2 <- (pairs$Start2 + pairs$End2) / 2
+pairs$Pos1 <- (pairs$Start1 - 1 + pairs$End1) / 2
+pairs$Pos2 <- (pairs$Start2 - 1 + pairs$End2) / 2
 genes <- rbind(data.frame(Chr = pairs$Chr1, Pos = pairs$Pos1),
   data.frame(Chr = pairs$Chr2, Pos = pairs$Pos2))
 karyotype <- data.frame(Chr = c("1", "5"), Start = 0, End = c(30427671, 26975502))

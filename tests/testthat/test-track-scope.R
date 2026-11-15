@@ -710,3 +710,122 @@ test_that("overlay tiles and locus layers can be copied and adjusted together", 
     expect_no_warning(ggplot2::ggplotGrob(unclipped))
   }
 })
+
+test_that("automatic track value axes retain ticks on non-round ranges and filter fixed labels cleanly", {
+  k <- data.frame(Chr = "A", Start = 0, End = 100)
+  for (rng in list(c(1, 9), c(0.12, 0.88), c(11, 19), c(105, 195))) {
+    d <- data.frame(Chr = "A", Pos = c(20, 80), Value = rng)
+    p <- ggideogram(k, show_names = FALSE) +
+      geom_track(track = "sig", data = d,
+        ggplot2::aes(chr = Chr, x = Pos, y = Value),
+        geom = ggplot2::geom_line(), axis = TRUE)
+    built <- ggplot2::ggplot_build(p)$data
+    tick_idx <- which(vapply(p$layers, function(l) inherits(l$geom, "GeomIdeogramTick"), logical(1)))
+    expect_length(tick_idx, 1L)
+    expect_gte(nrow(built[[tick_idx]]), 2L)
+  }
+
+  d76 <- data.frame(Chr = "A", Pos = c(20, 80), Value = c(0, 76))
+  p_ok <- ggideogram(k, show_names = FALSE) +
+    geom_track(track = "sig", data = d76,
+      ggplot2::aes(chr = Chr, x = Pos, y = Value),
+      geom = ggplot2::geom_line(),
+      axis = list(breaks = c(0, 50, 100), labels = c("0", "50", "100")))
+  built_ok <- ggplot2::ggplot_build(p_ok)$data
+  txt_idx <- which(vapply(p_ok$layers, function(l) inherits(l$geom, "GeomIdeogramAxisText") &&
+    inherits(l$stat, "StatTrackAxis"), logical(1)))
+  expect_equal(built_ok[[txt_idx]]$label, c("0", "50"))
+
+  expect_error(
+    ggplot2::ggplot_build(ggideogram(k, show_names = FALSE) +
+      geom_track(track = "sig", data = d76,
+        ggplot2::aes(chr = Chr, x = Pos, y = Value),
+        geom = ggplot2::geom_line(),
+        axis = list(breaks = c(0, 50, 100), labels = c("0", "50")))),
+    "must match the number of breaks"
+  )
+})
+
+test_that("reverse_chr keeps auto linear track value axes at the display end while explicit endpoints use source bp", {
+  k <- data.frame(Chr = c("A", "B"), Start = 0, End = 100)
+  d <- data.frame(Chr = rep(c("A", "B"), each = 2),
+    Pos = rep(c(10, 90), 2), Value = c(0, 10, 0, 10))
+  p_v <- ggideogram(k, ncol = 2, reverse_chr = "B") +
+    geom_track(track = "sig", data = d,
+      ggplot2::aes(chr = Chr, x = Pos, y = Value),
+      geom = ggplot2::geom_line(), axis = TRUE)
+  tick_v <- which(vapply(p_v$layers, function(l) inherits(l$geom, "GeomIdeogramTick"), logical(1)))
+  bv <- ggplot2::ggplot_build(p_v)$data[[tick_v]]
+  expect_equal(length(unique(round(bv$y, 6))), 1L)
+  expect_true(all(bv$ny < 0))
+
+  p_h <- ggideogram(k, orientation = "horizontal", reverse_chr = "B") +
+    geom_track(track = "sig", data = d,
+      ggplot2::aes(chr = Chr, x = Pos, y = Value),
+      geom = ggplot2::geom_line(), axis = TRUE)
+  tick_h <- which(vapply(p_h$layers, function(l) inherits(l$geom, "GeomIdeogramTick"), logical(1)))
+  bh <- ggplot2::ggplot_build(p_h)$data[[tick_h]]
+  expect_equal(length(unique(round(bh$x, 6))), 1L)
+  expect_true(all(bh$nx > 0))
+
+  p_exp <- ggideogram(k, ncol = 2, reverse_chr = "B") +
+    geom_track(track = "sig", data = d,
+      ggplot2::aes(chr = Chr, x = Pos, y = Value),
+      geom = ggplot2::geom_line(), axis = list(chr = "B", position = "end"))
+  tick_exp <- which(vapply(p_exp$layers, function(l) inherits(l$geom, "GeomIdeogramTick"), logical(1)))
+  b_exp <- ggplot2::ggplot_build(p_exp)$data[[tick_exp]]
+  expect_true(all(b_exp$ny > 0))
+})
+
+test_that("incremental geom_track addition onto a declared overlay track preserves tile silhouette clipping", {
+  k <- data.frame(Chr = "A", Start = 0, End = 100, CE_start = 40, CE_end = 60)
+  d <- data.frame(Chr = "A", Pos = c(10, 50, 90), Value = c(1, 2, 3))
+  base <- ggideogram(k, centromere = ggplot2::aes(start = CE_start, end = CE_end),
+    tracks = list(heat = geom_track(side = "overlay")), show_names = FALSE)
+  p_auto <- base + geom_track(track = "heat", data = d,
+    ggplot2::aes(chr = Chr, x = Pos, y = Value, fill = Value),
+    geom = ggplot2::geom_tile(width = 20))
+  tile_auto <- track_scope_indices(p_auto, "GeomTile")
+  expect_s3_class(p_auto$layers[[tile_auto]]$geom, "GeomChrTrackTile")
+
+  p_on <- base + geom_track(track = "heat", data = d,
+    ggplot2::aes(chr = Chr, x = Pos, y = Value, fill = Value),
+    geom = ggplot2::geom_tile(width = 20), clip = "on")
+  tile_on <- track_scope_indices(p_on, "GeomTile")
+  expect_s3_class(p_on$layers[[tile_on]]$geom, "GeomChrTrackTile")
+  expect_no_warning(ggplot2::ggplotGrob(p_on))
+})
+
+test_that("boxplot hinges, whiskers and notches remain ordered on decreasing transverse tracks", {
+  k <- data.frame(Chr = "A", Start = 0, End = 100)
+  vals <- rep(c(1, 2, 2.2, 2.5, 2.8, 3, 3.1, 3.2, 3.5, 4, 4.5, 5, 6, 7, 8, 12), 3)
+  d <- data.frame(Chr = "A", Pos = rep(50, length(vals)), Value = vals)
+  cases <- list(
+    list(orientation = "horizontal", side = "right", reverse = FALSE),
+    list(orientation = "horizontal", side = "left", reverse = TRUE),
+    list(orientation = "vertical", side = "left", reverse = FALSE),
+    list(orientation = "vertical", side = "right", reverse = TRUE),
+    list(orientation = "circular", side = "inner", reverse = FALSE)
+  )
+  for (cfg in cases) {
+    p <- ggideogram(k, orientation = cfg$orientation, show_names = FALSE) +
+      geom_track(track = "box", side = cfg$side, reverse = cfg$reverse,
+        data = d, ggplot2::aes(chr = Chr, x = Pos, y = Value, group = Pos),
+        geom = ggplot2::geom_boxplot(width = 10, notch = TRUE))
+    grob <- expect_no_message(expect_no_warning(ggplot2::ggplotGrob(p)))
+    if (cfg$orientation != "circular") {
+      segs <- Filter(function(g) inherits(g, "segments") && length(g$y0) == 2L,
+        track_scope_grobs(grob))
+      expect_gte(length(segs), 1L)
+      w <- segs[[length(segs)]]
+      if (cfg$orientation == "horizontal") {
+        y0 <- as.numeric(w$y0); y1 <- as.numeric(w$y1)
+        s1 <- sort(c(y0[1], y1[1])); s2 <- sort(c(y0[2], y1[2]))
+      } else {
+        x0 <- as.numeric(w$x0); x1 <- as.numeric(w$x1)
+        s1 <- sort(c(x0[1], x1[1])); s2 <- sort(c(x0[2], x1[2]))
+      }
+      expect_true(s1[2] <= s2[1] || s2[2] <= s1[1])
+    }
+  }
+})

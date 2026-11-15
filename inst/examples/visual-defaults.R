@@ -8,9 +8,9 @@ pairs <- read.delim(system.file("extdata", "arabidopsis-synteny-pairs.tsv",
   package = "ggideogram"))
 pairs <- pairs[pairs$Block == 15, ]
 genes <- unique(rbind(
-  data.frame(Chr = pairs$Chr1, Pos = (pairs$Start1 + pairs$End1) / 2,
+  data.frame(Chr = pairs$Chr1, Pos = (pairs$Start1 - 1 + pairs$End1) / 2,
     Gene = pairs$Gene1),
-  data.frame(Chr = pairs$Chr2, Pos = (pairs$Start2 + pairs$End2) / 2,
+  data.frame(Chr = pairs$Chr2, Pos = (pairs$Start2 - 1 + pairs$End2) / 2,
     Gene = pairs$Gene2)))
 karyotype <- data.frame(Chr = "1", Start = 0, End = 30427671)
 view <- chr_view(karyotype, "1", min(genes$Pos) - 20000, max(genes$Pos) + 20000)

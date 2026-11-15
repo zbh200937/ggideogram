@@ -1,4 +1,4 @@
-# Run: micromamba run -n multiomics Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/interactive-gallery.R")'
+# Run: Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/interactive-gallery.R")'
 library(ggideogram)
 library(ggplot2)
 source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))

@@ -94,4 +94,7 @@ test_that("ideogram_data has an informative compact print method", {
   expect_match(out[1], "<ideogram_data>", fixed = TRUE)
   expect_true(any(grepl("chromosomes: 24", out, fixed = TRUE)))
   expect_true(any(grepl("centromeres: 24", out, fixed = TRUE)))
+
+  nan_kar <- data.frame(Chr = "A", Start = 0, End = 100, CE_start = NaN, CE_end = 50)
+  expect_error(as_ideogram_data(nan_kar), "finite")
 })

@@ -28,6 +28,10 @@ test_that("cytoband palettes interpolate stains and accept overrides", {
   )
   expect_equal(cytoband_colours("gpos100", bleach = 0.5), "#7F7F7F")
   expect_error(cytoband_colours("unknown"), "Unknown Giemsa stain")
+  expect_error(cytoband_colours("0"), "Unknown Giemsa stain")
+  expect_error(cytoband_colours("25"), "Unknown Giemsa stain")
+  expect_error(cytoband_colours("-10"), "Unknown Giemsa stain")
+  expect_error(cytoband_colours("gpos150"), "Unknown Giemsa stain")
   expect_error(cytoband_colours("gneg", bleach = 2), "between 0 and 1")
 })
 
@@ -45,10 +49,30 @@ test_that("UCSC cytobands are read, selected and converted to a karyotype", {
   karyotype <- cytoband_karyotype(bands)
   expect_equal(karyotype$Chr, c("chr2", "chr1"))
   expect_equal(karyotype$End, c(50, 200))
-  expect_equal(karyotype$CE_start, c(0, 100))
-  expect_equal(karyotype$CE_end, c(0, 200))
+  expect_equal(karyotype$CE_start, c(NA_real_, 100))
+  expect_equal(karyotype$CE_end, c(NA_real_, 200))
+  expect_equal(is.na(as_ideogram_data(karyotype)$karyotype$.centromere_start), c(TRUE, FALSE))
   expect_no_error(as_ideogram_data(karyotype))
   expect_error(read_cytoband(ucsc, chr = "chrZ"), "Not in")
+
+  fac_ucsc <- data.frame(
+    chromosome = factor(c("chr1", "chr1")),
+    start = factor(c("0", "100")),
+    end = factor(c("100", "200")),
+    name = factor(c("p1", "q1")),
+    stain = factor(c("gneg", "gpos50"))
+  )
+  fac_bands <- read_cytoband(fac_ucsc)
+  expect_equal(fac_bands$Start, c(1, 101))
+  expect_equal(fac_bands$End, c(100, 200))
+  expect_error(
+    read_cytoband(data.frame(chr = "chr1", start = -1, end = 10, name = "b", stain = "gneg")),
+    "start < end"
+  )
+  expect_error(
+    read_cytoband(data.frame(chr = "chr1", start = 10, end = 10, name = "b", stain = "gneg")),
+    "start < end"
+  )
 })
 
 test_that("cytoband tables enter the dimensionless renderer directly", {

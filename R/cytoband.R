@@ -55,8 +55,11 @@ cytoband_colours <- function(
 
   stain <- tolower(trimws(as.character(stain)))
   result <- unname(colours[match(stain, names(colours))])
-  percentage <- suppressWarnings(as.numeric(sub("^gpos", "", stain)))
-  interpolate <- which(is.na(result) & !is.na(percentage))
+  is_gpos <- grepl("^gpos([0-9]+(\\.[0-9]+)?)$", stain)
+  percentage <- rep(NA_real_, length(stain))
+  percentage[is_gpos] <- as.numeric(sub("^gpos", "", stain[is_gpos]))
+  interpolate <- which(is.na(result) & !is.na(percentage) &
+    percentage >= 0 & percentage <= 100)
   if (length(interpolate)) {
     ramp <- grDevices::colorRamp(c(colours[["gneg"]], colours[["gpos"]]))
     rgb <- ramp(pmin(pmax(percentage[interpolate] / 100, 0), 1))
@@ -106,10 +109,26 @@ read_cytoband <- function(file, chr = NULL) {
   if (ncol(bands) < 5L) {
     stopf("`file` needs 5 cytoBand columns; got %d.", ncol(bands))
   }
+  coerce_band_coord <- function(col, what) {
+    if (is.factor(col) || is.character(col)) {
+      s <- as.character(col)
+      num <- suppressWarnings(as.numeric(s))
+      if (any(is.na(num))) stopf("`%s` must contain finite numeric coordinates.", what)
+      validate_coordinate(num, what)
+    } else {
+      validate_coordinate(col, what)
+    }
+  }
+  raw_start <- coerce_band_coord(bands[[2]], "cytoband start")
+  raw_end <- coerce_band_coord(bands[[3]], "cytoband end")
+  if (any(raw_start < 0 | raw_end <= raw_start |
+          raw_start != floor(raw_start) | raw_end != floor(raw_end))) {
+    stopf("Cytoband coordinates require non-negative integer 0-based `start < end`.")
+  }
   result <- data.frame(
-    Chr = as.character(bands[[1]]),
-    Start = as.numeric(bands[[2]]) + 1,
-    End = as.numeric(bands[[3]]),
+    Chr = validate_chr(bands[[1]], "cytoband chromosome"),
+    Start = raw_start + 1,
+    End = raw_end,
     Name = as.character(bands[[4]]),
     Stain = as.character(bands[[5]]),
     stringsAsFactors = FALSE
@@ -183,11 +202,11 @@ cytoband_karyotype <- function(cytoband, chr = NULL) {
   if (nrow(centromere)) {
     result$CE_start <- vapply(keep, function(id) {
       value <- centromere$Start[centromere$Chr == id]
-      if (length(value)) min(value) - 1 else 0
+      if (length(value)) min(value) - 1 else NA_real_
     }, numeric(1))
     result$CE_end <- vapply(keep, function(id) {
       value <- centromere$End[centromere$Chr == id]
-      if (length(value)) max(value) else 0
+      if (length(value)) max(value) else NA_real_
     }, numeric(1))
   }
   rownames(result) <- NULL

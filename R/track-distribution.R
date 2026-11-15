@@ -48,8 +48,18 @@ build_projected_distribution_layer <- function(object, layout, fields) {
   layer$geom <- ggplot2::ggproto(NULL, native,
     parameters = function(extra = FALSE) native$parameters(extra),
     draw_panel = function(data, panel_params, coord, ..., flipped_aes = FALSE) {
-      native$draw_panel(data, panel_params, coord, ...,
-        flipped_aes = coord$layout$orientation == "vertical")
+      is_vert <- coord$layout$orientation == "vertical"
+      unflipped <- ggplot2::flip_data(data, is_vert)
+      for (bounds in list(c("ymin", "ymax"), c("lower", "upper"),
+          c("notchlower", "notchupper"))) {
+        if (all(bounds %in% names(unflipped))) {
+          lo <- pmin(unflipped[[bounds[1]]], unflipped[[bounds[2]]])
+          unflipped[[bounds[2]]] <- pmax(unflipped[[bounds[1]]], unflipped[[bounds[2]]])
+          unflipped[[bounds[1]]] <- lo
+        }
+      }
+      data <- ggplot2::flip_data(unflipped, is_vert)
+      native$draw_panel(data, panel_params, coord, ..., flipped_aes = is_vert)
     })
   layer
 }

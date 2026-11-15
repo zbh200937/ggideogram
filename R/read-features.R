@@ -39,7 +39,7 @@ read_chr_features <- function(file, format = c("auto", "bed", "gff3", "gtf"),
   fasta <- match("##FASTA", trimws(lines))
   if (!is.na(fasta)) lines <- utils::head(lines, fasta - 1L)
   lines <- lines[nzchar(trimws(lines)) & !grepl("^\\s*#", lines)]
-  if (format == "bed") lines <- lines[!grepl("^(track|browser)\\s", lines)]
+  if (format == "bed") lines <- lines[!grepl("^(track|browser)($|[ ])", lines)]
   if (!length(lines)) stopf("The annotation file contains no features.")
   input <- utils::read.table(text = lines, sep = "\t", header = FALSE,
     quote = "", comment.char = "", colClasses = "character", na.strings = NULL)
@@ -60,6 +60,21 @@ read_chr_features <- function(file, format = c("auto", "bed", "gff3", "gtf"),
                   chr_map = chr_map, assembly = assembly)
 }
 
+decode_gff3_percent <- function(x) {
+  vapply(x, function(s) {
+    m <- gregexpr("(%[0-9A-Fa-f]{2})+", s, perl = TRUE)
+    regmatches(s, m) <- lapply(regmatches(s, m), function(chunks) {
+      vapply(chunks, function(chunk) {
+        bytes <- strtoi(substring(chunk, seq(2L, nchar(chunk), 3L),
+                                  seq(3L, nchar(chunk), 3L)), 16L)
+        bytes <- bytes[bytes != 0L]
+        if (!length(bytes)) "" else enc2utf8(rawToChar(as.raw(bytes)))
+      }, character(1))
+    })
+    s
+  }, character(1), USE.NAMES = FALSE)
+}
+
 feature_attribute <- function(attributes, key, format) {
   vapply(attributes, function(value) {
     # scan respects quoted semicolons in GTF attribute values.
@@ -71,7 +86,7 @@ feature_attribute <- function(attributes, key, format) {
     matches <- fields[grepl(pattern, fields)]
     if (!length(matches)) return(NA_character_)
     result <- sub(pattern, "", matches)
-    if (format == "gff3") result <- utils::URLdecode(result)
+    if (format == "gff3") result <- decode_gff3_percent(result)
     paste(result, collapse = ",")
   }, character(1), USE.NAMES = FALSE)
 }
@@ -152,6 +167,9 @@ as_chr_features.data.frame <- function(x,
 as_chr_features.GRanges <- function(x, karyotype = NULL, chr_map = NULL,
                                     assembly = NULL, ...) {
   check_unused_args(...)
+  if (!requireNamespace("GenomicRanges", quietly = TRUE)) {
+    stopf("Install the optional Bioconductor package `GenomicRanges` to use GRanges inputs.")
+  }
   info <- as.data.frame(GenomicRanges::seqinfo(x))
   known <- unique(stats::na.omit(info$genome))
   if (!is.null(assembly) && length(known) && any(known != assembly)) {
@@ -168,6 +186,9 @@ as_chr_features.GRanges <- function(x, karyotype = NULL, chr_map = NULL,
 #' @rdname as_ideogram_data
 #' @export
 as_ideogram_data.Seqinfo <- function(x, ...) {
+  if (!requireNamespace("Seqinfo", quietly = TRUE)) {
+    stopf("Install the optional Bioconductor package `Seqinfo` to use Seqinfo inputs.")
+  }
   info <- as.data.frame(x)
   karyotype <- read_karyotype(data.frame(Chr = rownames(info), End = info$seqlengths))
   karyotype$Assembly <- info$genome
@@ -177,5 +198,8 @@ as_ideogram_data.Seqinfo <- function(x, ...) {
 #' @rdname as_ideogram_data
 #' @export
 as_ideogram_data.GRanges <- function(x, ...) {
+  if (!requireNamespace("GenomicRanges", quietly = TRUE)) {
+    stopf("Install the optional Bioconductor package `GenomicRanges` to use GRanges inputs.")
+  }
   as_ideogram_data(GenomicRanges::seqinfo(x), ...)
 }

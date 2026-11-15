@@ -87,9 +87,9 @@ test_that("ggalign grobs retain their panels and nested insets at locus anchors"
       expect_equal(tail(built$data, 1)[[1]]$ideogram_position, 50)
     }
   }
-  heatmap <- ggalign::ggheatmap(matrix(1:9, 3)) +
+  heatmap <- suppressMessages(ggalign::ggheatmap(matrix(1:9, 3))) +
     ggplot2::scale_fill_continuous(name = "child-signal")
-  plot <- host + geom_locus_inset(ggalign::ggalignGrob(heatmap),
+  plot <- host + geom_locus_inset(suppressMessages(ggalign::ggalignGrob(heatmap)),
     data = data.frame(Chr = "A", Pos = 50),
     mapping = ggplot2::aes(chr = Chr, position = Pos), track = "child",
     width = grid::unit(.65, "npc"), height = grid::unit(.7, "npc"))

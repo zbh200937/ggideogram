@@ -1,4 +1,4 @@
-# Run: micromamba run -n multiomics Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/multi-genome-gallery.R")'
+# Run: Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/multi-genome-gallery.R")'
 # Regenerate inputs: python3 inst/examples/prepare-multi-genome-data.py
 library(ggideogram)
 library(ggplot2)
@@ -72,8 +72,8 @@ p <- do.call(ggideogram, c(list(data = semantic(k), order_by = 'homolog',
   geom_chrlink(type = "interval", data = blocks, aes(chr1 = Key1, start1 = Start1, end1 = End1,
       chr2 = Key2, start2 = Start2, end2 = End2, orientation = Orientation), fill = "#AAB2BD",
       alpha = 0.3, colour = NA) +
-  geom_chrlink(type = "point", data = transform(blocks, Pos1 = (Start1 + End1)/2, Pos2 = (Start2 +
-      End2)/2), aes(chr1 = Key1, position1 = Pos1, chr2 = Key2, position2 = Pos2), colour = "#818E9C",
+  geom_chrlink(type = "point", data = transform(blocks, Pos1 = (Start1 - 1 + End1)/2, Pos2 = (Start2 -
+      1 + End2)/2), aes(chr1 = Key1, position1 = Pos1, chr2 = Key2, position2 = Pos2), colour = "#818E9C",
       linewidth = 0.22, alpha = 0.7) +
   geom_chr(component = "fill", data = counts, track = "body", aes(chr = Chr, start = Start,
       end = End, fill = Rate)) +

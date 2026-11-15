@@ -497,8 +497,9 @@ GeomTile 输出添加染色体轮廓遮罩；遮罩来自公开布局的统一�
 
 ```r
 geom_locus_inset(
-  data,
+  plot = NULL,
   mapping = aes(chr = Chr, position = Pos, plot = Plot),
+  data = NULL,
   width,
   height,
   hjust = NULL,

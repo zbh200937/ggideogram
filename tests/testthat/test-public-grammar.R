@@ -183,3 +183,86 @@ test_that("body and fill components share selection and replay in the final layo
     plain$layers)[[1]]$data$ID, "b")
   expect_no_warning(ggplot2::ggplotGrob(plain))
 })
+
+test_that("additive geom_chr axis matches constructor gap, family and plain ggplot dispatch", {
+  k <- data.frame(Chr = c("A", "B", "C", "D"), Start = 0, End = c(100e3, 90e3, 80e3, 70e3))
+  ctor <- ggideogram(k, ncol = 4, axis = TRUE, base_family = "serif")
+  added <- ggideogram(k, ncol = 4, base_family = "serif") + geom_chr(component = "axis")
+  expect_equal(added$coordinates$layout$chromosome_gap, ctor$coordinates$layout$chromosome_gap)
+  expect_equal(added$coordinates$layout$chromosome_gap, 8)
+  axis_text <- Filter(function(l) inherits(l$geom, "GeomIdeogramAxisText"), added$layers)[[1]]
+  expect_identical(axis_text$aes_params$family, "serif")
+  expect_true(isTRUE(axis_text$geom_params$check_overlap))
+
+  axis_only <- ggplot2::ggplot(k, ggplot2::aes(chr = Chr, start = Start, end = End)) +
+    geom_chr(component = "axis", units = "kb", breaks = c(0, 50e3, 100e3))
+  expect_false(any(vapply(axis_only$layers, function(l) inherits(l$geom, "GeomChromosome"), logical(1))))
+  only_text <- Filter(function(l) inherits(l$geom, "GeomIdeogramAxisText"), axis_only$layers)[[1]]
+  expect_true(all(grepl("kb$", only_text$data$label)))
+  expect_no_warning(ggplot2::ggplotGrob(axis_only))
+
+  body_and_axis <- ggplot2::ggplot(k) +
+    geom_chr(component = c("body", "axis"), ncol = 4, units = "kb")
+  expect_equal(body_and_axis$coordinates$layout$chromosome_gap, 8)
+  expect_error(ggideogram(k) + geom_chr(chr = c("A", "A")), "unique")
+  expect_error(ggideogram(k) + geom_chr(chr = character(0)), "unique|non-empty")
+})
+
+test_that("disjoint implicit spread labels share one chr_labels track and beside annotations reserve marker_extent", {
+  k <- data.frame(Chr = c("A", "B"), Start = 0, End = c(100, 100))
+  d_a <- data.frame(Chr = "A", Pos = c(20, 40), Label = c("gA1", "gA2"))
+  d_b <- data.frame(Chr = "B", Pos = c(30, 60), Label = c("gB1", "gB2"))
+  p <- ggideogram(k) +
+    geom_locus(data = d_a, ggplot2::aes(chr = Chr, position = Pos, label = Label),
+      geom = "text", position = "spread") +
+    geom_locus(data = d_b, ggplot2::aes(chr = Chr, position = Pos, label = Label),
+      geom = "text", position = "spread")
+  expect_equal(p$coordinates$layout$tracks$id, "chr_labels")
+  expect_false("chr_labels_" %in% p$coordinates$layout$tracks$id)
+  expect_equal(unname(p$coordinates$layout$track_extent["right"]), 16.2)
+
+  # Same-chromosome implicit spread calls still stack safely on separate lanes
+  p_same <- ggideogram(k) +
+    geom_locus(data = d_a, ggplot2::aes(chr = Chr, position = Pos, label = Label),
+      geom = "text", position = "spread") +
+    geom_locus(data = transform(d_a, Pos = Pos + 5),
+      ggplot2::aes(chr = Chr, position = Pos, label = Label),
+      geom = "text", position = "spread")
+  expect_true("chr_labels_" %in% p_same$coordinates$layout$tracks$id)
+
+  # Untracked beside interval and identity text reserve marker_extent
+  p_iv <- ggideogram(k, show_names = FALSE) +
+    geom_chr_interval(data = data.frame(Chr = "A", Start = 10, End = 40),
+      ggplot2::aes(chr = Chr, start = Start, end = End),
+      placement = "beside", side = "right", gap = 0.6) +
+    geom_track(track = "sig", side = "right", width = 2, gap = 0.2)
+  expect_equal(unname(p_iv$coordinates$layout$marker_extent["right"]), 1.2)
+  expect_equal(track_table_row(p_iv$coordinates$layout, "sig")$low_offset, 0.6 + 1.2 + 0.2)
+
+  p_txt <- ggideogram(k, show_names = FALSE) +
+    geom_locus(data = d_a, ggplot2::aes(chr = Chr, position = Pos, label = Label),
+      geom = "text", side = "left", gap = 0.7)
+  expect_equal(unname(p_txt$coordinates$layout$marker_extent["left"]), 1.4)
+})
+
+test_that("geom_locus forwards third-party interactive aesthetics, na.rm and explicit inherit.aes without warnings", {
+  skip_if_not_installed("ggiraph")
+  k <- data.frame(Chr = "A", Start = 0, End = 100)
+  d <- data.frame(Chr = "A", Pos = c(25, 75), Tip = c("t1", "t2"), ID = c("id1", "id2"))
+  expect_no_warning({
+    p <- ggideogram(k, show_names = FALSE) +
+      geom_locus(
+        data = d,
+        ggplot2::aes(chr = Chr, position = Pos, tooltip = Tip, data_id = ID),
+        geom = ggiraph::geom_point_interactive,
+        na.rm = TRUE
+      )
+  })
+  layer <- utils::tail(p$layers, 1)[[1]]
+  expect_true(isTRUE(layer$geom_params$na.rm))
+  expect_true(isTRUE(layer$stat_params$na.rm))
+  expect_false(isTRUE(layer$inherit.aes))
+  built <- ggplot2::ggplot_build(p)
+  expect_identical(utils::tail(built$data, 1)[[1]]$tooltip, d$Tip)
+  expect_identical(utils::tail(built$data, 1)[[1]]$data_id, d$ID)
+})

@@ -38,6 +38,16 @@ coord_ideogram_next <- function(layout, padding = 0.5, clip = "off") {
       panel$ideogram_labels <- new.env(parent = emptyenv())
       panel
     },
+    render_bg = function(self, panel_params, theme) {
+      # Internal x/y breaks are dimensionless layout coordinates rather than
+      # genomic positions; keep panel.background while suppressing layout grids.
+      clean_theme <- theme + ggplot2::theme(
+        panel.grid.major = ggplot2::element_blank(),
+        panel.grid.minor = ggplot2::element_blank()
+      )
+      ggplot2::ggproto_parent(ggplot2::CoordCartesian, self)$render_bg(
+        panel_params, clean_theme)
+    },
     transform = function(self, data, panel_params) {
       semantic <- "ideogram_track" %in% names(data) ||
         all(c("ideogram_chr", "ideogram_position") %in% names(data))

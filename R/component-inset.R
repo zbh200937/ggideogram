@@ -1,23 +1,89 @@
 # Complete ggplot/grob components anchored to chromosome coordinates.
 
+validate_and_filter_chr_inset <- function(data, ideogram_layout) {
+  has_position <- "position" %in% names(data)
+  has_interval <- all(c("start", "end") %in% names(data))
+  if (!nrow(data) || !all(c("chr", "plot") %in% names(data)) ||
+      (!has_position && !has_interval)) {
+    return(data)
+  }
+  chr <- validate_chr(data$chr, "chr")
+  if (!is.null(ideogram_layout)) {
+    source <- ideogram_layout$data$karyotype
+    i <- match(chr, source$.chr)
+    if (anyNA(i)) {
+      stopf("Unknown chromosome%s: %s.",
+            if (sum(is.na(i)) > 1L) "s" else "",
+            format_chr_rows(unique(chr[is.na(i)])))
+    }
+    vis <- match(chr, ideogram_layout$chrom$.chr)
+    if (has_interval) {
+      first <- validate_coordinate(data$start, "start")
+      last <- validate_coordinate(data$end, "end")
+      if (any(first < 1 | first > last | first != floor(first) | last != floor(last))) {
+        stopf("Inset intervals require positive closed integer `start <= end`.")
+      }
+      if (any(first - 1 < source$.start[i] | last > source$.end[i])) {
+        stopf("Inset intervals are outside the source chromosome bounds.")
+      }
+      low <- pmax(first - 1, ideogram_layout$chrom$.start[vis])
+      high <- pmin(last, ideogram_layout$chrom$.end[vis])
+      keep <- !is.na(vis) & low < high
+      data <- data[keep, , drop = FALSE]
+      if (!nrow(data)) return(data)
+      chr <- chr[keep]
+      clip_first <- pmax(first[keep], floor(ideogram_layout$chrom$.start[vis[keep]]) + 1)
+      clip_last <- pmin(last[keep], ceiling(ideogram_layout$chrom$.end[vis[keep]]))
+      data$.source_start <- data$.source_start %||% first[keep]
+      data$.source_end <- data$.source_end %||% last[keep]
+      data$ideogram_inset_start <- clip_first
+      data$ideogram_inset_end <- clip_last
+      data$ideogram_position <- (clip_first - 1 + clip_last) / 2
+    } else {
+      pos <- validate_coordinate(data$position, "position")
+      if (any(pos < source$.start[i] | pos > source$.end[i])) {
+        stopf("Genomic position is outside its chromosome bounds.")
+      }
+      keep <- !is.na(vis) & pos >= ideogram_layout$chrom$.start[vis] &
+        pos <= ideogram_layout$chrom$.end[vis]
+      data <- data[keep, , drop = FALSE]
+      if (!nrow(data)) return(data)
+      chr <- chr[keep]
+      data$ideogram_position <- pos[keep]
+    }
+  } else {
+    data$ideogram_position <- if (has_position) {
+      validate_coordinate(data$position, "position")
+    } else {
+      first <- validate_coordinate(data$start, "start")
+      last <- validate_coordinate(data$end, "end")
+      data$ideogram_inset_start <- first
+      data$ideogram_inset_end <- last
+      (first - 1 + last) / 2
+    }
+  }
+  data$chr <- chr
+  data$ideogram_chr <- chr
+  data
+}
+
 StatChrInset <- ggplot2::ggproto(
   "StatChrInset", ggplot2::Stat,
   required_aes = c("chr", "plot", "position|start", "position|end"),
+  compute_layer = function(self, data, params, layout) {
+    params$ideogram_layout <- layout$coord$layout
+    data <- validate_and_filter_chr_inset(data, params$ideogram_layout)
+    ggplot2::ggproto_parent(ggplot2::Stat, self)$compute_layer(data, params, layout)
+  },
   compute_panel = function(data, scales, placement = "beside",
                            side = "right", gap = 0.25, track = NULL,
-                           na.rm = FALSE) {
-    position <- if ("position" %in% names(data)) {
-      data$position
-    } else {
-      (data$start - 1 + data$end) / 2
+                           na.rm = FALSE, ideogram_layout = NULL) {
+    if (!nrow(data)) return(data.frame())
+    if (!"ideogram_position" %in% names(data)) {
+      data <- validate_and_filter_chr_inset(data, ideogram_layout)
+      if (!nrow(data)) return(data.frame())
     }
-    data$ideogram_chr <- as.character(data$chr)
-    data$ideogram_position <- position
     data$ideogram_inset_layer <- rep(list(new.env(parent = emptyenv())), nrow(data))
-    if (all(c("start", "end") %in% names(data))) {
-      data$ideogram_inset_start <- data$start
-      data$ideogram_inset_end <- data$end
-    }
     if (placement == "beside") {
       data$ideogram_side <- side
       data$ideogram_gap <- gap
@@ -146,6 +212,9 @@ geom_chr_inset <- function(
   check_inset_unit(height, "height")
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
+  if (!is.null(track) && placement != "beside") {
+    stopf("`track` requires `placement = \"beside\"`.")
+  }
   check_inset_just(hjust, "hjust")
   check_inset_just(vjust, "vjust")
   validate_inset_mapping(data, mapping)

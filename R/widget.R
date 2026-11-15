@@ -48,8 +48,15 @@ as_ideogram_widget <- function(plot, data = NULL, id = "ID", chr = "Chr",
     source <- layout$data$karyotype
     index <- match(chromosomes, source$.chr)
     if (anyNA(index)) stopf("Widget records contain unknown source chromosomes.")
-    if (any(starts < source$.start[index] | ends > source$.end[index] | starts > ends)) {
-      stopf("Widget records require start <= end within the source chromosome bounds.")
+    if (is.null(end)) {
+      if (any(starts < source$.start[index] | ends > source$.end[index])) {
+        stopf("Widget records require positions within the source chromosome bounds.")
+      }
+    } else {
+      if (any(starts != floor(starts) | ends != floor(ends) | starts < 1 |
+              starts - 1 < source$.start[index] | ends > source$.end[index] | starts > ends)) {
+        stopf("Widget records require closed integer start <= end within the source chromosome bounds.")
+      }
     }
     categories <- if (is.null(category)) rep("", nrow(data)) else
       as.character(projection_column(data, category, "category"))

@@ -95,15 +95,29 @@ bin_genome <- function(data, karyotype, window = 1e6, value = NULL, FUN = NULL,
   if (!is.null(group)) stopf('Grouped windows require an explicit `method`.')
   input <- window_input(data, karyotype, window)
   k <- input$karyotype
-  if (!is.null(value) && !value %in% names(data)) {
-    stopf("`value` names column `%s`, which is not in `data`.\n  Columns present: %s",
-          value, paste0("`", names(data), "`", collapse = ", "))
+  if (!is.null(value)) {
+    if (!is.character(value) || length(value) != 1L || is.na(value) || !nzchar(value)) {
+      stopf("`value` must be NULL or one column name.")
+    }
+    if (!value %in% names(data)) {
+      stopf("`value` names column `%s`, which is not in `data`.\n  Columns present: %s",
+            value, paste0("`", names(data), "`", collapse = ", "))
+    }
+    if (is.null(FUN) && !is.numeric(data[[value]]) &&
+        !(is.logical(data[[value]]) && all(is.na(data[[value]])))) {
+      stopf("Default summary requires a numeric `value` column.")
+    }
   }
   method <- if (is.null(value) && is.null(FUN)) "count" else "summary"
   summary <- if (method == "count") NULL else if (is.null(FUN)) "mean" else
     paste(deparse(substitute(FUN)), collapse = " ")
   FUN <- FUN %||% if (is.null(value)) length else mean
-  empty <- empty %||% if (is.null(value)) 0 else NA
+  if (identical(empty, NA)) empty <- NA_real_
+  empty <- empty %||% if (is.null(value)) 0 else NA_real_
+  if (!is.numeric(empty) || length(empty) != 1L || is.infinite(empty) || is.nan(empty)) {
+    stopf("`empty` must be one finite number or NA.")
+  }
+  empty <- as.numeric(empty)
   if (!"End" %in% names(data)) count_position <- "start"
   at <- window_position(input$start, input$end, count_position)
   v <- if (is.null(value)) rep(1, nrow(data)) else data[[value]]

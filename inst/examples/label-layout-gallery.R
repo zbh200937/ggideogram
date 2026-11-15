@@ -1,4 +1,4 @@
-# Run: micromamba run -n multiomics Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/label-layout-gallery.R")'
+# Run: Rscript -e 'pkgload::load_all(".", export_all = FALSE); source("inst/examples/label-layout-gallery.R")'
 # Arabidopsis TAIR10 / Araport11 gene spans, Ensembl Plants release 62.
 library(ggideogram)
 library(ggplot2)

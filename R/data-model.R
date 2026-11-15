@@ -188,7 +188,7 @@ validate_coordinate <- function(x, what, allow_na = FALSE) {
   if (!is.numeric(x)) {
     stopf("`%s` must be numeric.", what)
   }
-  bad <- is.infinite(x) | (!allow_na & is.na(x))
+  bad <- is.infinite(x) | is.nan(x) | (!allow_na & is.na(x))
   if (any(bad)) {
     stopf("`%s` must contain %sfinite coordinates.", what,
           if (allow_na) "only missing or " else "")

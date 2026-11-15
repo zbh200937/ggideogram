@@ -91,4 +91,8 @@ test_that('same-name annotation and paired endpoints match the declared genome',
   expect_equal(as.character(built$layout$panel_scales_x[[1]]$get_labels()), multi_karyotype$Label)
   expect_true(inherits(q$layers[[1]]$geom, 'GeomCol'))
   expect_no_error(ggplot2::ggplotGrob(q))
+
+  expect_identical(chr_key("GenomeA", character(0)), character(0))
+  expect_identical(chr_key(character(0), character(0), "v1"), character(0))
+  expect_error(chr_key(c("A", "B"), character(0)), "equal lengths or length one")
 })

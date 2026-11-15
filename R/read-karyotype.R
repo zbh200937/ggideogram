@@ -33,7 +33,12 @@ read_karyotype <- function(file, format = c("auto", "chrom.sizes", "fai"),
     if (!is.character(file) || length(file) != 1L || is.na(file)) {
       stopf("`file` must be a file path or data frame.")
     }
-    utils::read.table(file, sep = "\t", header = FALSE, quote = "",
+    con <- if (grepl("\\.gz$", file, ignore.case = TRUE)) gzfile(file, "rt") else base::file(file, "rt")
+    on.exit(close(con))
+    lines <- readLines(con, warn = FALSE)
+    lines <- lines[nzchar(trimws(lines))]
+    if (!length(lines)) stopf("The chromosome length table has no rows.")
+    utils::read.table(text = lines, sep = "\t", header = FALSE, quote = "",
       comment.char = "", colClasses = "character", na.strings = NULL,
       stringsAsFactors = FALSE)
   }

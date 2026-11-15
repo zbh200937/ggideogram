@@ -104,4 +104,20 @@ test_that("bad arguments are named rather than failing inside cut()", {
   expect_error(GFFex(gff("A", 10), kar1, window = 1.5), "positive integer")
   expect_error(GFFex(gff("A", 10), data.frame(Chr = c("A", "B"), End = c(1e6, NA))),
                "finite")
+
+  gff_file <- tempfile(fileext = ".gff3.gz")
+  on.exit(unlink(gff_file), add = TRUE)
+  con <- gzfile(gff_file, "wt")
+  writeLines(c(
+    "##gff-version 3",
+    "A\t.\tregion\t.\t.\t.\t+\t.\tID=reg1",
+    "A\t.\tgene\t10\t200\t.\t+\t.\tID=g1",
+    "A\t.\tgene\t500\t800\t.\t-\t.\tID=g2",
+    "##FASTA",
+    ">A",
+    "ACGTACGTACGT"
+  ), con)
+  close(con)
+  parsed <- GFFex(gff_file, data.frame(Chr = "A", End = 1000), window = 500)
+  expect_equal(parsed$Value, c(2, 0))
 })

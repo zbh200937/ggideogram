@@ -493,15 +493,26 @@ chromosome_axis_profile <- function(
   rbind(profile, profile[1, , drop = FALSE])
 }
 
+axis_physical_mm_factors <- c(
+  mm = 1,
+  cm = 10,
+  inches = 25.4,
+  points = 25.4 / 72.27,
+  bigpts = 25.4 / 72,
+  picas = 12 * 25.4 / 72.27,
+  dida = 1238 / 1157 * 25.4 / 72.27,
+  cicero = 12 * 1238 / 1157 * 25.4 / 72.27,
+  scaledpts = 25.4 / (72.27 * 65536)
+)
+
 check_axis_absolute_unit <- function(x, what, positive) {
   if (!inherits(x, "unit") || length(x) != 1L) {
     stopf("`%s` must be one absolute grid unit.", what)
   }
-  type <- grid::unitType(x)
-  relative <- c("npc", "native", "null", "snpc", "strwidth", "strheight",
-                "grobwidth", "grobheight")
-  if (type %in% relative) {
-    stopf("`%s` must use an absolute physical unit, not `%s`.", what, type)
+  types <- unlist(grid::unitType(x, recurse = TRUE), use.names = FALSE)
+  bad <- setdiff(types, c(names(axis_physical_mm_factors), "sum", "min", "max"))
+  if (length(bad)) {
+    stopf("`%s` must use an absolute physical unit, not `%s`.", what, bad[1])
   }
   value <- tryCatch(
     axis_unit_mm(x, what),
@@ -516,11 +527,26 @@ check_axis_absolute_unit <- function(x, what, positive) {
 }
 
 axis_unit_mm <- function(x, what) {
-  value <- grid::convertWidth(x, "mm", valueOnly = TRUE)
-  if (length(value) != 1L) {
+  if (!inherits(x, "unit") || length(x) != 1L) {
     stopf("`%s` must resolve to one physical length.", what)
   }
-  value
+  type <- grid::unitType(x)
+  if (type %in% names(axis_physical_mm_factors)) {
+    if (inherits(x, "simpleUnit")) {
+      return(unname(as.numeric(x) * axis_physical_mm_factors[[type]]))
+    }
+    node <- unclass(x)[[1]]
+    return(unname(node[[1]] * axis_physical_mm_factors[[type]]))
+  }
+  if (type %in% c("sum", "min", "max")) {
+    node <- unclass(x)[[1]]
+    parts <- vapply(seq_along(node[[2]]), function(i) {
+      axis_unit_mm(node[[2]][i], what)
+    }, numeric(1))
+    agg <- switch(type, sum = sum(parts), min = min(parts), max = max(parts))
+    return(unname(node[[1]] * agg))
+  }
+  stopf("`%s` must use an absolute physical unit, not `%s`.", what, type)
 }
 
 #' @method widthDetails chromosome_axis_strip

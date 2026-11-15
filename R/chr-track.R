@@ -350,6 +350,7 @@ prepare_track_scope <- function(spec, id, layout) {
   unlist(lapply(parts, function(part) {
     if (is.null(part$inherit_data) || isTRUE(part$inherit_data)) part$data <- spec$data
     if (is.null(part$inherit_mapping) || isTRUE(part$inherit_mapping)) part$mapping <- spec$mapping
+    part$side <- spec$side
     part$chr <- spec$chr
     part$clip <- spec$clip
     lapply(part$layers %||% list(), function(layer) {

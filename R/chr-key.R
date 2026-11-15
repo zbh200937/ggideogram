@@ -13,8 +13,16 @@ chr_key <- function(genome, chr, assembly = NULL) {
   fields <- list(genome = genome, chr = chr)
   if (!is.null(assembly)) fields$assembly <- assembly
   sizes <- lengths(fields)
+  if (any(sizes == 0L)) {
+    if (any(!sizes %in% c(0L, 1L))) {
+      stopf("Chromosome key inputs must have equal lengths or length one.")
+    }
+    for (name in names(fields)) {
+      if (length(fields[[name]])) validate_chr(fields[[name]], name)
+    }
+    return(character())
+  }
   n <- max(sizes)
-  if (!n) return(character())
   if (any(!sizes %in% c(1L, n))) {
     stopf("Chromosome key inputs must have equal lengths or length one.")
   }

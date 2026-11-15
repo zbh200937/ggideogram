@@ -23,10 +23,11 @@
 #'   actual available panel in standalone plots, compositions and insets.
 #'   A number explicitly fixes this ratio and also guides automatic row
 #'   selection. Circular plots always preserve equal coordinate units.
-#' @param chromosome_gap Clear space between chromosome columns, in body-width
-#'   units. `NULL` uses 8 when constructing a vertical plot with a bp axis,
-#'   9 for linked horizontal two/three-chromosome comparisons, and 3 otherwise.
-#'   The gap may increase to fit a facing bp axis.
+#' @param chromosome_gap Clear space between adjacent chromosome cells (outside
+#'   any beside tracks, marker lanes, and label bands), in body-width units.
+#'   `NULL` uses 8 when a vertical plot has a bp axis, 9 for linked horizontal
+#'   two/three-chromosome comparisons, and 3 otherwise. The gap may increase to
+#'   fit a facing bp axis.
 #' @param min_gap Minimum spacing for beside tracks, in layout units. Set to
 #'   zero to use each track's declared gap directly.
 #' @param start_angle Circular starting angle, clockwise from the top, in degrees.
@@ -213,12 +214,19 @@ ggideogram <- function(
   base_spec[c("mapping", "centromere", "cytoband", "cytoband_mapping")] <- rep(list(NULL), 4)
 
   display <- microsynteny_order(semantic, base_spec)
+  auto_chr_gap <- is.null(chromosome_gap) ||
+    isTRUE(attr(chromosome_gap, "ideogram_auto_gap"))
+  resolved_chr_gap <- if (auto_chr_gap) {
+    default_gap <- if (orientation == "vertical" && !identical(axis, FALSE)) 8 else
+      if (orientation == "horizontal" && !is.null(semantic$pair_edges)) 9 else 3
+    max(c(default_gap, as.numeric(chromosome_gap)))
+  } else {
+    as.numeric(chromosome_gap)
+  }
   layout_args <- list(
     karyotype = display, ncol = ncol,
     chromosome_width = chromosome_width,
-    chromosome_gap = chromosome_gap %||%
-      if (orientation == "vertical" && !identical(axis, FALSE)) 8 else
-        if (orientation == "horizontal" && !is.null(semantic$pair_edges)) 9 else 3,
+    chromosome_gap = resolved_chr_gap,
     max_chr_length = max_chr_length %||% 40,
     row_gap = row_gap,
     orientation = orientation,

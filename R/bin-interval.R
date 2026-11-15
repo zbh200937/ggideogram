@@ -63,8 +63,8 @@ bin_interval_windows <- function(data, karyotype, window, value, FUN, empty,
     Chr = character(), Start = numeric(), End = numeric(), Value = numeric(),
     Width = numeric(), N = integer(), N_valid = integer())
   if (!length(parts)) {
-    for (name in group) out[[name]] <- data[[name]][FALSE]
     if (method == 'count') out$Rate <- numeric()
+    for (name in group) out[[name]] <- data[[name]][FALSE]
   }
   rownames(out) <- NULL
   attr(out, 'window_summary') <- window_metadata(method, window, group, value,
