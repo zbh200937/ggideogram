@@ -1,0 +1,41 @@
+Arabidopsis thaliana multi-omics, MAGIC QTL, Marey map, and 4-genome SyRI vignette datasets
+
+1. Reference karyotype, centromeres, gene density, and ERECTA locus GFF3:
+   - Files:
+     * arabidopsis-tair10.fai
+     * arabidopsis-centromeres.bed
+     * arabidopsis-gene-density.bedgraph.gz
+     * arabidopsis-erecta-locus.gff3.gz
+   - Sources:
+     * TAIR10 nuclear chromosome lengths and gene models (Chr1-Chr5; Chr2:11,195,000-11,232,000 spanning ERECTA / AT2G26330) from TAIR10_GFF3_genes.gff.gz.
+     * Centromere intervals from Giraut et al. (2011), PLoS Genetics 7(11):e1002354, doi:10.1371/journal.pgen.1002354 (CC-BY).
+
+2. 19-founder Arabidopsis MAGIC GWAS, Chr2 RIL graphical genotypes, and ERECTA phenotypes:
+   - Files:
+     * arabidopsis-magic-gwas.tsv.gz (1,251 TAIR9/TAIR10 SNPs across n = 677 phenotyped MAGIC lines)
+     * arabidopsis-magic-chr2-binmap.tsv (105 Col-0 != Ler-0 Chr2 SNPs across Col-0, Ler-0, and 8 complete-call MAGIC RILs)
+     * arabidopsis-magic-erecta-pheno.tsv.gz (plant height and fruit length grouped by MASC06116 genotype)
+   - Sources:
+     * Kover et al. (2009), PLoS Genetics 5(7):e1000551, doi:10.1371/journal.pgen.1000551 (CC-BY).
+     * Gnan, Priest & Kover (2014), Genetics 198(4):1751-1758, doi:10.1534/genetics.114.170746; distributed via rqtl/qtl2data (ArabMAGIC).
+
+3. Col x Ler genetic (cM) and physical (bp) Marey map:
+   - File: arabidopsis-mareymap.tsv (399 validated markers across Chr1-Chr5)
+   - Source: CRAN package MareyMap (data/Arabidopsis_thaliana.rda; Siberchicot et al., 2017, Genome Biology and Evolution, GPL >= 2).
+
+4. Four-accession chromosome-level Arabidopsis pangenome SyRI rearrangements:
+   - Files:
+     * arabidopsis-pangenome-chrlen.tsv (Col-0, Ler-0, Cvi-0, Eri-1)
+     * arabidopsis-col-ler-chr34.syri.out.gz
+     * arabidopsis-ler-cvi-chr34.syri.out.gz
+     * arabidopsis-cvi-eri-chr34.syri.out.gz
+     (primary SyRI blocks >= 15 kb on Chr3 and Chr4)
+   - Sources:
+     * Jiao & Schneeberger (2020), Nature Communications 11:989, doi:10.1038/s41467-020-14779-y.
+     * Goel et al. (2019), Genome Biology 20:277 (SyRI) and Goel & Schneeberger (2022), Bioinformatics 38(10):2922-2924 (plotsr example dataset, MIT License).
+
+5. Whole-genome duplication MCScanX collinearity:
+   - Files:
+     * arabidopsis-mcscanx.collinearity.gz (alignment blocks with >= 18 collinear gene pairs)
+     * arabidopsis-mcscanx.gff.gz (4-column gene coordinate table)
+   - Source: Wang et al. (2012), Nucleic Acids Research 40(7):e49 (MCScanX official Arabidopsis example; license in MCScanX-LICENSE.txt).
