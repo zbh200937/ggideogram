@@ -41,8 +41,11 @@ new_ideogram_object <- function(component) {
 geom_chr <- function(mapping = NULL, data = NULL, chr = NULL,
     component = "body", names = NULL, axis = FALSE, track = NULL, ...) {
   component <- match.arg(component, c("body", "name", "axis", "band", "fill"), several.ok = TRUE)
+  params <- list(...)
+  no_scope_inherit <- "inherit.aes" %in% names(params) && isFALSE(params$inherit.aes)
   new_ideogram_object(structure(list(mapping = mapping, data = data, chr = chr,
-    components = component, names = names, axis = axis, track = track, params = list(...)),
+    components = component, names = names, axis = axis, track = track, params = params,
+    ideogram_no_scope_inherit = no_scope_inherit),
     class = "ggideogram_chr_component"))
 }
 
@@ -68,7 +71,12 @@ geom_chr <- function(mapping = NULL, data = NULL, chr = NULL,
 geom_genemodel <- function(mapping = NULL, data = NULL, track = NULL,
     mode = c("gene", "transcript"), ...) {
   fun <- if (match.arg(mode) == "gene") geom_chr_gene else geom_chr_transcript
-  new_ideogram_object(fun(mapping, data, track, ...))
+  dots <- list(...)
+  comp <- fun(mapping, data, track, ...)
+  if ("inherit.aes" %in% names(dots) && isFALSE(dots$inherit.aes)) {
+    comp$ideogram_no_scope_inherit <- TRUE
+  }
+  new_ideogram_object(comp)
 }
 
 #' Draw native points, text or intervals at chromosome loci
@@ -123,8 +131,13 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
   side <- canonical_chr_side(match.arg(side))
   automatic <- side == "auto" && is.null(track)
   if (side == "auto") side <- "right"
+  dots_all <- list(...)
+  no_scope_inherit <- ("inherit.aes" %in% names(dots_all) && isFALSE(dots_all$inherit.aes)) ||
+    (inherits(geom, "Layer") && !inherits(geom$stat, c("StatChrMarker", "StatChrInterval")) &&
+      isFALSE(geom$inherit.aes))
   wrap <- function(component) {
     if (automatic) component$ideogram_auto_side <- TRUE
+    if (no_scope_inherit) component$ideogram_no_scope_inherit <- TRUE
     new_ideogram_object(component)
   }
   if (is.character(position) && length(position) == 1L && position %in% c("spread", "repel")) {
@@ -160,7 +173,9 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
   if (!is.null(mapping$x) && is.null(mapping$position)) mapping$position <- mapping$x
   na_rm <- isTRUE(dots$na.rm %||% prototype$geom_params$na.rm %||% prototype$stat_params$na.rm)
   inherit_aes <- if ("inherit.aes" %in% names(dots)) isTRUE(dots$inherit.aes) else FALSE
-  if (inherits(prototype$geom, "GeomSegment") && all(c("start", "end") %in% names(mapping))) {
+  if (inherits(prototype$geom, "GeomSegment") &&
+      (all(c("start", "end") %in% names(mapping)) ||
+       (!any(c("position", "x", "xend", "y", "yend") %in% names(mapping)) && is.null(data)))) {
     base <- geom_chr_interval(mapping, data, track = track, side = side,
       gap = gap, placement = if (is.null(track)) "overlay" else "beside",
       track_position = track_position, na.rm = na_rm, inherit.aes = inherit_aes,
@@ -181,19 +196,22 @@ geom_locus <- function(mapping = NULL, data = NULL, geom = ggplot2::geom_point,
     base$aes_params$size <- ideogram_text_size("label")
   }
   base$show.legend <- prototype$show.legend
+  if (!is.null(prototype$key_glyph)) base$key_glyph <- prototype$key_glyph
   wrap(base)
 }
 
 locus_native_layer <- function(geom, params, position = NULL) {
   if (is.function(geom)) {
-    return(do.call(geom, c(list(position = position %||% "identity"), params)))
+    call_args <- if (is.null(position)) params else c(list(position = position), params)
+    return(do.call(geom, call_args))
   }
   if (!inherits(geom, "Layer") || (!length(params) && is.null(position))) return(geom)
-  settings <- c("stat", "show.legend", "inherit.aes", "check.aes", "check.param")
+  settings <- c("stat", "show.legend", "inherit.aes", "check.aes", "check.param", "key_glyph")
   args <- list(geom = geom$geom, stat = geom$stat, mapping = geom$mapping,
     data = if (inherits(geom$data, "waiver")) NULL else geom$data,
     position = position %||% geom$position,
-    show.legend = geom$show.legend, inherit.aes = geom$inherit.aes)
+    show.legend = geom$show.legend, inherit.aes = geom$inherit.aes,
+    key_glyph = geom$key_glyph)
   args <- utils::modifyList(args, params[intersect(names(params), settings)])
   defaults <- c(geom$stat_params, geom$geom_params, geom$aes_params)
   defaults <- defaults[!duplicated(names(defaults), fromLast = TRUE)]
@@ -308,6 +326,7 @@ geom_locus_inset <- function(plot = NULL, mapping = NULL, data = NULL, ...) {
     column <- ".ideogram_child"
     while (column %in% names(data)) column <- paste0(column, "_")
     data[[column]] <- rep(list(plot), nrow(data))
+    if (is.null(mapping)) mapping <- ggplot2::aes()
     mapping$plot <- rlang::new_quosure(rlang::sym(column))
   }
   new_ideogram_object(geom_chr_inset(mapping, data, ...))
@@ -380,7 +399,12 @@ ggplot_add.ggideogram_chr_component <- function(object, plot, ...) {
       axis = if (axis_via_ctor) object$axis else FALSE,
       show_names = name_via_ctor), ctor_params)
     result <- do.call(ggideogram, args)
-    if (!has_body) result$layers <- list()
+    if (!has_body) {
+      result$layers <- Filter(function(l) !is_body_base_layer(l), result$layers)
+      res_layout <- ideogram_plot_layout(result)
+      res_layout$base_spec$.omit_base_body <- TRUE
+      result <- update_plot_ideogram_layout(result, res_layout)
+    }
     if (length(extra)) {
       rest <- object
       rest$components <- extra

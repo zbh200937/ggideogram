@@ -79,13 +79,11 @@ test_that("sorted interval windows match direct overlapping observations", {
   }
 })
 
-test_that("GFF3 example models retain shared exon relationships", {
-  e <- new.env()
-  sys.source(system.file("examples", "gene-model-data.R", package = "ggideogram"), e)
+test_that("resolve_gene_models retains shared exon relationships across isoforms", {
   d <- data.frame(Chr = "A", Type = c("mRNA", "mRNA", "exon"),
     ID = c("t1", "t2", "e1"), Parent = c("g1", "g1", "t1,t2"),
     Start = c(1, 1, 20), End = c(100, 100, 40))
-  models <- e$gene_model_data(d)
+  models <- resolve_gene_models(d, strip_prefix = FALSE)
   shared <- models[models$Type == "exon", ]
   expect_equal(shared$Transcript, c("t1", "t2"))
   expect_equal(shared$Parent, rep("t1,t2", 2))

@@ -2,11 +2,11 @@
 % Please edit documentation in R/read-features.R
 \name{read_chr_features}
 \alias{read_chr_features}
-\title{Read genomic annotations in BED, GFF3 or GTF format}
+\title{Read genomic annotations in BED, bedGraph, GFF3 or GTF format}
 \usage{
 read_chr_features(
   file,
-  format = c("auto", "bed", "gff3", "gtf"),
+  format = c("auto", "bed", "bedgraph", "gff3", "gtf"),
   karyotype = NULL,
   chr_map = NULL,
   assembly = NULL
@@ -29,17 +29,20 @@ metadata in an \code{ideogram_data} object is used; unknown versions are not
 inferred.}
 }
 \value{
-A data frame with \code{Chr}, \code{Start}, \code{End} and annotation columns.
-Attributes \code{source_coordinates} and \code{assembly} record input conventions.
+A data frame with \code{Chr}, \code{Start}, \code{End} and annotation columns
+(\code{Value} and \code{Mid} for \code{bedgraph}). Attributes \code{source_coordinates} and
+\code{assembly} record input conventions.
 }
 \description{
-BED3--6 starts are converted from zero-based, half-open coordinates to
-one-based, closed coordinates (\code{Start = chromStart + 1}, \code{End = chromEnd}).
-GFF3 and GTF already use one-based, closed coordinates. Zero-width BED
-insertion sites need an explicit point representation and are rejected.
-Original GFF/GTF attributes are retained in \code{Attributes}; common identifiers
-are also extracted without collapsing rows or parent relationships.
+BED3--6 and bedGraph starts are converted from zero-based, half-open
+coordinates to one-based, closed coordinates (\code{Start = chromStart + 1},
+\code{End = chromEnd}). GFF3 and GTF already use one-based, closed coordinates.
+Zero-width BED insertion sites need an explicit point representation and are
+rejected. Original GFF/GTF attributes are retained in \code{Attributes}; common
+identifiers are also extracted without collapsing rows or parent
+relationships. Use \code{\link[=resolve_gene_models]{resolve_gene_models()}} to expand GFF3/GTF parent
+hierarchies for \code{\link[=geom_genemodel]{geom_genemodel()}}.
 }
 \seealso{
-\code{\link[=as_chr_features]{as_chr_features()}}, \code{\link[=read_karyotype]{read_karyotype()}}
+\code{\link[=resolve_gene_models]{resolve_gene_models()}}, \code{\link[=read_chr_links]{read_chr_links()}}, \code{\link[=as_chr_features]{as_chr_features()}}, \code{\link[=read_karyotype]{read_karyotype()}}
 }

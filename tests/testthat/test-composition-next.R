@@ -43,20 +43,9 @@ make_composition_ideogram <- function() {
     ggplot2::labs(shape = "Marker", fill = "Marker")
 }
 
-test_that("ideogram is exactly a thin ggideogram preset", {
+test_that("ggideogram does not leak mutable layout attributes onto plot", {
   direct <- ggideogram(composition_kar, ncol = 3)
-  preset <- ideogram(composition_kar, ncol = 3)
-
-  expect_identical(names(formals(ideogram)), "...")
-  expect_equal(
-    vapply(direct$layers, function(layer) class(layer$geom)[1], character(1)),
-    vapply(preset$layers, function(layer) class(layer$geom)[1], character(1))
-  )
-  expect_equal(
-    direct$coordinates$layout$chrom,
-    preset$coordinates$layout$chrom
-  )
-  expect_false("ideogram_layout" %in% names(attributes(preset)))
+  expect_false("ideogram_layout" %in% names(attributes(direct)))
 })
 
 test_that("standard plot composition keeps semantic and physical components", {
@@ -114,14 +103,14 @@ test_that("cowplot, ggplotGrob and ggsave use the standard ggplot boundary", {
   expect_gt(file.info(tall)$size, 0)
 })
 
-test_that("save_ideogram supports plots and grobs through ggsave", {
+test_that("ggplot2::ggsave supports ideogram plots and grobs directly", {
   p <- make_composition_ideogram()
   plots <- list(p, ggplot2::ggplotGrob(p))
   files <- vapply(plots, function(x) tempfile(fileext = ".png"), character(1))
   on.exit(unlink(files), add = TRUE)
   for (i in seq_along(plots)) {
-    expect_identical(save_ideogram(files[i], plots[[i]],
-      width = 120, height = 80, units = "mm", dpi = 72), files[i])
+    expect_no_error(ggplot2::ggsave(files[i], plots[[i]],
+      width = 120, height = 80, units = "mm", dpi = 72))
     expect_gt(file.info(files[i])$size, 0)
   }
 })

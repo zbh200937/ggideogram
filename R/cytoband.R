@@ -103,7 +103,8 @@ read_cytoband <- function(file, chr = NULL) {
   } else {
     utils::read.table(
       file, sep = "\t", header = FALSE, quote = "",
-      comment.char = "#", stringsAsFactors = FALSE
+      comment.char = "#", colClasses = "character",
+      na.strings = character(), stringsAsFactors = FALSE
     )
   }
   if (ncol(bands) < 5L) {
@@ -134,7 +135,10 @@ read_cytoband <- function(file, chr = NULL) {
     stringsAsFactors = FALSE
   )
   if (!is.null(chr)) {
-    chr <- as.character(chr)
+    chr <- validate_chr(chr, "chr")
+    if (!length(chr) || anyDuplicated(chr)) {
+      stopf("`chr` must select unique non-empty chromosomes.")
+    }
     missing <- setdiff(chr, result$Chr)
     if (length(missing)) {
       stopf("Not in the cytoband table: %s.", format_chr_rows(missing))
@@ -179,8 +183,22 @@ cytoband_karyotype <- function(cytoband, chr = NULL) {
           if (length(missing) > 1L) "s" else "",
           paste0("`", missing, "`", collapse = ", "))
   }
-  cytoband$Chr <- as.character(cytoband$Chr)
-  keep <- if (is.null(chr)) unique(cytoband$Chr) else as.character(chr)
+  cytoband$Chr <- validate_chr(cytoband$Chr, "cytoband chromosome")
+  c_start <- validate_coordinate(cytoband$Start, "cytoband Start")
+  c_end <- validate_coordinate(cytoband$End, "cytoband End")
+  if (!nrow(cytoband) || any(c_start < 1 | c_end < c_start |
+      c_start != floor(c_start) | c_end != floor(c_end))) {
+    stopf("`cytoband` requires non-empty 1-based closed integer intervals with `Start <= End`.")
+  }
+  cytoband$Start <- c_start
+  cytoband$End <- c_end
+  keep <- if (is.null(chr)) unique(cytoband$Chr) else {
+    chr <- validate_chr(chr, "chr")
+    if (!length(chr) || anyDuplicated(chr)) {
+      stopf("`chr` must select unique non-empty chromosomes.")
+    }
+    chr
+  }
   unknown <- setdiff(keep, cytoband$Chr)
   if (length(unknown)) {
     stopf("Not in the cytoband table: %s.", format_chr_rows(unknown))

@@ -85,8 +85,10 @@ prepare_chr_pairs <- function(object, layout) {
     }
     visible <- visible & !is.na(lower) & !is.na(upper) & lower < upper
     for (j in 1:2) {
-      d[[paste0('.pair_from', j)]] <- from[[j]] + lower * (to[[j]] - from[[j]])
-      d[[paste0('.pair_to', j)]] <- from[[j]] + upper * (to[[j]] - from[[j]])
+      raw_f <- from[[j]] + lower * (to[[j]] - from[[j]])
+      raw_t <- from[[j]] + upper * (to[[j]] - from[[j]])
+      d[[paste0('.pair_from', j)]] <- pmin(pmax(raw_f, scope[[j]]$low), scope[[j]]$high)
+      d[[paste0('.pair_to', j)]] <- pmin(pmax(raw_t, scope[[j]]$low), scope[[j]]$high)
     }
   }
   d$.pair_id <- seq_len(nrow(d))
@@ -141,15 +143,36 @@ ggplot_add.ggideogram_pair_component <- function(object, plot, ...) {
       d$.pair_xend <- as.vector(rbind(mx, b$x)); d$.pair_yend <- as.vector(rbind(my, b$y))
     } else if (any(d$.pair_curvature != 0)) {
       normal <- linear_pair_curve_normal(layout, d$.pair_chr1, first, a, b)
-      parts <- lapply(seq_len(nrow(d)), function(i) {
-        path <- linear_link_curve(c(a$x[i], a$y[i]), c(b$x[i], b$y[i]),
-          d$.pair_curvature[i], object$curve_points, normal[i, ])
-        result <- d[rep(i, nrow(path) - 1L), , drop = FALSE]
-        result$.pair_x <- utils::head(path$x, -1L); result$.pair_y <- utils::head(path$y, -1L)
-        result$.pair_xend <- utils::tail(path$x, -1L); result$.pair_yend <- utils::tail(path$y, -1L)
-        result
-      })
-      d <- do.call(rbind, parts)
+      auto_corridor <- isTRUE(layout$microsynteny) && is.null(object$gap) &&
+        object$side1 == 'auto' && object$side2 == 'auto'
+      adjacent <- if (auto_corridor) {
+        abs(layout$index[d$.pair_chr1] - layout$index[d$.pair_chr2]) == 1L
+      } else rep(FALSE, nrow(d))
+      curved <- d$.pair_curvature != 0
+      k_pts <- object$curve_points
+      seg_counts <- ifelse(curved, k_pts - 1L, 1L)
+      idx <- rep(seq_len(nrow(d)), seg_counts)
+      out <- d[idx, , drop = FALSE]
+      is_straight <- !curved[idx]
+      out$.pair_x <- numeric(length(idx))
+      out$.pair_y <- numeric(length(idx))
+      out$.pair_xend <- numeric(length(idx))
+      out$.pair_yend <- numeric(length(idx))
+      if (any(!curved)) {
+        out$.pair_x[is_straight] <- a$x[!curved]
+        out$.pair_y[is_straight] <- a$y[!curved]
+        out$.pair_xend[is_straight] <- b$x[!curved]
+        out$.pair_yend[is_straight] <- b$y[!curved]
+      }
+      ci <- which(curved)
+      c_mat <- sample_linear_curves(a$x[ci], a$y[ci], b$x[ci], b$y[ci],
+        d$.pair_curvature[ci], k_pts, normal[ci, , drop = FALSE],
+        adjacent[ci], a$y[ci], b$y[ci])
+      out$.pair_x[!is_straight] <- as.vector(c_mat$x[-k_pts, , drop = FALSE])
+      out$.pair_y[!is_straight] <- as.vector(c_mat$y[-k_pts, , drop = FALSE])
+      out$.pair_xend[!is_straight] <- as.vector(c_mat$x[-1L, , drop = FALSE])
+      out$.pair_yend[!is_straight] <- as.vector(c_mat$y[-1L, , drop = FALSE])
+      d <- out
     }
     mapping <- combine_track_mapping(mapping, ggplot2::aes(x = .data$.pair_x, y = .data$.pair_y,
       xend = .data$.pair_xend, yend = .data$.pair_yend))
@@ -208,17 +231,16 @@ linear_pair_polygons <- function(data, ends, object, layout, center, a, b) {
     adjacent <- if (auto_corridor) {
       abs(layout$index[data$.pair_chr1] - layout$index[data$.pair_chr2]) == 1L
     } else rep(FALSE, nrow(data))
-    last_vertex <- cumsum(counts)
-    for (i in which(curved)) {
-      corridor <- if (adjacent[i]) range(y[1:2, i]) else NULL
-      from <- linear_link_curve(c(x[1, i], y[1, i]), c(x[2, i], y[2, i]),
-        data$.pair_curvature[i], object$curve_points, normal[i, ], corridor)
-      to <- linear_link_curve(c(x[3, i], y[3, i]), c(x[4, i], y[4, i]),
-        data$.pair_curvature[i], object$curve_points, normal[i, ], corridor)
-      rows <- seq.int(last_vertex[i] - counts[i] + 1L, last_vertex[i])
-      result$.pair_x[rows] <- c(from$x, to$x)
-      result$.pair_y[rows] <- c(from$y, to$y)
-    }
+    ci <- which(curved)
+    k_pts <- object$curve_points
+    from_mat <- sample_linear_curves(x[1, ci], y[1, ci], x[2, ci], y[2, ci],
+      data$.pair_curvature[ci], k_pts, normal[ci, , drop = FALSE],
+      adjacent[ci], y[1, ci], y[2, ci])
+    to_mat <- sample_linear_curves(x[3, ci], y[3, ci], x[4, ci], y[4, ci],
+      data$.pair_curvature[ci], k_pts, normal[ci, , drop = FALSE],
+      adjacent[ci], y[1, ci], y[2, ci])
+    result$.pair_x[!straight] <- as.vector(rbind(from_mat$x, to_mat$x))
+    result$.pair_y[!straight] <- as.vector(rbind(from_mat$y, to_mat$y))
   }
   result
 }
@@ -273,17 +295,32 @@ linear_pair_curve_normal <- function(layout, chr, center, a, b) {
   outward <- cbind(a$x - center$x, a$y - center$y)
   on_center <- rowSums(outward^2) == 0
   outward[on_center, ] <- cbind(right$nx, right$ny)[on_center, , drop = FALSE]
+  zero_dist <- distance == 0
+  if (any(zero_dist)) {
+    out_len <- sqrt(rowSums(outward[zero_dist, , drop = FALSE]^2))
+    normal[zero_dist, ] <- outward[zero_dist, , drop = FALSE] / ifelse(out_len == 0, 1, out_len)
+  }
   flip <- rowSums(normal * outward) < 0
   normal[flip, ] <- -normal[flip, , drop = FALSE]
   normal
 }
 
-linear_link_curve <- function(a, b, curvature, points, normal, corridor = NULL) {
-  t <- seq(0, 1, length.out = if (curvature == 0) 2 else points)
-  control <- (a + b) / 2 + curvature * sqrt(sum((b - a)^2)) * normal
-  if (!is.null(corridor)) control[2] <- min(corridor[2], max(corridor[1], control[2]))
-  data.frame(x = (1 - t)^2 * a[1] + 2 * t * (1 - t) * control[1] + t^2 * b[1],
-    y = (1 - t)^2 * a[2] + 2 * t * (1 - t) * control[2] + t^2 * b[2])
+sample_linear_curves <- function(ax, ay, bx, by, curvature, points, normal,
+                                 has_corridor, cor_y1, cor_y2) {
+  t <- seq(0, 1, length.out = points)
+  w0 <- (1 - t)^2; w1 <- 2 * t * (1 - t); w2 <- t^2
+  dist <- sqrt((bx - ax)^2 + (by - ay)^2)
+  cx <- (ax + bx) / 2 + curvature * dist * normal[, 1]
+  cy <- (ay + by) / 2 + curvature * dist * normal[, 2]
+  if (any(has_corridor)) {
+    lo <- pmin(cor_y1[has_corridor], cor_y2[has_corridor])
+    hi <- pmax(cor_y1[has_corridor], cor_y2[has_corridor])
+    cy[has_corridor] <- pmin(hi, pmax(lo, cy[has_corridor]))
+  }
+  list(
+    x = outer(w0, ax) + outer(w1, cx) + outer(w2, bx),
+    y = outer(w0, ay) + outer(w1, cy) + outer(w2, by)
+  )
 }
 
 StatCartesianPair <- ggplot2::ggproto('StatCartesianPair', ggplot2::StatIdentity,
@@ -292,15 +329,31 @@ StatCartesianPair <- ggplot2::ggproto('StatCartesianPair', ggplot2::StatIdentity
     data
   })
 
-circular_link_curve <- function(a, b, curvature, points, bend, normal) {
-  t <- seq(0, 1, length.out = if (curvature == 0 && bend == 0) 2 else points)
-  control <- (a + b) / 2 * (1 - curvature) + bend * normal
-  data.frame(x = (1 - t)^2 * a[1] + 2 * t * (1 - t) * control[1] + t^2 * b[1],
-             y = (1 - t)^2 * a[2] + 2 * t * (1 - t) * control[2] + t^2 * b[2])
+sample_circular_curves <- function(ax, ay, bx, by, curvature, points, bend, nx, ny) {
+  k <- if (curvature == 0 && bend == 0) 2L else points
+  t <- seq(0, 1, length.out = k)
+  w0 <- (1 - t)^2; w1 <- 2 * t * (1 - t); w2 <- t^2
+  cx <- (ax + bx) / 2 * (1 - curvature) + bend * nx
+  cy <- (ay + by) / 2 * (1 - curvature) + bend * ny
+  list(
+    x = outer(w0, ax) + outer(w1, cx) + outer(w2, bx),
+    y = outer(w0, ay) + outer(w1, cy) + outer(w2, by)
+  )
+}
+
+sample_circular_arcs <- function(layout, arc_from, arc_to, radius_vec, points) {
+  s <- seq(0, 1, length.out = points)
+  arc_mat <- outer(1 - s, arc_from) + outer(s, arc_to)
+  rad_mat <- matrix(rep(radius_vec, each = points), nrow = points, ncol = length(radius_vec))
+  pts <- circular_xy(layout, as.vector(arc_mat), as.vector(rad_mat))
+  list(
+    x = matrix(pts$x, nrow = points, ncol = length(radius_vec)),
+    y = matrix(pts$y, nrow = points, ncol = length(radius_vec))
+  )
 }
 
 add_circular_chr_pairs <- function(object, plot, layout, d, first, second, mapping) {
-  curvature <- object$curvature %||% 1
+  curvature <- if (!is.null(object$curvature)) object$curvature else if (isTRUE(object$bend_explicit)) 0 else 1
   endpoints <- list()
   for (j in 1:2) {
     center <- if (j == 1) first else second
@@ -317,31 +370,32 @@ add_circular_chr_pairs <- function(object, plot, layout, d, first, second, mappi
   }
   xy <- lapply(endpoints, function(p) circular_xy(layout, p$x, p$y))
   theta <- circular_theta(layout, first$x)
-  normals <- cbind(sin(theta), cos(theta))
-  at <- function(key, i) c(xy[[key]]$x[i], xy[[key]]$y[i])
-  parts <- lapply(seq_len(nrow(d)), function(i) {
-    curve <- function(a, b) circular_link_curve(a, b, curvature,
-      object$curve_points, object$bend, normals[i, ])
-    if (object$type == 'point') {
-      path <- curve(at('start1', i), at('start2', i))
-      result <- d[rep(i, nrow(path) - 1L), , drop = FALSE]
-      result$.pair_x <- utils::head(path$x, -1L); result$.pair_y <- utils::head(path$y, -1L)
-      result$.pair_xend <- utils::tail(path$x, -1L); result$.pair_yend <- utils::tail(path$y, -1L)
-      return(result)
-    }
-    arc <- function(from, to) {
-      p <- circular_xy(layout,
-        seq(endpoints[[from]]$x[i], endpoints[[to]]$x[i], length.out = object$curve_points),
-        endpoints[[from]]$y[i])
-      as.data.frame(p)
-    }
-    polygon <- rbind(curve(at('from1', i), at('from2', i)),
-      arc('from2', 'to2'), curve(at('to2', i), at('to1', i)), arc('to1', 'from1'))
-    result <- d[rep(i, nrow(polygon)), , drop = FALSE]
-    result$.pair_x <- polygon$x; result$.pair_y <- polygon$y
-    result
-  })
-  d <- do.call(rbind, parts)
+  nx <- sin(theta); ny <- cos(theta)
+  n_pairs <- nrow(d)
+  if (object$type == 'point') {
+    c_mat <- sample_circular_curves(xy$start1$x, xy$start1$y, xy$start2$x, xy$start2$y,
+      curvature, object$curve_points, object$bend, nx, ny)
+    k_pts <- nrow(c_mat$x)
+    d <- d[rep(seq_len(n_pairs), each = k_pts - 1L), , drop = FALSE]
+    d$.pair_x <- as.vector(c_mat$x[-k_pts, , drop = FALSE])
+    d$.pair_y <- as.vector(c_mat$y[-k_pts, , drop = FALSE])
+    d$.pair_xend <- as.vector(c_mat$x[-1L, , drop = FALSE])
+    d$.pair_yend <- as.vector(c_mat$y[-1L, , drop = FALSE])
+  } else {
+    c1 <- sample_circular_curves(xy$from1$x, xy$from1$y, xy$from2$x, xy$from2$y,
+      curvature, object$curve_points, object$bend, nx, ny)
+    a1 <- sample_circular_arcs(layout, endpoints$from2$x, endpoints$to2$x,
+      endpoints$from2$y, object$curve_points)
+    c2 <- sample_circular_curves(xy$to2$x, xy$to2$y, xy$to1$x, xy$to1$y,
+      curvature, object$curve_points, object$bend, nx, ny)
+    a2 <- sample_circular_arcs(layout, endpoints$to1$x, endpoints$from1$x,
+      endpoints$to1$y, object$curve_points)
+    poly_x <- rbind(c1$x, a1$x, c2$x, a2$x)
+    poly_y <- rbind(c1$y, a1$y, c2$y, a2$y)
+    d <- d[rep(seq_len(n_pairs), each = nrow(poly_x)), , drop = FALSE]
+    d$.pair_x <- as.vector(poly_x)
+    d$.pair_y <- as.vector(poly_y)
+  }
   if (object$type == 'point') {
     mapping <- combine_track_mapping(mapping, ggplot2::aes(x = .data$.pair_x, y = .data$.pair_y,
       xend = .data$.pair_xend, yend = .data$.pair_yend))

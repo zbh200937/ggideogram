@@ -9,6 +9,7 @@ StatChrTrack <- ggplot2::ggproto(
   compute_panel = function(data, scales, track, chromosome_separation,
                            circular = FALSE,
                            track_geometry = FALSE,
+                           zero_baseline = FALSE,
                            track_clip = "auto",
                            na.rm = FALSE) {
     data$ideogram_chr <- as.character(data$chr)
@@ -23,6 +24,7 @@ StatChrTrack <- ggplot2::ggproto(
       drop = TRUE, lex.order = TRUE
     ))
     if (track_geometry) data$ideogram_track_geometry <- TRUE
+    if (zero_baseline) data$ideogram_zero_baseline <- TRUE
     data$ideogram_track_clip <- track_clip
     data
   }
@@ -154,8 +156,8 @@ add_dynamic_track_component <- function(object, plot, layout, object_name) {
   } else {
     # Some native constructors fix their Stat internally (geom_col in 3.5).
     # Construct their ordinary layer, then install the semantic identity Stat.
-    semantic_params <- arguments[c("track", "chromosome_separation", "circular", "na.rm")]
-    arguments[c("stat", "track", "chromosome_separation", "circular")] <- NULL
+    semantic_params <- arguments[c("track", "chromosome_separation", "circular", "zero_baseline", "na.rm")]
+    arguments[c("stat", "track", "chromosome_separation", "circular", "zero_baseline")] <- NULL
     arguments["mapping"] <- list(NULL)
     layer <- do.call(geom, arguments)
     layer$mapping <- mapping
@@ -164,7 +166,8 @@ add_dynamic_track_component <- function(object, plot, layout, object_name) {
   }
   # Native rectangles become polygon vertices under a nonlinear Coord. Their
   # generated edges may extend beyond a valid observation's source bp.
-  layer$stat_params$track_geometry <- inherits(layer$geom, "GeomRect")
+  layer$stat_params$track_geometry <- inherits(layer$geom, c("GeomRect", "GeomCol"))
+  layer$stat_params$zero_baseline <- isTRUE(object$include_zero)
   if (inherits(layer$stat, "StatChrTrack")) layer$stat_params$track_clip <-
     object$tile_clip %||% layout$base_spec$tracks[[object$track]]$clip %||% "auto"
   if (length(position_fields)) {
@@ -293,7 +296,15 @@ add_preprojected_track_component <- function(
       object$data, object$mapping, c("chr", "position", "value"),
       what = "mapping")
     range_value <- as.numeric(fields$value)
-    if (object$kind == "area") range_value <- c(range_value, 0)
+    range_chr <- as.character(fields$chr)
+    if (object$kind == "area") {
+      present_chr <- unique(range_chr)
+      base_z <- track_zero_baseline(layout, object$track, range_value)
+      if (is.finite(base_z) && length(present_chr)) {
+        range_value <- c(range_value, rep(base_z, length(present_chr)))
+        range_chr <- c(range_chr, present_chr)
+      }
+    }
   } else if (object$kind == "ribbon") {
     fields <- mapped_fields(
       object$data, object$mapping, c("chr", "position", "ymin", "ymax"),
@@ -303,6 +314,7 @@ add_preprojected_track_component <- function(
       stopf("Ribbon `ymin` and `ymax` must be numeric with `ymin <= ymax`.")
     }
     range_value <- c(fields$ymin, fields$ymax)
+    range_chr <- rep(as.character(fields$chr), 2L)
   } else {
     stopf("Unknown preprojected track component `%s`.", object$kind)
   }
@@ -313,8 +325,7 @@ add_preprojected_track_component <- function(
   finite_range <- range_value[!is.na(range_value)]
   layout <- register_track_values(
     layout, object$track,
-    rep(as.character(fields$chr),
-        length.out = length(range_value)),
+    range_chr,
     range_value
   )
   plot <- update_plot_ideogram_layout(plot, layout)
@@ -383,7 +394,9 @@ track_group_values <- function(data, mapping, chr, position = NULL) {
 }
 
 build_projected_ribbon_layer <- function(object, layout, fields) {
-  lower <- if (object$kind == "area") rep(0, length(fields$value)) else fields$ymin
+  lower <- if (object$kind == "area") {
+    clamp_track_baseline(layout, object$track, fields$chr, rep(0, length(fields$value)))
+  } else fields$ymin
   upper <- if (object$kind == "area") fields$value else fields$ymax
   first <- project_track_values_raw(
     layout, object$track, fields$chr, fields$position, lower)

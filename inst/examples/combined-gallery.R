@@ -166,8 +166,7 @@ regions <- read.table(text = sub('^##sequence-region[[:space:]]+', '', regions),
 regions$Start <- regions$Start - 1
 arab_karyotype <- regions[regions$Chr == '1', ]
 arab_view <- chr_view(arab_karyotype, '1', 7000, 9000)
-source(system.file('examples', 'gene-model-data.R', package = 'ggideogram'))
-models <- gene_model_data(features)
+models <- resolve_gene_models(features)
 arab_counts <- bin_genome(features[features$Type == 'gene', ],
   arab_karyotype, window = 250, method = 'count')
 arab_counts$Pos <- (arab_counts$Start - 1 + arab_counts$End) / 2

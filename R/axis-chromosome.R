@@ -173,8 +173,12 @@ chromosome_position_scale <- function(
 chromosome_axis_label_function <- function(labels) {
   force(labels)
   function(breaks) {
-    index <- match(names(labels), breaks, nomatch = 0L)
-    replace(breaks, index, labels[index != 0L])
+    hit <- match(breaks, names(labels), nomatch = 0L)
+    out <- breaks
+    keep <- hit != 0L
+    if (is.expression(labels)) out <- as.list(out)
+    out[keep] <- labels[hit[keep]]
+    if (is.expression(labels)) as.expression(out) else out
   }
 }
 
@@ -278,6 +282,10 @@ GuideChromosomeAxis <- ggplot2::ggproto(
   extract_key = function(self, scale, aesthetic, ...) {
     key <- ggplot2::GuideAxis$extract_key(scale, aesthetic, ...)
     if (is.null(key) || !nrow(key)) return(key)
+    if (".type" %in% names(key)) {
+      key <- key[key$.type == "major", , drop = FALSE]
+    }
+    if (!nrow(key)) return(key)
     breaks <- scale$get_breaks()
     if (length(breaks) != nrow(key)) {
       stopf("Chromosome-axis breaks could not be matched to the guide key.")
@@ -302,13 +310,13 @@ chromosome_axis_strip <- function(key, text_element, params) {
   karyotype <- params$semantic$karyotype
   chromosome <- as.character(key$.chr)
   index <- match(chromosome, karyotype$.chr)
-  if (anyNA(index)) {
-    unknown <- unique(chromosome[is.na(index)])
+  bad <- is.na(index) & !is.na(chromosome)
+  if (any(bad)) {
+    unknown <- unique(chromosome[bad])
     stopf("Chromosome-axis break%s not found in `data`: %s.",
           if (length(unknown) > 1L) "s" else "",
           format_chr_rows(unknown))
   }
-  karyotype <- karyotype[index, , drop = FALSE]
   position <- key[[params$aes]]
   labels <- key$.label %||% character()
   if (is.list(labels)) {
@@ -321,18 +329,18 @@ chromosome_axis_strip <- function(key, text_element, params) {
     any(!is.na(label_text) & nzchar(label_text))
   max_length_mm <- axis_unit_mm(params$axis_length, "axis_length")
   body_width_mm <- axis_unit_mm(params$body_width, "body_width")
-  length_ratio <- (karyotype$.end - karyotype$.start) /
-    max(params$semantic$karyotype$.end -
-          params$semantic$karyotype$.start)
-  body_length_mm <- max_length_mm * length_ratio
+  max_span <- max(params$semantic$karyotype$.end - params$semantic$karyotype$.start)
 
-  body_grobs <- lapply(seq_len(nrow(karyotype)), function(i) {
+  body_grobs <- lapply(seq_along(index), function(i) {
+    if (is.na(index[i])) return(grid::nullGrob())
+    k_row <- karyotype[index[i], , drop = FALSE]
+    b_len <- max_length_mm * (k_row$.end - k_row$.start) / max_span
     chromosome_axis_body_grob(
-      karyotype[i, , drop = FALSE],
+      k_row,
       axis_position = position[i],
       guide_position = params$position,
-      body_length_mm = body_length_mm[i],
-      body_width_mm = min(body_width_mm, body_length_mm[i]),
+      body_length_mm = b_len,
+      body_width_mm = min(body_width_mm, b_len),
       fill = params$fill,
       colour = params$colour,
       linewidth = params$linewidth,
@@ -376,8 +384,34 @@ chromosome_axis_strip <- function(key, text_element, params) {
 
 chromosome_axis_text_grob <- function(
     position, labels, text_element, guide_position, show_labels) {
-  if (!show_labels) return(grid::nullGrob())
+  if (!show_labels || inherits(text_element, "element_blank")) return(grid::nullGrob())
   no_margin <- ggplot2::margin(0, 0, 0, 0)
+  rot <- (text_element$angle %||% 0) %% 360 != 0
+  if (rot) {
+    probe <- ggplot2::element_grob(
+      text_element, label = labels,
+      x = grid::unit(rep(0.5, length(position)), "npc"),
+      y = grid::unit(rep(0.5, length(position)), "npc"),
+      hjust = 0.5, vjust = 0.5, margin = no_margin)
+    band <- if (guide_position %in% c("bottom", "top")) grid::grobHeight(probe) else grid::grobWidth(probe)
+    if (guide_position == "bottom") {
+      return(ggplot2::element_grob(text_element, label = labels,
+        x = grid::unit(position, "native"), y = 0.5 * band,
+        hjust = 0.5, vjust = 0.5, margin = no_margin))
+    } else if (guide_position == "top") {
+      return(ggplot2::element_grob(text_element, label = labels,
+        x = grid::unit(position, "native"), y = grid::unit(1, "npc") - 0.5 * band,
+        hjust = 0.5, vjust = 0.5, margin = no_margin))
+    } else if (guide_position == "left") {
+      return(ggplot2::element_grob(text_element, label = labels,
+        x = 0.5 * band, y = grid::unit(position, "native"),
+        hjust = 0.5, vjust = 0.5, margin = no_margin))
+    } else {
+      return(ggplot2::element_grob(text_element, label = labels,
+        x = grid::unit(1, "npc") - 0.5 * band, y = grid::unit(position, "native"),
+        hjust = 0.5, vjust = 0.5, margin = no_margin))
+    }
+  }
   if (guide_position == "bottom") {
     ggplot2::element_grob(
       text_element, label = labels,
@@ -477,9 +511,9 @@ chromosome_axis_profile <- function(
       (longitudinal[last_cap] - (body_length_mm - radius))^2))
   if (has_centromere) {
     at_waist <- longitudinal >= ce_start & longitudinal <= ce_end
-    half_width[at_waist] <- radius *
+    half_width[at_waist] <- pmin(half_width[at_waist], radius *
       abs(2 * (longitudinal[at_waist] - ce_start) /
-            (ce_end - ce_start) - 1)
+            (ce_end - ce_start) - 1))
   }
   one_side <- data.frame(
     long = longitudinal / body_length_mm,

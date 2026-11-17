@@ -28,9 +28,7 @@ strand_scales <- function() list(scale_fill_manual(values = strand, name = 'Stra
 f <- read_chr_features(extdata('arabidopsis-first-genes.gff3'))
 genes <- f[f$Type == 'gene', ]
 genes$Mid <- (genes$Start - 1 + genes$End) / 2
-source(system.file('examples', 'gene-model-data.R', package = 'ggideogram'))
-models <- gene_model_data(f)
-models$Gene <- sub('gene:', '', models$Gene)
+models <- resolve_gene_models(f)
 k <- data.frame(Chr = '1', Start = 0, End = 30427671, Label = 'Chr1')
 semantic <- as_ideogram_data(k, aes(chr = Chr, start = Start, end = End, label = Label))
 local_view <- chr_view(semantic, '1', 4500, 14500)

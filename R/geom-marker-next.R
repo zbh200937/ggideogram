@@ -77,6 +77,7 @@ geom_chr_marker <- function(
     na.rm = FALSE,
     show.legend = NA,
     inherit.aes = FALSE,
+    key_glyph = NULL,
     .geom = ggplot2::GeomPoint) {
   side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
@@ -90,6 +91,7 @@ geom_chr_marker <- function(
     position = position,
     show.legend = show.legend,
     inherit.aes = inherit.aes,
+    key_glyph = key_glyph,
     params = c(list(
       side = side, gap = gap, track = track, track_position = track_position,
       component = "marker", na.rm = na.rm
@@ -113,7 +115,8 @@ geom_chr_link <- function(
     track_position = 0.5,
     na.rm = FALSE,
     show.legend = FALSE,
-    inherit.aes = FALSE) {
+    inherit.aes = FALSE,
+    key_glyph = NULL) {
   side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
@@ -126,6 +129,7 @@ geom_chr_link <- function(
     position = position,
     show.legend = show.legend,
     inherit.aes = inherit.aes,
+    key_glyph = key_glyph,
     params = c(list(
       side = side, gap = gap, track = track, track_position = track_position,
       component = "link", na.rm = na.rm
@@ -212,14 +216,41 @@ ggplot_add.LayerChrMarker <- function(object, plot, ...) {
   spec <- object$ideogram_marker_spec
   if (!is.null(spec$track)) return(plot)
   layout$marker_extent <- layout$marker_extent %||% c(left = 0, right = 0)
+  by_chr <- layout$marker_extent_by_chr %||% list(left = stats::setNames(numeric(), character()),
+    right = stats::setNames(numeric(), character()))
   # An untracked marker is centred in a symmetric lane: `gap` from the
   # body edge to its centre and the same distance beyond the centre.
   extent <- 2 * spec$gap
-  if (extent <= layout$marker_extent[[spec$side]]) return(plot)
+  owned_chr <- if (is.data.frame(object$data) && "chr" %in% names(object$mapping)) {
+    if (!nrow(object$data)) character() else tryCatch(
+      intersect(unique(as.character(mapped_fields(object$data, object$mapping, "chr", what = "mapping")$chr)),
+        layout$data$karyotype$.chr),
+      error = function(e) layout$data$karyotype$.chr)
+  } else layout$data$karyotype$.chr
+  cur_side <- by_chr[[spec$side]]
+  new_side <- cur_side
+  for (ck in owned_chr) {
+    old_v <- if (ck %in% names(new_side)) unname(new_side[[ck]]) else 0
+    if (extent > old_v) new_side[[ck]] <- extent
+  }
+  by_chr[[spec$side]] <- new_side
+  space <- layout$marker_extent
+  if (length(owned_chr) && extent > space[[spec$side]]) space[[spec$side]] <- extent
+  if (identical(space, layout$marker_extent) && identical(by_chr, layout$marker_extent_by_chr)) {
+    return(plot)
+  }
+  if (extent == 0) {
+    layout$marker_extent <- space
+    layout$marker_extent_by_chr <- by_chr
+    if (!is.null(layout$base_spec$tracks)) {
+      attr(layout$base_spec$tracks, "marker_extent") <- space
+      attr(layout$base_spec$tracks, "marker_extent_by_chr") <- by_chr
+    }
+    return(update_plot_ideogram_layout(plot, layout))
+  }
   base <- layout$base_spec
   base$tracks <- base$tracks %||% track_layout()
-  space <- layout$marker_extent
-  space[[spec$side]] <- extent
   attr(base$tracks, "marker_extent") <- space
+  attr(base$tracks, "marker_extent_by_chr") <- by_chr
   rebuild_ideogram(plot, base)
 }

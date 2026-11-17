@@ -1,3 +1,39 @@
+# ggideogram 0.6.0
+
+- Removed redundant legacy wrappers `ideogram()`, `GFFex()`, `save_ideogram()`
+  and `as_ideogram_grob()` in favor of `ggideogram()`, `read_chr_features()` +
+  `bin_genome()`, `ggplot2::ggsave()` and `ggplot2::ggplotGrob()`.
+- Added `resolve_gene_models()` to expand GFF3 (`ID`/`Parent`, including
+  multi-parent shared exons, non-coding transcripts and two-level `gene ->
+  exon/CDS` structures) and GTF (`gene_id`/`transcript_id`) tables directly for
+  `geom_genemodel()`.
+- Added `read_chr_links()` to parse `minimap2` PAF (`.paf`/`.paf.gz`), `SyRI`
+  structural rearrangement outputs (`.out`) and `MCScanX` `.collinearity`
+  alignments (gene pairs or `collapse_blocks = TRUE` block ribbons) into
+  1-based closed coordinate tables with optional `chr_key()` genome keys.
+- Extended `read_chr_features()` with `format = "bedgraph"` (`.bedgraph`/`.bg`).
+- Extended `geom_track()` with native discrete/categorical `y` channels
+  (`factor` or `character`, automatic `1..K` sub-lanes and category axis
+  labels), per-chromosome `geom_smooth()` (`StatSmooth`), track-edge
+  `geom_rug()`, `geom_hline()`, `geom_vline()`, interval-only `geom_rect()` /
+  `geom_linerange()` / `geom_errorbar()`, and `log10`-safe `geom_col()` /
+  `geom_area()` baselines.
+- Extended `axis_units` and `geom_chr(component = "axis", units = ...)` with
+  `"cM"` for genetic linkage maps and `"none"` for unitless numeric ticks.
+- Generalized horizontal microsynteny stacks to four or more genomes (`N >= 2`)
+  with shared corridor spacing, diamond middle-genome locus markers and a
+  shared bottom distance ruler.
+- Eliminated hidden default graphics device side-effects (`Rplots.pdf`) during
+  lazy text and label layout construction, fixed outer tick-length clearance in
+  axis title reservation, and aligned gene-model track titles and chromosome
+  names without over-displacing non-collinear names.
+- Vectorized circular/curved `geom_chrlink()` Bezier and arc sampling,
+  `geom_genemodel()` interval merging and $O(1)$ lane lookup, and deduplicated
+  lazy text-dimension measurements.
+- Added the end-to-end `ggideogram-workflows` vignette and multi-domain
+  pangenome, QTL fine-mapping, T2T SyRI, breeding BinMap and Marey map gallery
+  scripts.
+
 # ggideogram 0.5.0
 
 - `min_gap` sets a minimum clearance for beside tracks. The bp-axis

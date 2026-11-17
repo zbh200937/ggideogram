@@ -64,8 +64,8 @@ chromosome_halfwidth_next <- function(g, s, width, cap_ratio = 1) {
     c1 <- (g$.centromere_start - g$.start) * g$.units_per_bp
     c2 <- (g$.centromere_end - g$.start) * g$.units_per_bp
     at_waist <- s >= c1 & s <= c2
-    halfwidth[at_waist] <- radius *
-      abs(2 * (s[at_waist] - c1) / (c2 - c1) - 1)
+    halfwidth[at_waist] <- pmin(halfwidth[at_waist],
+      radius * abs(2 * (s[at_waist] - c1) / (c2 - c1) - 1))
   }
   halfwidth
 }
@@ -223,8 +223,8 @@ linear_chromosome_name_data <- function(layout, position = "auto", align = "body
   g <- layout$chrom
   if (position == "auto") position <- "start"
   vertical <- layout$orientation == "vertical"
-  left <- layout$chromosome_width / 2 + layout$track_extent[["left"]]
-  right <- layout$chromosome_width / 2 + layout$track_extent[["right"]]
+  left <- layout$chromosome_width / 2 + annotation_extent(layout, g$.chr, "left")
+  right <- layout$chromosome_width / 2 + annotation_extent(layout, g$.chr, "right")
   data <- data.frame(name_chr = g$.chr,
     x = (g$.axis_start_x + g$.axis_end_x) / 2,
     y = (g$.axis_start_y + g$.axis_end_y) / 2,
@@ -391,7 +391,7 @@ chromosome_axis_layers <- function(
           if (length(unknown) > 1L) "s" else "",
           format_chr_rows(unknown))
   }
-  shared <- shared_microsynteny_axis(layout) && side == "auto" && isTRUE(chr) && is.null(breaks)
+  shared <- can_share_microsynteny_axis(layout) && side == "auto" && isTRUE(chr) && is.null(breaks)
   if (shared) selected <- utils::tail(layout$chrom$.chr, 1)
   spine_parts <- list()
   tick_parts <- list()
@@ -418,16 +418,23 @@ chromosome_axis_layers <- function(
     } else {
       breaks
     }
-    local_breaks <- local_breaks[
-      local_breaks >= g$.start & local_breaks <= g$.end]
+    if (!is.null(breaks) && (!is.numeric(local_breaks) || anyNA(local_breaks) || any(!is.finite(local_breaks)))) {
+      stopf("Axis `breaks` must contain finite numeric genomic coordinates.")
+    }
+    local_breaks <- sort(unique(local_breaks[
+      local_breaks >= g$.start & local_breaks <= g$.end]))
     if (is_circular_layout(layout) && is.null(breaks)) {
       local_breaks <- local_breaks[local_breaks < g$.end]
     }
     if (!length(local_breaks)) next
     projected <- project_positions_raw(if (shared) g else layout$chrom, g$.chr, local_breaks)
-    marker_extent <- (layout$marker_extent %||% c(left = 0, right = 0))[[axis_side]]
-    offset <- layout$chromosome_width / 2 +
-      max(annotation_extent(layout, g$.chr, axis_side), marker_extent) + gap
+    ext <- if (isTRUE(layout$microsynteny)) {
+      annotation_extent(layout, g$.chr, axis_side)
+    } else {
+      marker_extent <- (layout$marker_extent %||% c(left = 0, right = 0))[[axis_side]]
+      max(annotation_extent(layout, g$.chr, axis_side), marker_extent)
+    }
+    offset <- layout$chromosome_width / 2 + ext + gap
     if (is_circular_layout(layout) && axis_side == "left" && offset >= layout$circular$radius) {
       stopf("The inner bp axis reaches the circle center. Increase `radius` or reduce `axis_gap`.")
     }

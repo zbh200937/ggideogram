@@ -22,7 +22,11 @@ GeomCircularGapText <- ggplot2::ggproto("GeomCircularGapText", GeomIdeogramAxisT
       assign(key, state, registry)
     }
     state <- get(key, registry, inherits = FALSE)
-    id <- length(state$entries) + 1L
+    existing <- which(vapply(state$entries, function(e) {
+      identical(e$track, gap_track) && identical(e$title, isTRUE(gap_title)) &&
+        identical(e$xy$x, xy$x) && identical(e$xy$y, xy$y)
+    }, logical(1)))
+    id <- if (length(existing)) existing[1L] else length(state$entries) + 1L
     state$entries[[id]] <- list(text = text, data = data, xy = xy,
       track = gap_track, title = isTRUE(gap_title),
       tick_length = tick_length, label_gap = label_gap)
@@ -91,8 +95,9 @@ resolve_circular_gap_text <- function(state) {
       outer <- max(vapply(boxes[values], function(b) max(b %*% normal), numeric(1)))
       minimum <- max(0, outer + positions$packing_padding[i] - min(boxes[[i]] %*% normal))
     }
-    shift <- min(2 * positions$size[i], circular_gap_clearance(
-      boxes[[i]], normal, boxes[placed], positions$packing_padding[i], minimum))
+    raw_shift <- circular_gap_clearance(
+      boxes[[i]], normal, boxes[placed], positions$packing_padding[i], minimum)
+    shift <- if (positions$title[i]) raw_shift else min(2 * positions$size[i], raw_shift)
     positions$shift[i] <- shift
     positions$x[i] <- positions$x[i] + normal[1] * shift
     positions$y[i] <- positions$y[i] + normal[2] * shift

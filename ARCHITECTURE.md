@@ -2,8 +2,8 @@
 
 > 状态：**生效中的规范性设计（normative）**
 > 适用范围：下一代 ggideogram 的全部代码、测试、文档和示例
-> 最近更新：2026-11-10
-> 当前阶段：M10–M20 已实现；0.5.0 统计接口、默认配置与公开文档已统一，完整测试通过，包检查为 Status: OK
+> 最近更新：2026-11-17
+> 当前阶段：M10–M21 生效中；精简历史冗余封装，补齐生信格式解析、离散/平滑轨道、遗传图谱标尺与向量化绘制引擎
 
 本文件是本项目重构的单一设计来源。后续开发对话在修改代码前必须完整阅读本文件；
 实现与本文件冲突时，以本文件为准。只有用户明确改变设计目标时，才能先修改本文件，
@@ -377,9 +377,7 @@ p <- ggideogram(
 职责：创建语义数据、布局、基础坐标和主题，并加入默认染色体主体层。
 
 非职责：保存文件、添加固定图例、猜测所有轨道、读取 label type、模拟原版 SVG 页面。
-
-`ideogram()` 可以保留为轻量快捷入口，但其实现必须等价于公开组件的组合；不能拥有
-独立分支或私有渲染行为。
+`ggideogram()` 是唯一主构造函数，不再保留原版同名的 `ideogram()` 历史别名。
 
 ### 7.2 染色体与位点对象
 
@@ -474,8 +472,12 @@ x 始终为原始 bp，y 始终为轨道值；横、竖、圆形只是显示方�
 轨道 x 继承为 position；轨道 y 不为这些注释提供数值范围或显示位置。
 
 ordinary Layer 保留 Geom、Stat、Position、美学参数、key glyph 和原生图例。
-点、折线、柱、矩形、tile、文字及兼容 identity geom 使用统一投影；面积/ribbon 在
-原始坐标运行原生准备、统计和位置调整后投影；箱线/小提琴先解决固定统计值域。
+点、折线、柱、矩形、区间线段、tile、文字及兼容 identity geom 使用统一投影；
+`geom_hline`、`geom_vline` 和 `geom_rug` 按所属轨道与各染色体的真实边界投影；
+面积、ribbon 与 `geom_smooth`（`StatSmooth`）在每条染色体原始坐标内独立完成原生统计
+和位置调整后投影；箱线/小提琴先解决固定统计值域。
+轨道 `y` 除连续数值外还原生接受离散分类（`factor`/`character`），按因子水平或首次出现
+顺序映射为等宽子通道 `1..K`（范围 `[0.5, K + 0.5]`），开启轨道轴时自动标注类别名。
 所有层的值域必须在添加内容前一致训练。未知 Stat 必须明确拒绝。
 
 `geom_track(geom = ggplot2::geom_tile(), clip = "auto")` 在 overlay 轨道上仅为原生
@@ -553,12 +555,9 @@ cowplot::ggdraw(p_main) + cowplot::draw_plot(p_ideo, ...)
 grid::grobTree(ggplot2::ggplotGrob(p_ideo))
 ```
 
-如提供 `as_ideogram_grob()`，它只能是 `ggplotGrob()` 的稳定便捷封装，不能产生与
-标准 ggplot 输出不同的第二种版式。
-
+标准 grob 转换直接使用 `ggplot2::ggplotGrob()`，图形导出直接使用 `ggplot2::ggsave()`；
+包内不再单独维护重复的 `as_ideogram_grob()` 与 `save_ideogram()` 薄包装。
 ggalign 的 align_plots()、ggfree() 和 inset() 接入同一标准 ggplot 边界。
-save_ideogram() 将图形直接委托 ggplot2::ggsave()；可保存的对象由其标准绘制
-协议决定，包含 ggplot、grob 及提供相应 grid.draw 方法的组合对象。
 外部排版不隐式建立 chr/bp 对齐。参与 ggalign 离散排序的染色体轴使用其
 .discrete_x/.discrete_y 名称映射及 limits = NULL；默认名称和命名标签按原始 break
 键生成，排序或分组不改变染色体名称与主体的对应关系。
@@ -1063,13 +1062,13 @@ weighted_mean；未指定 method 的原有 FUN 汇总语义保留。group 为一
 按输入中出现的组合独立统计，在每组内保留核型所有窗口。输入注释采用 1-based closed。
 count 和 FUN 汇总通过 `count_position = "midpoint" / "start" / "end"` 指定每条记录的
 窗口归属；默认 midpoint 为 `(Start + End) / 2`，无 End 时使用 Start，恰好落在窗口
-终点的记录属于该窗口。`GFFex()` 是按类型选择 GFF 特征并调用同一统计入口的便利
-适配器，保留按 start 计数的默认定义，并验证完整区间。coverage 为区间并集的覆盖 bp 除以实际
+终点的记录属于该窗口。GFF/GTF/BED 特征统一通过 `read_chr_features()` 读取后交给
+`bin_genome()` 统计，不再保留历史 `GFFex()` 包装。coverage 为区间并集的覆盖 bp 除以实际
 窗口宽度，重叠碱基不重复计算；weighted_mean 以各观测与窗口的相交 bp 为权重，
 重叠观测各自贡献权重，不解释为合并后的唯一信号；这两种方法使用完整区间，不接受
 count_position 的显式设置。统计代表位置与区间绘图边界分别遵循各自明确的定义。
 输出都含 Chr/Start/End/Value；显式方法另含分组字段、Width、N 和 N_valid，count
-另含每 Mb 的 Rate。FUN 与 GFFex 的四列输出保持可直接用于已有轨道。
+另含每 Mb 的 Rate。FUN 的四列输出保持可直接用于已有轨道。
 窗口 Width 使用实际边界，包括短末端窗口；空 count/coverage 为 0，空加权均值为 NA。
 缺失值默认使加权均值为 NA，显式 na.rm = TRUE 仅移除缺失观测的权重；N 与 N_valid
 区分无观测、全缺失和真实零。
@@ -1344,15 +1343,16 @@ position = "repel" 提供自由文字框布局。
 GeomSegment，区间边界交给 GeomPolygon。使用同一投影确定两端和弯曲方向，自动弯曲幅度
 随端点距离变化。显式 curvature = 0 画直线；显式 bend 保持已有控制语义。
 
-**微共线性默认布局。** 横向单行堆叠的两至三条染色体加入跨染色体连接后，
+**微共线性默认布局。** 横向单行堆叠的两条及以上染色体加入跨染色体连接后，
 默认将染色体之间的区域留给连接。三条染色体构成双边星形关系时，将公共染色体
 放在中间，两端维持输入相对顺序；`link_layout = "input"` 或显式 chr 顺序保留用户排序。
 默认 axis_side/位点 side 为 auto：上端位点注释向上、下端向下；中间染色体的文字
 注释以原生小菱形代替。显式 side 与 track 声明优先。默认文字占位宽度为 4 个布局单位，
 引导线高度为 2 mm；只按每条染色体实际注释侧计算间隔，默认连接区间隔为 9 个主体宽度。
-默认采用 global 长度尺度，染色体窗口按实际 bp 长度成比例。axis = TRUE 且轴的
-side/breaks 为自动时，两条染色体各用自己的原始基因组坐标轴，分别位于上、下外侧；
-三条染色体在底部共用一条 bp 距离轴，表示从各自显示起点起算的距离。
+默认采用 global 长度尺度，染色体窗口按实际 bp 长度成比例。启用 bp 轴（`axis = TRUE`
+或 `geom_chr(component = "axis")`）且轴的 side/breaks 为自动时，两条染色体各用自己的
+原始基因组坐标轴，分别位于上、下外侧；三条及以上染色体在底部共用一条 bp 距离轴，
+表示从各自显示起点起算的距离。
 显式 per_chr、轴 side 或 breaks 使用各染色体的独立原始坐标轴。
 连接 side1/side2 = auto 时，两端分别从朝向对方的主体边缘出发；中间染色体同时使用
 上下两侧。gap 默认为 NULL，自动越过同侧注释轨道及建图时声明的轴占位，显式 gap 保持指定偏移。
@@ -1371,3 +1371,45 @@ axis_width 默认 4 个布局单位，作为轴的连接净空，可显式调节
 横/竖/圆形、reverse、chr_view、复合键、普通与第三方 geom、inset、外部组合的交叉运行；
 两种输出尺寸的物理字号与环形名称环、原生 geom 类型及源坐标保持不变；帮助页、简明
 使用代码与 PNG/PDF 同步。完成后运行包检查，未运行不得声称通过。
+
+### M21：接口去冗、生信解析直连、离散/平滑轨道、遗传标尺与向量化引擎
+
+本阶段面向完整基因组学与育种科研作图闭环，清理与 ggplot2 重复的历史薄封装，补齐
+高频生信格式解析入口与轨道语法缺口，并消除大数据量下的逐行拼接瓶颈。
+
+1. **移除冗余历史封装。** 删除 `ideogram()`、`GFFex()`、`save_ideogram()` 与
+   `as_ideogram_grob()`，统一收敛至 `ggideogram()`、`read_chr_features()` +
+   `bin_genome()`、`ggplot2::ggsave()` 和 `ggplot2::ggplotGrob()`。
+2. **生信注释与共线性/结构变异解析器。**
+   - `resolve_gene_models(features, transcript_types = ...)`：接收 GFF3 或 GTF 的
+     `read_chr_features()` 结果，自动拆分多父级 `Parent`、关联转录本与父基因（兼容无中间
+     转录本的直接基因子特征），输出含 `Chr/Start/End/Type/Strand/Gene/Transcript/Symbol`
+     的标准表供 `geom_genemodel()` 直接消费，保留全部源属性列。
+   - `read_chr_links(file, format = c("auto", "paf", "syri", "mcscanx"), ...)`：解析
+     `minimap2` PAF（0-based 半开转 1-based 闭区间，保留比对长度、一致性与 MapQ）、
+     `SyRI` `.out`（1-based 结构重排区块 `SYN/INV/TRANS/INVTR/DUP/INVDP`，反转为 `-`）
+     及 `MCScanX` `.collinearity`（结合基因坐标表输出基因对或 `collapse_blocks = TRUE`
+     聚合共线性区块起止区间与正反链方向）；可选 `target_genome`/`query_genome` 直接生成
+     `chr_key()` 复合键，结果直接交给 `geom_chrlink()`。
+   - `read_chr_features(..., format = "bedgraph")`：原生识别 `.bedgraph`/`.bg` 四列定量
+     区间文件（跳过 `track`/`browser` 头，0-based 半开转 1-based 闭区间并验证数值 `Value`）。
+3. **轨道语法扩展：离散 `y` 通道、`geom_smooth()` 与 `geom_rug()`。**
+   - 离散 `y`：当轨道映射的 `y` 为因子或字符向量时，按因子水平或首次出现顺序建立确定性
+     分类字典 `1..K`，默认固定值域 `c(0.5, K + 0.5)`，使多品系单倍型/渐渗 BinMap、多组织
+     表观热图与多类型变异轨道无需手工编码数字即可等分轨道宽度，并在 `axis = TRUE` 时自动
+     标注类别名称（含环形闭合缺口轴）。
+   - `geom_smooth()`（`StatSmooth`）：在每条染色体原始 `(bp, value)` 坐标内独立拟合平滑
+     曲线及置信带（不跨染色体平滑），自动训练轨道值域并投影至横、竖与环形布局。
+   - `geom_rug()`（`GeomRug`）：按染色体轨道近端（`"b"`）与远端（`"t"`）边界转换为原生
+     `GeomSegment` 短刻度，支持线性与环形轨道。
+4. **遗传图谱与无单位标尺。** `axis_units` 与 `geom_chr(component = "axis", units = ...)`
+   新增 `"cM"` 与 `"none"`，支持遗传连锁群（cM）与物理染色体（Mb）跨尺度共线性比较及
+   Marey map 组合图。
+5. **高通量向量化实现。** 环形双端色带/曲线、线性弯曲连接、`geom_genemodel()` 通道归并及
+   同样式文本尺寸测量改用向量化矩阵与索引展开，避免逐行 `rbind` 造成的大规模数据卡顿。
+
+验收：已删除的 4 个历史符号不再导出且文档/示例全部迁移；GFF3/GTF `resolve_gene_models()`、
+PAF/SyRI/MCScanX `read_chr_links()` 与 `bedGraph` 读取通过手算坐标与方向校验；离散 `y`
+多品系渐渗/多组学热图、`geom_smooth()` Marey/群体扫描曲线、`geom_rug()` 与 `"cM"` 轴在
+横/竖/环形下构建无警告；2,000 条环形共线性带与 400 个多外显子基因模型保持亚秒级构建；
+提供多场景出版级组合示例图并通过完整测试与 `R CMD check`。

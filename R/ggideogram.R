@@ -73,7 +73,8 @@
 #'   Circular automatic breaks omit the
 #'   terminal endpoint to keep adjacent seam labels separate.
 #' @param axis_n Maximum target automatic break intervals.
-#' @param axis_units Label unit.
+#' @param axis_units Label unit (`"auto"`, `"bp"`, `"kb"`, `"Mb"`, `"Gb"`,
+#'   `"cM"` for genetic maps, or `"none"` for unitless numeric ticks).
 #' @param axis_gap Clear gap beyond the outermost same-side track or marker lane
 #'   (or the body when neither is present), in body-width units. Tick marks start
 #'   at the axis spine and extend away from the chromosome, so they do not eat
@@ -136,7 +137,7 @@ ggideogram <- function(
     axis_side = c("auto", "left", "right", "inner", "outer"),
     axis_breaks = NULL,
     axis_n = 6,
-    axis_units = c("auto", "bp", "kb", "Mb", "Gb"),
+    axis_units = c("auto", "bp", "kb", "Mb", "Gb", "cM", "none"),
     axis_gap = 0.3,
     axis_tick_length = 1.5,
     axis_label_gap = 0.25,
@@ -174,14 +175,24 @@ ggideogram <- function(
   check_nonnegative_layout(linewidth, "linewidth")
   check_nonnegative_layout(axis_linewidth, "axis_linewidth")
 
-  if (!inherits(data, "ideogram_data") && is_cytoband(data)) {
+  if (!inherits(data, "ideogram_data") && is_cytoband(data) && is.null(mapping)) {
     if (!is.null(cytoband)) {
       stopf(paste0(
         "`data` already looks like a cytoband table; do not also supply ",
         "`cytoband`."))
     }
     cytoband <- cytoband_alias(data)
-    data <- cytoband_karyotype(cytoband)
+    if (!is.null(cytoband_mapping)) {
+      cf <- mapped_fields(cytoband, cytoband_mapping, c("chr", "start", "end"),
+        what = "cytoband_mapping")
+      cyto_norm <- cytoband
+      cyto_norm$Chr <- cf$chr
+      cyto_norm$Start <- cf$start
+      cyto_norm$End <- cf$end
+      data <- cytoband_karyotype(cyto_norm)
+    } else {
+      data <- cytoband_karyotype(cytoband)
+    }
   }
 
   semantic <- if (inherits(data, "ideogram_data")) {
@@ -258,6 +269,7 @@ ggideogram <- function(
     result$base_spec <- base_spec
     result$data <- semantic
     result$marker_extent <- attr(tracks, "marker_extent")
+    result$marker_extent_by_chr <- attr(tracks, "marker_extent_by_chr")
     result$microsynteny <- is_microsynteny(result)
     if (result$microsynteny) result <- pack_microsynteny(result)
     result

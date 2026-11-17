@@ -32,13 +32,17 @@ validate_and_filter_chr_inset <- function(data, ideogram_layout) {
       data <- data[keep, , drop = FALSE]
       if (!nrow(data)) return(data)
       chr <- chr[keep]
-      clip_first <- pmax(first[keep], floor(ideogram_layout$chrom$.start[vis[keep]]) + 1)
-      clip_last <- pmin(last[keep], ceiling(ideogram_layout$chrom$.end[vis[keep]]))
-      data$.source_start <- data$.source_start %||% first[keep]
-      data$.source_end <- data$.source_end %||% last[keep]
+      c_lo <- pmax(first[keep] - 1, ideogram_layout$chrom$.start[vis[keep]])
+      c_hi <- pmin(last[keep], ideogram_layout$chrom$.end[vis[keep]])
+      clip_first <- pmax(first[keep], floor(c_lo) + 1)
+      clip_last <- pmin(last[keep], ceiling(c_hi))
+      if (!".source_start" %in% names(data) || is.null(data$.source_start)) data$.source_start <- first[keep]
+      if (!".source_end" %in% names(data) || is.null(data$.source_end)) data$.source_end <- last[keep]
+      data$ideogram_inset_low <- c_lo
+      data$ideogram_inset_high <- c_hi
       data$ideogram_inset_start <- clip_first
       data$ideogram_inset_end <- clip_last
-      data$ideogram_position <- (clip_first - 1 + clip_last) / 2
+      data$ideogram_position <- (c_lo + c_hi) / 2
     } else {
       pos <- validate_coordinate(data$position, "position")
       if (any(pos < source$.start[i] | pos > source$.end[i])) {
@@ -128,6 +132,9 @@ GeomChrInset <- ggplot2::ggproto(
 
     children <- lapply(seq_len(nrow(coordinates)), function(index) {
       child <- coordinates$plot[[index]]
+      if (!is_inset_plot(child)) {
+        stopf("Inset `plot` entries must be complete ggplot or grob objects.")
+      }
       grob <- if (inherits(child, "ggplot")) {
         ggplot2::ggplotGrob(child)
       } else {
@@ -450,21 +457,4 @@ validate_inset_mapping <- function(data, mapping) {
 
 is_inset_plot <- function(plot) {
   inherits(plot, "ggplot") || grid::is.grob(plot)
-}
-
-#' Convert an ideogram to a standard grob
-#'
-#' This is a stable convenience wrapper around [ggplot2::ggplotGrob()] and does
-#' not create a second renderer or fixed page layout.
-#'
-#' @param plot A [ggideogram()] plot.
-#'
-#' @return A standard gtable/grob.
-#' @export
-as_ideogram_grob <- function(plot) {
-  if (!inherits(plot, "ggplot") ||
-      !inherits(plot$coordinates$layout, "ideogram_layout_v2")) {
-    stopf("`plot` must be a `ggideogram()` ggplot object.")
-  }
-  ggplot2::ggplotGrob(plot)
 }

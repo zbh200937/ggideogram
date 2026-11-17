@@ -80,7 +80,7 @@ labels. Ticks remain visible in both cases.
 \code{gap} sets the distance from the track endpoint to the value-axis spine,
 in body-width units (default 0.2). Circular axes use at most half the
 adjacent sector gap, measured along the chromosome centerline.
-With \code{size = NULL} (default), tick text uses 1.8--2.8 mm based on the
+With \code{size = NULL} (default), tick text uses 1.8–2.8 mm based on the
 rendered axis length and label spacing. A numeric \code{size} fixes the
 physical text size. Set \code{family}, \code{colour}, \code{tick_length} (mm) and
 \code{label_gap} (em) independently.}
@@ -114,11 +114,15 @@ synteny plots, tracks restricted to different chromosomes can reuse space.
 }
 \details{
 Pass an ordinary layer to \code{geom}, or several layers to \code{layers}. Compatible
-identity-stat geoms keep their original Geom, Position, parameters and keys.
-Area, ribbon, boxplot and violin layers finish their native statistics and
-Position in raw bp/value coordinates before projection. Widths use bp;
-violin bandwidths use the original value units. Automatic value limits
-include statistical geometry such as density tails and boxplot notches.
+identity-stat geoms keep their original Geom, Position, parameters and keys,
+and \code{geom_hline()}, \code{geom_vline()} and \code{geom_rug()} project against each
+chromosome's track boundaries. Discrete \code{y} (\code{factor} or \code{character}) maps
+categories to equal sub-channels \verb{1..K} with automatic category axis labels.
+Area, ribbon, smooth (\code{geom_smooth()}), boxplot and violin layers finish
+their native statistics and Position independently per chromosome in raw
+bp/value coordinates before projection. Widths use bp; violin bandwidths use
+the original value units. Automatic value limits include statistical geometry
+such as confidence bands, density tails and boxplot notches.
 All contents train the shared value range before drawing.
 Adding another track recomputes existing components from source data.
 Reuse a track identifier without \code{geom}/\code{layers} to adjust it. Omitted

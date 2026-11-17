@@ -132,7 +132,7 @@ attach_chr_component <- function(layout, object, name) {
       format_chr_rows(unique(chr[duplicated_key])))
   }
   if (object$relationship == "one-to-one") {
-    missing <- setdiff(layout$chrom$.chr, chr)
+    missing <- setdiff(layout$data$karyotype$.chr, chr)
     if (length(missing)) {
       stopf("One-to-one chromosome attachment `%s` is missing %s.",
             name, format_chr_rows(missing))

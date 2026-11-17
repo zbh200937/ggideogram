@@ -44,6 +44,6 @@ output_dir <- file.path("work", "ggalign-examples")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 plots <- list(panels = panels, axis = aligned, inset = embedded)
 for (name in names(plots)) {
-  save_ideogram(file.path(output_dir, paste0("ggalign-", name, ".png")),
+  ggplot2::ggsave(file.path(output_dir, paste0("ggalign-", name, ".png")),
     plots[[name]], width = 210, height = 115, units = "mm", dpi = 150, bg = "white")
 }

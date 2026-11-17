@@ -17,11 +17,15 @@ ggideogram_track_spec <- function(...) track(...)
 #' synteny plots, tracks restricted to different chromosomes can reuse space.
 #'
 #' Pass an ordinary layer to `geom`, or several layers to `layers`. Compatible
-#' identity-stat geoms keep their original Geom, Position, parameters and keys.
-#' Area, ribbon, boxplot and violin layers finish their native statistics and
-#' Position in raw bp/value coordinates before projection. Widths use bp;
-#' violin bandwidths use the original value units. Automatic value limits
-#' include statistical geometry such as density tails and boxplot notches.
+#' identity-stat geoms keep their original Geom, Position, parameters and keys,
+#' and `geom_hline()`, `geom_vline()` and `geom_rug()` project against each
+#' chromosome's track boundaries. Discrete `y` (`factor` or `character`) maps
+#' categories to equal sub-channels `1..K` with automatic category axis labels.
+#' Area, ribbon, smooth (`geom_smooth()`), boxplot and violin layers finish
+#' their native statistics and Position independently per chromosome in raw
+#' bp/value coordinates before projection. Widths use bp; violin bandwidths use
+#' the original value units. Automatic value limits include statistical geometry
+#' such as confidence bands, density tails and boxplot notches.
 #' All contents train the shared value range before drawing.
 #' Adding another track recomputes existing components from source data.
 #' Reuse a track identifier without `geom`/`layers` to adjust it. Omitted
@@ -167,6 +171,8 @@ chr_track_layers <- function(layers) {
 
 normalise_chr_tracks <- function(tracks) {
   if (is.null(tracks)) return(NULL)
+  m_ext <- attr(tracks, "marker_extent")
+  m_ext_chr <- attr(tracks, "marker_extent_by_chr")
   if (!inherits(tracks, "ideogram_track_layout")) {
     if (!is.list(tracks)) stopf("`tracks` must be a named list of geom_track() declarations.")
     tracks <- do.call(track_layout, tracks)
@@ -176,6 +182,8 @@ normalise_chr_tracks <- function(tracks) {
     if (!is.null(specified) && specified != id) stopf("Track `%s` has a different identifier `%s`.", id, specified)
     tracks[[id]] <- validate_track_spec(tracks[[id]])
   }
+  attr(tracks, "marker_extent") <- m_ext
+  attr(tracks, "marker_extent_by_chr") <- m_ext_chr
   tracks
 }
 
@@ -238,7 +246,7 @@ track_layer_constructor <- function(prototype, ribbon = FALSE) {
     layer$stat_params <- prototype$stat_params
     if (identical(stat, StatChrTrack)) {
       layer$stat_params <- supplied[intersect(names(supplied),
-        c("track", "chromosome_separation", "circular", "track_geometry"))]
+        c("track", "chromosome_separation", "circular", "track_geometry", "zero_baseline"))]
     }
     layer$stat_params$na.rm <- na.rm
     layer$geom_params$na.rm <- na.rm
@@ -253,9 +261,264 @@ track_layer_constructor <- function(prototype, ribbon = FALSE) {
   }
 }
 
+build_track_hline_component <- function(layer, spec, id, layout) {
+  own_data <- !is.null(layer$data) && !inherits(layer$data, "waiver")
+  hdata <- if (own_data) {
+    if (is.function(layer$data)) layer$data(spec$data) else layer$data
+  } else spec$data
+  hmapping <- if (isTRUE(layer$inherit.aes)) {
+    scope_mapping(spec$mapping, layer$mapping, TRUE)
+  } else layer$mapping
+  yint_param <- layer$aes_params$yintercept %||% layer$geom_params$yintercept
+  if (!is.data.frame(hdata)) {
+    if (is.null(yint_param)) stopf("`geom_hline()` in track `%s` requires `yintercept`.", id)
+    hdata <- data.frame(.hline_y = if (is_discrete_track_vec(yint_param)) as.character(yint_param) else as.numeric(yint_param),
+      stringsAsFactors = FALSE)
+    hmapping <- ggplot2::aes(yintercept = .data$.hline_y)
+  }
+  if (!nrow(hdata)) {
+    empty_df <- data.frame(.hline_chr = character(0), .hline_pos = numeric(0),
+      .hline_y = numeric(0), .hline_grp = character(0))
+    proto <- ggplot2::geom_line(data = empty_df, show.legend = layer$show.legend, inherit.aes = FALSE)
+    proto$mapping <- ggplot2::aes(chr = .data$.hline_chr, x = .data$.hline_pos,
+      y = .data$.hline_y, group = .data$.hline_grp)
+    comp <- native_track_component(proto, spec, id, layout)
+    comp$from_hline <- TRUE
+    return(comp)
+  }
+  yint <- if (!is.null(hmapping$yintercept)) {
+    recycle_semantic(rlang::eval_tidy(hmapping$yintercept, data = hdata), nrow(hdata), "yintercept")
+  } else if (!is.null(yint_param)) {
+    recycle_semantic(yint_param, nrow(hdata), "yintercept")
+  } else stopf("`geom_hline()` in track `%s` requires `yintercept`.", id)
+  if (!is_discrete_track_vec(yint) && (!is.numeric(yint) || any(!is.finite(yint[!is.na(yint)])))) {
+    stopf("Track `yintercept` must contain finite numbers or discrete track levels.")
+  }
+  owned_chrs <- track_chromosomes(layout, id)
+  if (!is.null(hmapping) && "chr" %in% names(hmapping)) {
+    row_chr <- validate_chr(recycle_semantic(rlang::eval_tidy(hmapping$chr, data = hdata), nrow(hdata), "chr"), "chr")
+    source <- layout$data$karyotype
+    if (any(!row_chr %in% source$.chr)) stopf("Track positions are outside the source chromosome bounds.")
+    keep <- row_chr %in% owned_chrs & !is.na(yint)
+    idx <- which(keep)
+    pairs_r <- idx
+    pairs_c <- row_chr[idx]
+  } else {
+    valid_r <- which(!is.na(yint))
+    grid_rc <- expand.grid(r = valid_r, c = owned_chrs, stringsAsFactors = FALSE)
+    pairs_r <- grid_rc$r
+    pairs_c <- grid_rc$c
+  }
+  if (!length(pairs_r)) {
+    empty_df <- data.frame(.hline_chr = character(0), .hline_pos = numeric(0),
+      .hline_y = numeric(0), .hline_grp = character(0))
+      proto <- ggplot2::geom_line(data = empty_df, show.legend = layer$show.legend, inherit.aes = FALSE)
+    proto$mapping <- ggplot2::aes(chr = .data$.hline_chr, x = .data$.hline_pos,
+      y = .data$.hline_y, group = .data$.hline_grp)
+    comp <- native_track_component(proto, spec, id, layout)
+    comp$from_hline <- TRUE
+    return(comp)
+  }
+  g <- layout$chrom[match(pairs_c, layout$chrom$.chr), , drop = FALSE]
+  rep2 <- rep(seq_along(pairs_r), each = 2L)
+  out <- hdata[pairs_r[rep2], , drop = FALSE]
+  out$.hline_chr <- pairs_c[rep2]
+  out$.hline_pos <- as.vector(rbind(g$.start, g$.end))
+  out$.hline_y <- if (is.factor(yint)) yint[pairs_r[rep2]] else yint[pairs_r[rep2]]
+  out$.hline_grp <- paste0(pairs_r[rep2], ":", pairs_c[rep2])
+  keep_aes <- setdiff(names(hmapping), c("yintercept", "chr", "x", "y", "position", "value", "group"))
+  line_map <- combine_track_mapping(hmapping[keep_aes], ggplot2::aes(
+    chr = .data$.hline_chr, x = .data$.hline_pos,
+    y = .data$.hline_y, group = .data$.hline_grp))
+  aes_p <- layer$aes_params
+  aes_p$yintercept <- NULL
+  geom_p <- layer$geom_params[intersect(names(layer$geom_params), c("na.rm", "lineend", "linejoin", "linemitre"))]
+  proto <- do.call(ggplot2::geom_line, c(list(data = out,
+    show.legend = layer$show.legend, inherit.aes = FALSE), geom_p, aes_p))
+  proto$mapping <- line_map
+  comp <- native_track_component(proto, spec, id, layout)
+  comp$from_hline <- TRUE
+  comp
+}
+
+build_track_vline_layer <- function(layer, spec, id, layout) {
+  own_data <- !is.null(layer$data) && !inherits(layer$data, "waiver")
+  vdata <- if (own_data) {
+    if (is.function(layer$data)) layer$data(spec$data) else layer$data
+  } else spec$data
+  vmapping <- if (isTRUE(layer$inherit.aes)) {
+    scope_mapping(spec$mapping, layer$mapping, TRUE)
+  } else layer$mapping
+  xint_param <- layer$aes_params$xintercept %||% layer$geom_params$xintercept
+  if (!is.data.frame(vdata)) {
+    if (is.null(xint_param)) stopf("`geom_vline()` in track `%s` requires `xintercept`.", id)
+    vdata <- data.frame(.vline_x = as.numeric(xint_param))
+    vmapping <- ggplot2::aes(xintercept = .data$.vline_x)
+  }
+  trow <- track_table_row(layout, id)
+  if (!nrow(vdata)) {
+    empty_seg <- data.frame(.vx = numeric(0), .vy = numeric(0), .vxend = numeric(0), .vyend = numeric(0))
+    return(ggplot2::geom_segment(data = empty_seg,
+      mapping = ggplot2::aes(x = .data$.vx, y = .data$.vy, xend = .data$.vxend, yend = .data$.vyend),
+      inherit.aes = FALSE, show.legend = layer$show.legend))
+  }
+  xint <- if (!is.null(vmapping$xintercept)) {
+    recycle_semantic(rlang::eval_tidy(vmapping$xintercept, data = vdata), nrow(vdata), "xintercept")
+  } else if (!is.null(xint_param)) {
+    recycle_semantic(xint_param, nrow(vdata), "xintercept")
+  } else stopf("`geom_vline()` in track `%s` requires `xintercept`.", id)
+  if (!is.numeric(xint) || anyNA(xint) || any(!is.finite(xint))) {
+    stopf("Track `xintercept` must contain finite numeric coordinates.")
+  }
+  owned_chrs <- track_chromosomes(layout, id)
+  if (!is.null(vmapping) && "chr" %in% names(vmapping)) {
+    row_chr <- validate_chr(recycle_semantic(rlang::eval_tidy(vmapping$chr, data = vdata), nrow(vdata), "chr"), "chr")
+    source <- layout$data$karyotype
+    src_i <- match(row_chr, source$.chr)
+    if (anyNA(src_i) || any(xint < source$.start[src_i] | xint > source$.end[src_i])) {
+      stopf("Track positions are outside the source chromosome bounds.")
+    }
+    vis_i <- match(row_chr, layout$chrom$.chr)
+    keep <- row_chr %in% owned_chrs & !is.na(vis_i) &
+      xint >= layout$chrom$.start[vis_i] & xint <= layout$chrom$.end[vis_i]
+    pairs_r <- which(keep)
+    pairs_c <- row_chr[keep]
+  } else {
+    grid_rc <- expand.grid(r = seq_len(nrow(vdata)), c = owned_chrs, stringsAsFactors = FALSE)
+    vis_i <- match(grid_rc$c, layout$chrom$.chr)
+    keep <- !is.na(vis_i) & xint[grid_rc$r] >= layout$chrom$.start[vis_i] &
+      xint[grid_rc$r] <= layout$chrom$.end[vis_i]
+    pairs_r <- grid_rc$r[keep]
+    pairs_c <- grid_rc$c[keep]
+  }
+  if (!length(pairs_r)) {
+    empty_seg <- data.frame(.vx = numeric(0), .vy = numeric(0), .vxend = numeric(0), .vyend = numeric(0))
+    return(ggplot2::geom_segment(data = empty_seg,
+      mapping = ggplot2::aes(x = .data$.vx, y = .data$.vy, xend = .data$.vxend, yend = .data$.vyend),
+      inherit.aes = FALSE, show.legend = layer$show.legend))
+  }
+  out <- vdata[pairs_r, , drop = FALSE]
+  pts <- project_positions_checked(layout, pairs_c, xint[pairs_r])
+  lo_pt <- offset_chr_points_signed(layout, pairs_c, pts, rep(trow$low_offset, length(pairs_c)))
+  hi_pt <- offset_chr_points_signed(layout, pairs_c, pts, rep(trow$high_offset, length(pairs_c)))
+  out$.vx <- lo_pt$x; out$.vy <- lo_pt$y
+  out$.vxend <- hi_pt$x; out$.vyend <- hi_pt$y
+  keep_aes <- setdiff(names(vmapping), c("xintercept", "chr", "x", "y", "xend", "yend", "position", "value"))
+  seg_map <- combine_track_mapping(vmapping[keep_aes], ggplot2::aes(
+    x = .data$.vx, y = .data$.vy, xend = .data$.vxend, yend = .data$.vyend))
+  aes_p <- layer$aes_params
+  aes_p$xintercept <- NULL
+  geom_p <- layer$geom_params[intersect(names(layer$geom_params), c("na.rm", "lineend", "linejoin", "arrow", "arrow.fill"))]
+  seg_layer <- do.call(ggplot2::geom_segment, c(list(mapping = seg_map, data = out,
+    show.legend = layer$show.legend, inherit.aes = FALSE), geom_p, aes_p))
+  seg_layer$ideogram_track_chrs <- unique(pairs_c)
+  seg_layer
+}
+
+build_track_rug_layer <- function(layer, spec, id, layout) {
+  own_data <- !is.null(layer$data) && !inherits(layer$data, "waiver")
+  rdata <- if (own_data) {
+    if (is.function(layer$data)) layer$data(spec$data) else layer$data
+  } else spec$data
+  rmapping <- if (isTRUE(layer$inherit.aes)) {
+    scope_mapping(spec$mapping, layer$mapping, TRUE)
+  } else layer$mapping
+  rmapping <- scope_track_mapping(rmapping)
+  if (!is.data.frame(rdata)) stopf("`geom_rug()` in track `%s` requires data-frame `data`.", id)
+  if (is.null(rmapping) || !all(c("chr", "position") %in% names(rmapping))) {
+    stopf("`geom_rug()` in track `%s` requires `chr` and `x` (or `position`) mappings.", id)
+  }
+  sides <- as.character(layer$geom_params$sides %||% layer$aes_params$sides %||% "b")[1]
+  has_b <- grepl("b", sides, fixed = TRUE)
+  has_t <- grepl("t", sides, fixed = TRUE)
+  if (!has_b && !has_t) {
+    stopf("`geom_rug()` in track `%s` requires `sides` containing `\"b\"` and/or `\"t\"`.", id)
+  }
+  raw_len <- layer$geom_params$length %||% layer$aes_params$length
+  frac <- if (is.null(raw_len) || identical(as.character(raw_len), "0.03npc")) {
+    0.15
+  } else if (grid::is.unit(raw_len)) {
+    val_u <- as.numeric(raw_len)[1]
+    if (!is.finite(val_u) || val_u <= 0) stopf("`geom_rug()` `length` must be positive.")
+    min(val_u, 1)
+  } else if (is.numeric(raw_len) && length(raw_len) == 1L && is.finite(raw_len) && raw_len > 0) {
+    min(raw_len, 1)
+  } else {
+    stopf("`geom_rug()` `length` in track `%s` must be a positive fraction or grid unit.", id)
+  }
+  rdata <- scope_point_data(rdata, rmapping, layout, spec$chr)
+  empty_seg <- function() {
+    empty_df <- data.frame(.rx = numeric(0), .ry = numeric(0), .rxend = numeric(0), .ryend = numeric(0))
+    sl <- ggplot2::geom_segment(data = empty_df,
+      mapping = ggplot2::aes(x = .data$.rx, y = .data$.ry, xend = .data$.rxend, yend = .data$.ryend),
+      inherit.aes = FALSE, show.legend = layer$show.legend)
+    sl$ideogram_track_chrs <- character(0)
+    sl
+  }
+  if (!nrow(rdata)) return(empty_seg())
+  f <- mapped_fields(rdata, rmapping, c("chr", "position"), what = "mapping")
+  chr_v <- validate_chr(f$chr, "chr")
+  pos_v <- validate_coordinate(f$position, "position")
+  owned_chrs <- track_chromosomes(layout, id)
+  keep <- chr_v %in% owned_chrs
+  if (!any(keep)) return(empty_seg())
+  rdata <- rdata[keep, , drop = FALSE]
+  chr_v <- chr_v[keep]
+  pos_v <- pos_v[keep]
+
+  trow <- track_table_row(layout, id)
+  bot_edge <- if (isTRUE(trow$reverse)) trow$high_offset else trow$low_offset
+  top_edge <- if (isTRUE(trow$reverse)) trow$low_offset else trow$high_offset
+  tick_delta <- (top_edge - bot_edge) * frac
+
+  pieces <- list()
+  if (has_b) {
+    b_df <- rdata
+    pts <- project_positions_checked(layout, chr_v, pos_v)
+    p0 <- offset_chr_points_signed(layout, chr_v, pts, rep(bot_edge, length(chr_v)))
+    p1 <- offset_chr_points_signed(layout, chr_v, pts, rep(bot_edge + tick_delta, length(chr_v)))
+    b_df$.rx <- p0$x; b_df$.ry <- p0$y
+    b_df$.rxend <- p1$x; b_df$.ryend <- p1$y
+    pieces[[length(pieces) + 1L]] <- b_df
+  }
+  if (has_t) {
+    t_df <- rdata
+    pts <- project_positions_checked(layout, chr_v, pos_v)
+    p0 <- offset_chr_points_signed(layout, chr_v, pts, rep(top_edge, length(chr_v)))
+    p1 <- offset_chr_points_signed(layout, chr_v, pts, rep(top_edge - tick_delta, length(chr_v)))
+    t_df$.rx <- p0$x; t_df$.ry <- p0$y
+    t_df$.rxend <- p1$x; t_df$.ryend <- p1$y
+    pieces[[length(pieces) + 1L]] <- t_df
+  }
+  out <- do.call(rbind, pieces)
+  keep_aes <- setdiff(names(rmapping), c("chr", "x", "y", "xend", "yend", "position", "value"))
+  seg_map <- combine_track_mapping(rmapping[keep_aes], ggplot2::aes(
+    x = .data$.rx, y = .data$.ry, xend = .data$.rxend, yend = .data$.ryend))
+  aes_p <- layer$aes_params
+  aes_p[c("sides", "length", "outside")] <- NULL
+  geom_p <- layer$geom_params[intersect(names(layer$geom_params), c("na.rm", "lineend"))]
+  seg_layer <- do.call(ggplot2::geom_segment, c(list(mapping = seg_map, data = out,
+    show.legend = layer$show.legend, inherit.aes = FALSE), geom_p, aes_p))
+  seg_layer$ideogram_track_chrs <- unique(chr_v)
+  seg_layer
+}
+
 native_track_component <- function(layer, spec, id, layout) {
+  if (inherits(layer$geom, "GeomHline")) {
+    return(build_track_hline_component(layer, spec, id, layout))
+  }
+  if (inherits(layer$geom, "GeomVline")) {
+    return(build_track_vline_layer(layer, spec, id, layout))
+  }
+  if (inherits(layer$geom, "GeomRug")) {
+    return(build_track_rug_layer(layer, spec, id, layout))
+  }
   domain <- inherits(layer$stat, "StatChrMarker") || inherits(layer$stat, "StatChrInterval")
-  mapping <- scope_mapping(spec$mapping, layer$mapping, domain || isTRUE(layer$inherit.aes))
+  if (domain && !is.null(layer$stat_params$track) && !identical(layer$stat_params$track, id)) {
+    stopf("A layer inside track `%s` targets another track.", id)
+  }
+  inherit_scope <- if (domain) !isTRUE(layer$ideogram_no_scope_inherit) else isTRUE(layer$inherit.aes)
+  mapping <- scope_mapping(spec$mapping, layer$mapping, inherit_scope)
   data <- scope_layer_data(layer$data, spec$data)
   if (domain) {
     mapping <- scope_annotation_mapping(mapping, point = inherits(layer$stat, "StatChrMarker"))
@@ -266,6 +529,7 @@ native_track_component <- function(layer, spec, id, layout) {
     if (!is.null(layer$ideogram_marker_spec)) layer$ideogram_marker_spec$track <- id
     if ("position" %in% names(mapping)) layer$data <- scope_point_data(data, mapping, layout, spec$chr)
     if (inherits(layer$stat, "StatChrInterval")) {
+      if (!is.data.frame(data)) stopf("Track layers require data-frame `data`.")
       f <- mapped_fields(data, mapping, c("chr", "start", "end"), what = "mapping")
       chr <- validate_chr(f$chr, "chr")
       first <- validate_coordinate(f$start, "start")
@@ -279,8 +543,8 @@ native_track_component <- function(layer, spec, id, layout) {
       i <- match(chr, layout$chrom$.chr)
       keep <- !is.na(i) & last > layout$chrom$.start[i] & first - 1 < layout$chrom$.end[i]
       if (!is.null(spec$chr)) keep <- keep & chr %in% spec$chr
-      data$.source_start <- data$.source_start %||% first
-      data$.source_end <- data$.source_end %||% last
+      if (!".source_start" %in% names(data)) data$.source_start <- first
+      if (!".source_end" %in% names(data)) data$.source_end <- last
       data$.ideogram_start <- pmax(first, floor(layout$chrom$.start[i]) + 1)
       data$.ideogram_end <- pmin(last, ceiling(layout$chrom$.end[i]))
       layer$data <- data[keep, , drop = FALSE]
@@ -292,14 +556,31 @@ native_track_component <- function(layer, spec, id, layout) {
   kind <- if (inherits(layer$geom, "GeomArea") &&
       (inherits(layer$stat, "StatAlign") || inherits(layer$stat, "StatIdentity"))) "area" else
     if (inherits(layer$geom, "GeomRibbon") && inherits(layer$stat, "StatIdentity")) "ribbon" else
+    if (inherits(layer$geom, "GeomSmooth") &&
+      (inherits(layer$stat, "StatSmooth") || inherits(layer$stat, "StatIdentity"))) "smooth" else
     if (inherits(layer$geom, "GeomBoxplot") && inherits(layer$stat, "StatBoxplot")) "boxplot" else
     if (inherits(layer$geom, "GeomViolin") && inherits(layer$stat, "StatYdensity")) "violin" else
     if (inherits(layer$stat, "StatIdentity")) "dynamic" else NA_character_
   if (is.na(kind)) stopf("Track `%s` does not support the `%s` Stat; supply prepared values with an identity layer.",
     id, class(layer$stat)[1])
-  range_layer <- kind %in% c("area", "ribbon")
+  range_layer <- kind %in% c("area", "ribbon", "smooth")
   area <- identical(kind, "area")
   mapping <- scope_track_mapping(mapping)
+  is_rect <- inherits(layer$geom, "GeomRect")
+  if (is.null(mapping$position)) {
+    xmin_expr <- mapping$xmin %||% layer$aes_params$xmin %||% layer$geom_params$xmin
+    xmax_expr <- mapping$xmax %||% layer$aes_params$xmax %||% layer$geom_params$xmax
+    if (!is.null(xmin_expr) && !is.null(xmax_expr)) {
+      mapping$position <- rlang::new_quosure(rlang::expr((!!xmin_expr + !!xmax_expr) / 2))
+    }
+  }
+  if (is.null(mapping$value) && !range_layer) {
+    ymin_expr <- mapping$ymin %||% layer$aes_params$ymin %||% layer$geom_params$ymin
+    ymax_expr <- mapping$ymax %||% layer$aes_params$ymax %||% layer$geom_params$ymax
+    if (!is.null(ymin_expr) && !is.null(ymax_expr)) {
+      mapping$value <- rlang::new_quosure(rlang::expr((!!ymin_expr + !!ymax_expr) / 2))
+    }
+  }
   if (range_layer) {
     mapping$x <- mapping$position
     if (is.null(mapping$value)) {
@@ -311,7 +592,36 @@ native_track_component <- function(layer, spec, id, layout) {
     mapping$y <- mapping$value
     kind <- "dynamic"
   }
-  data <- scope_point_data(data, mapping, layout, spec$chr)
+  if (is_rect && all(c("xmin", "xmax") %in% unique(c(names(mapping), names(layer$aes_params), names(layer$geom_params))))) {
+    if (!is.data.frame(data)) stopf("Track layers require data-frame `data`.")
+    f_chr <- validate_chr(mapped_fields(data, mapping, "chr", what = "mapping")$chr, "chr")
+    xmin_v <- if ("xmin" %in% names(mapping)) recycle_semantic(rlang::eval_tidy(mapping$xmin, data = data), nrow(data), "xmin") else
+      recycle_semantic(layer$aes_params$xmin %||% layer$geom_params$xmin, nrow(data), "xmin")
+    xmax_v <- if ("xmax" %in% names(mapping)) recycle_semantic(rlang::eval_tidy(mapping$xmax, data = data), nrow(data), "xmax") else
+      recycle_semantic(layer$aes_params$xmax %||% layer$geom_params$xmax, nrow(data), "xmax")
+    if (!is.numeric(xmin_v) || !is.numeric(xmax_v) || anyNA(xmin_v) || anyNA(xmax_v) ||
+        any(!is.finite(xmin_v)) || any(!is.finite(xmax_v)) || any(xmin_v > xmax_v)) {
+      stopf("Track rectangle `xmin` and `xmax` must be finite numbers with `xmin <= xmax`.")
+    }
+    source <- layout$data$karyotype
+    src_i <- match(f_chr, source$.chr)
+    if (anyNA(src_i) || any(xmin_v < source$.start[src_i] | xmax_v > source$.end[src_i])) {
+      stopf("Track positions are outside the source chromosome bounds.")
+    }
+    vis_i <- match(f_chr, layout$chrom$.chr)
+    keep <- !is.na(vis_i) & xmax_v > layout$chrom$.start[vis_i] & xmin_v < layout$chrom$.end[vis_i]
+    if (!is.null(spec$chr)) keep <- keep & f_chr %in% spec$chr
+    data <- data[keep, , drop = FALSE]
+    if (nrow(data)) {
+      vis_k <- vis_i[keep]
+      c_lo <- pmax(xmin_v[keep], layout$chrom$.start[vis_k])
+      c_hi <- pmin(xmax_v[keep], layout$chrom$.end[vis_k])
+      data$.ideogram_rect_mid <- (c_lo + c_hi) / 2
+      mapping$position <- ggplot2::aes(position = .data$.ideogram_rect_mid)$position
+    }
+  } else {
+    data <- scope_point_data(data, mapping, layout, spec$chr)
+  }
   if (inherits(layer$geom, "GeomTile")) {
     clip <- spec$clip %||% "auto"
     if (clip == "on" && spec$side != "overlay") stopf("Tile clipping requires an overlay track.")
@@ -370,7 +680,7 @@ prepare_track_scope <- function(spec, id, layout) {
       }
       layer$track <- id
       layer$data <- scope_layer_data(layer$data, part$data)
-      layer$mapping <- scope_mapping(part$mapping, layer$mapping)
+      layer$mapping <- scope_mapping(part$mapping, layer$mapping, !isTRUE(layer$ideogram_no_scope_inherit))
       if (inherits(layer, "ggideogram_track_component")) {
         layer$mapping <- scope_track_mapping(layer$mapping)
       } else if (inherits(layer, c("ggideogram_labels_component", "ggideogram_repel_component"))) {
@@ -379,6 +689,7 @@ prepare_track_scope <- function(spec, id, layout) {
         layer$mapping <- scope_annotation_mapping(layer$mapping)
       }
       if (!is.null(part$chr)) {
+        if (!is.data.frame(layer$data)) stopf("Track layers require data-frame `data`.")
         interval <- all(c("start", "end") %in% names(layer$mapping))
         f <- mapped_fields(layer$data, layer$mapping,
           if (interval) c("chr", "start", "end") else "chr", what = "mapping")
@@ -398,7 +709,7 @@ prepare_track_scope <- function(spec, id, layout) {
         }
         layer$data <- layer$data[as.character(f$chr) %in% part$chr, , drop = FALSE]
       }
-      if (inherits(layer, "ggideogram_track_component")) {
+      if (inherits(layer, c("ggideogram_track_component", "ggideogram_labels_component", "ggideogram_repel_component"))) {
         layer$data <- scope_point_data(layer$data, layer$mapping, layout)
       }
       layer
@@ -410,7 +721,10 @@ train_track_scopes <- function(plot, components) {
   layout <- ideogram_plot_layout(plot)
   frozen <- character()
   for (spec in layout$base_spec$tracks %||% list()) {
-    for (key in names(spec$frozen_ranges)) layout$track_ranges[[key]] <- spec$frozen_ranges[[key]]
+    if (!is.null(spec$limits)) next
+    for (key in names(spec$frozen_ranges)) {
+      layout$track_ranges[[key]] <- spec$frozen_ranges[[key]]
+    }
   }
   for (object in components) {
     if (!inherits(object, "ggideogram_track_component") || !nrow(object$data)) next
@@ -421,7 +735,14 @@ train_track_scopes <- function(plot, components) {
         if (object$kind == "ribbon") c("chr", "position", "ymin", "ymax") else c("chr", "position", "value"), what = "mapping")
       values <- if (object$kind == "ribbon") c(fields$ymin, fields$ymax) else fields$value
       chr <- rep(as.character(fields$chr), length.out = length(values))
-      if (object$kind == "area") { values <- c(values, 0); chr <- c(chr, chr[1]) }
+      if (object$kind == "area") {
+        present_chr <- unique(chr)
+        base_z <- track_zero_baseline(layout, object$track, values)
+        if (is.finite(base_z) && length(present_chr)) {
+          values <- c(values, rep(base_z, length(present_chr)))
+          chr <- c(chr, present_chr)
+        }
+      }
       if (object$kind == "area" && !inherits(object$position, "PositionIdentity")) {
         stacked <- track_position_value_range(object$position, fields$chr, fields$position, fields$value)
         if (!is.null(stacked)) { values <- c(values, stacked$value); chr <- c(chr, stacked$chr) }
@@ -445,12 +766,24 @@ train_track_scopes <- function(plot, components) {
 }
 
 track_scope_owners <- function(layout, id, contents) {
+  if (!length(contents)) return(track_chromosomes(layout, id))
   owners <- unique(unlist(lapply(contents, function(object) {
-    if (is.null(object$data) || is.null(object$mapping) || !nrow(object$data)) return(NULL)
-    as.character(mapped_fields(object$data, object$mapping, "chr", what = "mapping")$chr)
+    if (!is.null(object$ideogram_track_chrs)) return(object$ideogram_track_chrs)
+    if (is.null(object$data) || !is.data.frame(object$data) || !nrow(object$data)) return(NULL)
+    if (is.null(object$mapping) || !"chr" %in% names(object$mapping)) {
+      return(track_chromosomes(layout, id))
+    }
+    chr_col <- as.character(mapped_fields(object$data, object$mapping, "chr", what = "mapping")$chr)
+    if (all(c("start", "end") %in% names(object$mapping))) {
+      f <- mapped_fields(object$data, object$mapping, c("start", "end"), what = "mapping")
+      vis_i <- match(chr_col, layout$chrom$.chr)
+      keep <- !is.na(vis_i) & f$end > layout$chrom$.start[vis_i] & f$start - 1 < layout$chrom$.end[vis_i]
+      chr_col <- chr_col[keep]
+    }
+    chr_col
   }), use.names = FALSE))
   assigned <- track_chromosomes(layout, id)
-  if (length(owners)) intersect(assigned, owners) else assigned
+  intersect(assigned, owners)
 }
 
 add_track_scope_title <- function(plot, id, title, owners, circular_gap = 0) {
@@ -458,7 +791,7 @@ add_track_scope_title <- function(plot, id, title, owners, circular_gap = 0) {
   settings <- utils::modifyList(list(size = ideogram_text_size("track"),
     colour = ideogram_colour("text"), family = layout$base_spec$base_family %||% "",
     fontface = 1, gap = 0.3),
-    track_label_settings(title))
+    Filter(Negate(is.null), track_label_settings(title)))
   if (is.null(settings$text) || !nzchar(settings$text) || !length(owners)) return(plot)
   selected <- match(owners[1], layout$chrom$.chr)
   g <- layout$chrom[selected, , drop = FALSE]
@@ -502,6 +835,9 @@ add_track_scope_title <- function(plot, id, title, owners, circular_gap = 0) {
 add_chr_track_contents <- function(plot, tracks) {
   if (is.null(tracks)) return(plot)
   components <- lapply(names(tracks), function(id) prepare_track_scope(tracks[[id]], id, ideogram_plot_layout(plot)))
+  encoded <- encode_discrete_track_scopes(plot, tracks, components)
+  plot <- encoded$plot
+  components <- encoded$components
   plot <- train_track_scopes(plot, unlist(components, recursive = FALSE))
   for (i in seq_along(tracks)) {
     id <- names(tracks)[i]; start <- length(plot$layers)

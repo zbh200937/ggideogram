@@ -36,13 +36,14 @@ function(el, x, data) {
   el.appendChild(style);
   el.prepend(controls);
   el.appendChild(table);
-  let filter = '';
+  const ALL_CATEGORIES = '__all__';
+  let filter = ALL_CATEGORIES;
   const refresh = () => {
     marks.forEach(mark => {
       const id = mark.getAttribute('data-id');
       const record = byId.get(id);
       if (!record) return;
-      mark.style.display = !filter || String(record.category) === filter ? '' : 'none';
+      mark.style.display = filter === ALL_CATEGORIES || ('cat:' + String(record.category)) === filter ? '' : 'none';
       mark.classList.toggle('ideogram-selected', selected.has(id));
     });
     body.replaceChildren();
@@ -77,10 +78,10 @@ function(el, x, data) {
     label.textContent = '显示类别 ';
     const select = document.createElement('select');
     select.setAttribute('aria-label', '显示类别');
-    const all = new Option('全部类别', '');
+    const all = new Option('全部类别', ALL_CATEGORIES);
     select.appendChild(all);
     Array.from(new Set(records.map(record => String(record.category)))).forEach(category => {
-      select.appendChild(new Option(category, category));
+      select.appendChild(new Option(category, 'cat:' + category));
     });
     select.addEventListener('change', () => {
       filter = select.value;

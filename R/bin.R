@@ -132,8 +132,13 @@ bin_genome <- function(data, karyotype, window = 1e6, value = NULL, FUN = NULL,
       bin <- findInterval(at[keep], e$upper, left.open = TRUE) + 1L
       groups <- split(v[keep], factor(bin, levels = seq_along(e$upper)))
       occupied <- lengths(groups) > 0L
-      out[occupied] <- vapply(groups[occupied],
-        function(x) as.numeric(FUN(x, ...)), numeric(1))
+      out[occupied] <- vapply(groups[occupied], function(x) {
+        res <- FUN(x, ...)
+        if (length(res) != 1L || (!is.numeric(res) && !is.logical(res))) {
+          stopf("`FUN` must return a single numeric or NA scalar per window.")
+        }
+        as.numeric(res)
+      }, numeric(1))
     }
     data.frame(Chr = k$.chr[i], Start = e$lower + 1, End = e$upper, Value = out,
                stringsAsFactors = FALSE)
@@ -176,7 +181,8 @@ window_input <- function(data, karyotype, window) {
     stopf("`window` must be a positive integer.")
   }
   if (is.character(karyotype)) {
-    karyotype <- utils::read.table(karyotype, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+    karyotype <- utils::read.table(karyotype, sep = "\t", header = TRUE,
+      colClasses = c(Chr = "character"), na.strings = "", stringsAsFactors = FALSE)
   }
   if (is.data.frame(karyotype) && !all(c("Chr", "End") %in% names(karyotype))) {
     stopf("`karyotype` needs columns Chr and End.")

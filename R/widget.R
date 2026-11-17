@@ -60,11 +60,13 @@ as_ideogram_widget <- function(plot, data = NULL, id = "ID", chr = "Chr",
     }
     categories <- if (is.null(category)) rep("", nrow(data)) else
       as.character(projection_column(data, category, "category"))
-    categories[is.na(categories)] <- "\u672a\u5206\u7c7b"
+    if (!is.null(category)) {
+      categories[is.na(categories) | !nzchar(categories)] <- "\u672a\u5206\u7c7b"
+    }
     urls <- if (is.null(url)) rep("", nrow(data)) else
       as.character(projection_column(data, url, "url"))
     urls[is.na(urls)] <- ""
-    if (any(nzchar(urls) & !grepl("^https?://", urls))) {
+    if (any(nzchar(urls) & (!grepl("^https?://\\S+$", urls, ignore.case = TRUE) | grepl("[[:cntrl:]]", urls)))) {
       stopf("Record links must be HTTP(S) URLs or empty.")
     }
     payload$fields <- names(data)
@@ -84,6 +86,13 @@ as_ideogram_widget <- function(plot, data = NULL, id = "ID", chr = "Chr",
         "border:1px solid #bac4cd;padding:5px 7px;font-size:11px;line-height:1.45;")),
       ggiraph::opts_toolbar(saveaspng = FALSE, hidden = "fullscreen")))
   script <- system.file("htmlwidgets", "ideogram-controls.js", package = "ggideogram")
+  if (!nzchar(script) || !file.exists(script)) {
+    candidate <- file.path("inst", "htmlwidgets", "ideogram-controls.js")
+    if (file.exists(candidate)) script <- candidate
+  }
+  if (!nzchar(script) || !file.exists(script)) {
+    stopf("Could not locate `ideogram-controls.js` in the `ggideogram` installation.")
+  }
   htmlwidgets::onRender(widget, paste(readLines(script, warn = FALSE), collapse = "\n"),
                         data = payload)
 }

@@ -162,6 +162,11 @@ track_column_region <- function(layout, chr, spec, column = 1L, columns = 1L) {
     xy <- as.data.frame(circular_xy(layout, p$x, p$y))
     polygon <- rbind(xy[seq_along(positions), ], xy[rev(seq_along(positions) + length(positions)), ])
     polygon <- rbind(polygon, polygon[1, ])
+    full_ring <- abs((g$.arc_end - g$.arc_start) / layout$circular$radius - 2 * pi) < 1e-5
+    if (full_ring) {
+      radii <- abs(layout$circular$radius + offsets)
+      attr(polygon, "full_ring") <- list(r_min = min(radii), r_max = max(radii))
+    }
     return(list(xlim = range(xy$x), ylim = range(xy$y), offset = mean(offsets), polygon = polygon))
   }
   points <- project_positions_checked(layout, rep(chr, 4), rep(c(g$.start, g$.end), each = 2))
@@ -176,6 +181,7 @@ resolve_track_geometry <- function(tracks, chromosome_width, source_chr, visible
   tracks <- normalise_chr_tracks(tracks)
   if (is.null(tracks)) tracks <- track_layout()
   marker_extent <- attr(tracks, "marker_extent") %||% c(left = 0, right = 0)
+  marker_by_chr <- attr(tracks, "marker_extent_by_chr")
   if (!inherits(tracks, "ideogram_track_layout")) {
     stopf("`tracks` must be NULL or created by `track_layout()`.")
   }
@@ -209,7 +215,16 @@ resolve_track_geometry <- function(tracks, chromosome_width, source_chr, visible
   rows <- vector("list", length(tracks))
   half <- chromosome_width / 2
   first <- half + marker_extent
-  cursors <- lapply(as.list(first), rep, length.out = if (compact) length(visible_chr) else 1L)
+  cursors <- if (compact && !is.null(marker_by_chr)) {
+    lapply(c(left = "left", right = "right"), function(sd) {
+      m_map <- marker_by_chr[[sd]]
+      half + vapply(visible_chr, function(ck) {
+        if (!is.null(m_map) && ck %in% names(m_map)) unname(m_map[[ck]]) else 0
+      }, numeric(1))
+    })
+  } else {
+    lapply(as.list(first), rep, length.out = if (compact) length(visible_chr) else 1L)
+  }
   for (index in seq_along(tracks)) {
     spec <- tracks[[index]]
     gap <- spec$gap
@@ -227,7 +242,8 @@ resolve_track_geometry <- function(tracks, chromosome_width, source_chr, visible
       side <- spec$side
       keys <- owners[[index]]
       slots <- if (compact) match(keys, visible_chr) else if (length(keys)) 1L else integer()
-      near <- max(c(first[[side]], cursors[[side]][slots])) + gap
+      base_floor <- if (compact && !is.null(marker_by_chr)) half else first[[side]]
+      near <- max(c(base_floor, cursors[[side]][slots])) + gap
       far <- near + spec$width
       sign <- if (side == "left") -1 else 1
       low <- sign * near
@@ -400,6 +416,31 @@ register_track_values <- function(layout, track_id, chr, value) {
   layout
 }
 
+track_zero_baseline <- function(layout, track_id, values = NULL) {
+  spec <- track_table_row(layout, track_id)
+  trans <- spec$transform[[1]]
+  explicit <- spec$limits[[1]]
+  t0 <- suppressWarnings(tryCatch(trans$transform(0), error = function(e) NA_real_))
+  z <- if (is.finite(t0)) {
+    0
+  } else {
+    suppressWarnings(tryCatch(trans$inverse(0), error = function(e) NA_real_))
+  }
+  tz <- suppressWarnings(tryCatch(trans$transform(z), error = function(e) NA_real_))
+  if (!is.finite(z) || !is.finite(tz)) {
+    if (!is.null(explicit)) {
+      z <- explicit[1]
+    } else {
+      fin <- values[is.finite(values)]
+      z <- if (length(fin)) min(fin) else NA_real_
+    }
+  }
+  if (!is.null(explicit) && is.finite(z)) {
+    z <- min(max(z, explicit[1]), explicit[2])
+  }
+  z
+}
+
 track_value_fraction <- function(layout, track_id, chr, value) {
   spec <- track_table_row(layout, track_id)
   check_track_chromosomes(layout, track_id, chr)
@@ -480,18 +521,68 @@ project_chr_track <- function(layout, data, chr, position, value, track) {
   layout <- chr_projection_layout(layout)
   check_layout_v2(layout)
   check_projection_data(data)
+  track_table_row(layout, track)
   chr_value <- projection_column(data, chr, "chr")
   position_value <- projection_column(data, position, "position")
   value_value <- projection_column(data, value, "value")
-  projected <- project_track_values_raw(
-    layout, track, chr_value, position_value, value_value)
+  n <- nrow(data)
+  if (!n) {
+    data$.chr <- character(0)
+    data$.position <- numeric(0)
+    data$.value <- numeric(0)
+    data$.track <- character(0)
+    data$.x <- numeric(0)
+    data$.y <- numeric(0)
+    data$.chr_index <- integer(0)
+    data$.value_fraction <- numeric(0)
+    return(data)
+  }
+  if (is_discrete_track_vec(value_value)) {
+    spec_row <- track_table_row(layout, track)
+    keys <- track_key_for_rows(spec_row, as.character(chr_value))
+    encoded <- rep(NA_real_, n)
+    raw_chr_val <- as.character(value_value)
+    for (key in unique(keys)) {
+      entry <- layout$track_ranges[[key]]
+      if (is.null(entry) || is.null(entry$discrete_levels)) {
+        stopf("Track `%s` is not configured with discrete `y` levels.", track)
+      }
+      idx <- which(keys == key & !is.na(value_value))
+      if (length(idx)) {
+        m <- match(raw_chr_val[idx], entry$discrete_levels)
+        if (anyNA(m)) {
+          stopf("Unknown discrete `value` level(s) in track `%s`: %s.",
+                track, format_chr_rows(unique(raw_chr_val[idx][is.na(m)])))
+        }
+        encoded[idx] <- as.numeric(m)
+      }
+    }
+    value_value <- encoded
+  }
+  if (!is.numeric(value_value)) stopf("Track `value` must be numeric.")
+  missing_val <- is.na(value_value)
+  if (any(!is.finite(value_value[!missing_val]))) {
+    stopf("Track `value` must contain only finite numbers or missing values.")
+  }
+  point_check <- project_positions_checked(layout, chr_value, position_value)
+  check_track_chromosomes(layout, track, chr_value)
+  x_out <- rep(NA_real_, n)
+  y_out <- rep(NA_real_, n)
+  frac_out <- rep(NA_real_, n)
+  if (any(!missing_val)) {
+    projected <- project_track_values_raw(
+      layout, track, chr_value[!missing_val], position_value[!missing_val], value_value[!missing_val])
+    x_out[!missing_val] <- projected$x
+    y_out[!missing_val] <- projected$y
+    frac_out[!missing_val] <- projected$fraction
+  }
   data$.chr <- as.character(chr_value)
   data$.position <- as.numeric(position_value)
   data$.value <- as.numeric(value_value)
-  data$.track <- track
-  data$.x <- projected$x
-  data$.y <- projected$y
-  data$.chr_index <- projected$index
-  data$.value_fraction <- projected$fraction
+  data$.track <- rep(track, n)
+  data$.x <- x_out
+  data$.y <- y_out
+  data$.chr_index <- point_check$index
+  data$.value_fraction <- frac_out
   data
 }

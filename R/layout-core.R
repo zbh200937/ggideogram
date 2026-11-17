@@ -219,7 +219,7 @@ ideogram_layout.ideogram_data <- function(
   chrom$.name_x <- chrom$.axis_start_x
   chrom$.name_y <- chrom$.axis_start_y
   reverse_chr <- validate_chr(reverse_chr, "reverse_chr")
-  unknown <- setdiff(reverse_chr, chrom$.chr)
+  unknown <- setdiff(reverse_chr, karyotype$karyotype$.chr)
   if (length(unknown)) stopf("Unknown reverse chromosome: %s.", format_chr_rows(unknown))
   reverse <- chrom$.chr %in% reverse_chr
   chrom$.direction <- ifelse(reverse, -1, 1)
@@ -373,7 +373,7 @@ unproject_chr_point <- function(layout, data, chr, x, y,
   length2 <- dx^2 + dy^2
   fraction <- ((x_value - g$.axis_start_x) * dx +
                  (y_value - g$.axis_start_y) * dy) / length2
-  axis_tolerance <- tolerance / sqrt(length2)
+  axis_tolerance <- max(tolerance / sqrt(length2), 8 * .Machine$double.eps)
   outside <- fraction < -axis_tolerance | fraction > 1 + axis_tolerance
   if (any(outside)) {
     stopf("Projected point lies beyond the chromosome axis for %s.",

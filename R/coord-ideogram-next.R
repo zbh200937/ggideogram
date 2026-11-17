@@ -84,7 +84,10 @@ transform_ideogram_semantics <- function(layout, data) {
   if ("ideogram_track" %in% names(data)) {
     return(transform_ideogram_track(layout, data))
   }
-  if (all(c("ideogram_inset_start", "ideogram_inset_end") %in% names(data))) {
+  if (all(c("ideogram_inset_low", "ideogram_inset_high") %in% names(data))) {
+    project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_low)
+    project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_high)
+  } else if (all(c("ideogram_inset_start", "ideogram_inset_end") %in% names(data))) {
     project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_start - 1)
     project_positions_checked(layout, data$ideogram_chr, data$ideogram_inset_end)
   }
@@ -239,18 +242,24 @@ transform_ideogram_track <- function(layout, data) {
 
   rectangle <- all(c("xmin", "xmax", "ymin", "ymax") %in% names(raw))
   if (rectangle) {
+    rect_ymin <- raw$ymin
+    rect_ymax <- raw$ymax
+    if ("ideogram_zero_baseline" %in% names(raw) && any(raw$ideogram_zero_baseline %in% TRUE)) {
+      rect_ymin <- clamp_track_baseline(layout, track_id, chr, rect_ymin)
+      rect_ymax <- clamp_track_baseline(layout, track_id, chr, rect_ymax)
+    }
     corners <- list(
       project_track_coordinate_pair(
-        layout, track_id, chr, raw$xmin - shift, raw$ymin,
+        layout, track_id, chr, raw$xmin - shift, rect_ymin,
         check_position = FALSE, clip_position = clip_geometry),
       project_track_coordinate_pair(
-        layout, track_id, chr, raw$xmin - shift, raw$ymax,
+        layout, track_id, chr, raw$xmin - shift, rect_ymax,
         check_position = FALSE, clip_position = clip_geometry),
       project_track_coordinate_pair(
-        layout, track_id, chr, raw$xmax - shift, raw$ymin,
+        layout, track_id, chr, raw$xmax - shift, rect_ymin,
         check_position = FALSE, clip_position = clip_geometry),
       project_track_coordinate_pair(
-        layout, track_id, chr, raw$xmax - shift, raw$ymax,
+        layout, track_id, chr, raw$xmax - shift, rect_ymax,
         check_position = FALSE, clip_position = clip_geometry)
     )
     x <- do.call(cbind, lapply(corners, `[[`, "x"))
@@ -261,6 +270,26 @@ transform_ideogram_track <- function(layout, data) {
     data$ymax <- apply(y, 1, max)
   }
   data
+}
+
+clamp_track_baseline <- function(layout, track_id, chr, values) {
+  spec <- track_table_row(layout, track_id)
+  trans <- spec$transform[[1]]
+  t0 <- suppressWarnings(tryCatch(trans$transform(0), error = function(e) NA_real_))
+  keys <- track_key_for_rows(spec, as.character(chr))
+  for (key in unique(keys)) {
+    idx <- which(keys == key)
+    lims <- layout$track_ranges[[key]]$limits
+    if (is.null(lims)) next
+    if (!is.finite(t0) || 0 < lims[1] || 0 > lims[2]) {
+      bz <- track_zero_baseline(layout, track_id, lims)
+      if (!is.finite(bz)) bz <- lims[1]
+      bz <- min(max(bz, lims[1]), lims[2])
+      zero_rows <- idx[!is.na(values[idx]) & values[idx] == 0]
+      if (length(zero_rows)) values[zero_rows] <- bz
+    }
+  }
+  values
 }
 
 restore_track_position <- function(layout, chr, coordinate, shift) {

@@ -54,9 +54,6 @@ body-width units. Circular geometry uses \code{radius}.}
 
 \item{row_gap}{Gap between linear chromosome rows, in body-width units.}
 
-\item{min_gap}{Minimum spacing in layout units for beside tracks. Set to
-zero to use each track's declared gap directly.}
-
 \item{orientation}{\code{"vertical"}, \code{"horizontal"}, or \code{"circular"}.}
 
 \item{scale_length}{\code{"global"} preserves length comparisons between
@@ -92,6 +89,9 @@ opening independently of the other chromosome gaps. \code{NULL} uses the closing
 value from \code{gap_angle}, or 20 degrees when both are \code{NULL}.}
 
 \item{clockwise}{Arrange circular sectors clockwise when TRUE.}
+
+\item{min_gap}{Minimum spacing in layout units for beside tracks. Set to
+zero to use each track's declared gap directly.}
 }
 \value{
 An \code{ideogram_layout_v2} object.

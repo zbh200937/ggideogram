@@ -1,7 +1,7 @@
 # Local horizontal comparisons share ordering and annotation-side decisions.
 is_microsynteny_layout <- function(orientation, rows, chromosomes, edges) {
   identical(orientation, "horizontal") && rows == 1L &&
-    chromosomes %in% 2:3 && !is.null(edges) && nrow(edges) > 0
+    chromosomes >= 2L && !is.null(edges) && nrow(edges) > 0
 }
 
 is_microsynteny <- function(layout) {
@@ -36,7 +36,7 @@ microsynteny_side <- function(layout, chr, kind = "locus") {
 register_microsynteny_pairs <- function(plot, component) {
   layout <- ideogram_plot_layout(plot)
   if (layout$orientation != "horizontal" || layout$nrow != 1L ||
-      !nrow(layout$chrom) %in% 2:3) return(plot)
+      nrow(layout$chrom) < 2L) return(plot)
   pairs <- prepare_chr_pairs(resolve_chr_pair_nodes(component, layout), layout)
   a <- pairs$.pair_chr1; b <- pairs$.pair_chr2
   edges <- unique(data.frame(a = pmin(a, b), b = pmax(a, b)))
@@ -48,7 +48,12 @@ register_microsynteny_pairs <- function(plot, component) {
   plot <- update_plot_ideogram_layout(plot, layout)
   spec <- layout$base_spec
   # Automatically declared annotation bands are recreated from source recipes.
-  spec$tracks <- Filter(function(x) is.null(x$.labels_source), spec$tracks)
+  prev_ext <- attr(spec$tracks, "marker_extent") %||% layout$marker_extent
+  prev_ext_chr <- attr(spec$tracks, "marker_extent_by_chr") %||% layout$marker_extent_by_chr
+  filtered <- Filter(function(x) is.null(x$.labels_source), spec$tracks)
+  spec$tracks <- do.call(track_layout, filtered %||% list())
+  attr(spec$tracks, "marker_extent") <- prev_ext
+  attr(spec$tracks, "marker_extent_by_chr") <- prev_ext_chr
   rebuild_ideogram(plot, spec)
 }
 
@@ -66,19 +71,26 @@ add_auto_locus <- function(component, plot) {
   text <- inherits(component, "ggideogram_labels_component") ||
     inherits(component, "ggideogram_repel_component") ||
     (inherits(component, "Layer") && inherits(component$geom, "GeomText"))
-  middle <- nrow(layout$chrom) == 3L & chr == layout$chrom$.chr[2]
+  middle <- nrow(layout$chrom) >= 3L &
+    !chr %in% c(layout$chrom$.chr[1], utils::tail(layout$chrom$.chr, 1))
   if (text && any(middle)) {
-    mapping <- track_mapping_without(component$mapping,
-      setdiff(names(component$mapping), c("chr", "position", ggplot2::GeomPoint$aesthetics())))
-    style <- component$aes_params %||% component$params
-    style <- style[intersect(names(style), c("colour", "fill", "alpha", "stroke"))]
-    defaults <- list(shape = 23, size = 2, fill = "white", colour = ideogram_colour("text"))
-    defaults <- defaults[!names(defaults) %in% names(mapping)]
-    plot <- plot + do.call(geom_chr_marker, c(list(mapping = mapping,
-      data = data[middle, , drop = FALSE], gap = 0, show.legend = component$show.legend),
-      utils::modifyList(defaults, style)))
+    mid_data <- data[middle, , drop = FALSE]
+    lbl <- as.character(mapped_fields(mid_data, component$mapping, "label", what = "mapping")$label)
+    valid_mid <- !is.na(lbl) & nzchar(lbl)
+    if (any(valid_mid)) {
+      mapping <- track_mapping_without(component$mapping,
+        setdiff(names(component$mapping), c("chr", "position", ggplot2::GeomPoint$aesthetics())))
+      style <- component$aes_params %||% component$params
+      style <- style[intersect(names(style), c("colour", "fill", "alpha", "stroke"))]
+      defaults <- list(shape = 23, size = 2, fill = "white", colour = ideogram_colour("text"))
+      defaults <- defaults[!names(defaults) %in% names(mapping)]
+      plot <- plot + do.call(geom_chr_marker, c(list(mapping = mapping,
+        data = mid_data[valid_mid, , drop = FALSE], gap = 0, show.legend = component$show.legend),
+        utils::modifyList(defaults, style)))
+    }
     data <- data[!middle, , drop = FALSE]
     sides <- sides[!middle]
+    if (!nrow(data)) return(plot)
   }
   for (side in unique(sides)) {
     part <- if (inherits(component, "Layer")) ggplot2::ggproto(NULL, component) else component
@@ -118,8 +130,13 @@ annotation_extent <- function(layout, chr, side) {
   vapply(seq_along(chr), function(i) {
     rows <- layout$tracks[layout$tracks$side == side[i], , drop = FALSE]
     keep <- vapply(rows$id, function(id) chr[i] %in% track_chromosomes(layout, id), logical(1))
-    max(c((layout$marker_extent %||% c(left = 0, right = 0))[[side[i]]],
-      abs(rows$high_offset[keep]) - layout$chromosome_width / 2))
+    m_map <- (layout$marker_extent_by_chr %||% list())[[side[i]]]
+    m_ext <- if (!is.null(m_map)) {
+      if (chr[i] %in% names(m_map)) unname(m_map[[chr[i]]]) else 0
+    } else {
+      (layout$marker_extent %||% c(left = 0, right = 0))[[side[i]]]
+    }
+    max(c(m_ext, abs(rows$high_offset[keep]) - layout$chromosome_width / 2))
   }, numeric(1))
 }
 
@@ -139,9 +156,13 @@ pack_microsynteny <- function(layout) {
   layout
 }
 
+can_share_microsynteny_axis <- function(layout) {
+  isTRUE(layout$microsynteny) && nrow(layout$chrom) >= 3L &&
+    identical(layout$scale_length, "global")
+}
+
 shared_microsynteny_axis <- function(layout) {
-  isTRUE(layout$microsynteny) && nrow(layout$chrom) == 3L &&
-    identical(layout$scale_length, "global") &&
+  can_share_microsynteny_axis(layout) &&
     isTRUE(layout$base_spec$axis) &&
     identical(layout$base_spec$axis_side, "auto") && is.null(layout$base_spec$axis_breaks)
 }

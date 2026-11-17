@@ -1,0 +1,378 @@
+---
+title: "End-to-End Chromosome Visualization Workflows with ggideogram"
+author: "zbh"
+date: "`r Sys.Date()`"
+---
+
+<!--
+%\VignetteIndexEntry{End-to-End Chromosome Visualization Workflows with ggideogram}
+%\VignetteEngine{knitr::knitr}
+%\VignetteEncoding{UTF-8}
+-->
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7.6,
+  fig.height = 4.2,
+  dpi = 120
+)
+```
+
+`ggideogram` extends the `ggplot2` Grammar of Graphics to chromosome coordinates. Every plot returned by `ggideogram()` is an ordinary `ggplot` object whose layers use native `GeomPoint`, `GeomSegment`, `GeomRect`, `GeomPolygon`, `GeomSmooth`, `GeomTile` and `GeomText` primitives, preserving physical point sizes, stroke widths and font sizes across output dimensions and multi-panel compositions.
+
+This vignette walks through the complete bioinformatics-to-publication workflow:
+
+1. **Karyotypes & Rulers** — importing `.fai` / `chrom.sizes` and cytobands into vertical, horizontal and circular skeletons.
+2. **Genomic Features, Window Summaries & Gene Structures** — reading BED, bedGraph, GFF3 and GTF files, computing window densities/coverages with `bin_genome()`, resolving multi-isoform hierarchies with `resolve_gene_models()`, and zooming with `chr_view()`.
+3. **Quantitative & Smoothed Chromosome Tracks** — layering native `ggplot2` geoms (`geom_line`, `geom_col`, `geom_area`, `geom_smooth`, `geom_hline`, `geom_vline`, `geom_rug`) inside named tracks.
+4. **Plant Breeding BinMaps & Genetic-Physical Marey Maps** — mapping discrete `y` categories (`factor` / `character`) for CSSL/RIL introgression lines and pairing genetic (`"cM"`) with physical (`"Mb"`) rulers.
+5. **Comparative Genomics & Structural Rearrangements** — parsing `minimap2` PAF, `SyRI` `.out` and `MCScanX` `.collinearity` outputs directly via `read_chr_links()` for multi-genome stacks and circular synteny plots.
+6. **Three-Way `ggplot2` Composition & Native Chromosome Axes** — combining ideograms outward (`patchwork`), inward (`geom_locus_inset()`), and at the axis level (`scale_x_chromosome()` / `scale_y_chromosome()`).
+
+---
+
+## 1. Karyotypes, Orientations, and Coordinate Rulers
+
+In `ggideogram`, chromosome lengths can come from bundled data (`human_karyotype`), any `data.frame` with start/end columns, or directly from a FASTA `.fai` index or two-column `chrom.sizes` file via `read_karyotype()`. Chromosome starts use `0` so 1-based closed genomic intervals `[Start, End]` occupy exact `[Start - 1, End]` base-pair spans.
+
+```{r karyotype-fai, fig.height = 3.6}
+library(ggideogram)
+library(ggplot2)
+
+fai_file <- tempfile(fileext = ".fa.fai")
+writeLines(c(
+  "Chr01\t43270923\t7\t60\t61",
+  "Chr02\t35937250\t43992120\t60\t61",
+  "Chr03\t36413819\t80528339\t60\t61"
+), fai_file)
+
+rice_kar <- read_karyotype(fai_file, format = "fai")
+unlink(fai_file)
+rice_kar$CE_start <- c(16.7e6, 13.6e6, 19.4e6)
+rice_kar$CE_end   <- c(17.2e6, 14.2e6, 20.0e6)
+
+ggideogram(
+  rice_kar,
+  centromere = aes(start = CE_start, end = CE_end),
+  orientation = "horizontal",
+  axis = TRUE,
+  axis_units = "Mb"
+)
+```
+
+---
+
+## 2. Reading Annotations, Window Summaries, Local Views, and Gene Models
+
+### 2.1 `read_chr_features()` and `bin_genome()`
+
+`read_chr_features()` imports BED3–6, 4-column `bedGraph` (`.bedgraph` / `.bg`), GFF3 and GTF files into 1-based closed coordinates (`Chr`, `Start`, `End`), automatically converting 0-based half-open BED and bedGraph starts (`Start = chromStart + 1`). `bin_genome()` summarizes features across fixed genomic windows using `method = "count"`, `"coverage"` (non-redundant union fraction), or `"weighted_mean"`.
+
+```{r bedgraph-and-binning}
+gff_path <- system.file("extdata", "arabidopsis-first-genes.gff3", package = "ggideogram")
+features <- read_chr_features(gff_path)
+
+arab_kar <- data.frame(Chr = "1", Start = 0, End = 30427671)
+exon_cov <- bin_genome(
+  features[features$Type == "exon", ],
+  arab_kar,
+  window = 2500,
+  method = "coverage"
+)
+head(exon_cov, 4)
+```
+
+### 2.2 `resolve_gene_models()` and `chr_view()` Local Zooming
+
+In GFF3 files, `exon`, `CDS` and UTR rows link to transcript IDs via `Parent`, which in turn link to `gene` IDs (including shared exons with comma-separated `Parent=tx1,tx2` and non-coding transcripts such as `lnc_RNA`). `resolve_gene_models()` resolves GFF3 and GTF hierarchies in one call and adds `Gene`, `Transcript`, `Symbol` and `Part` (`"CDS"`, `"UTR"`, or `NA`) columns ready for `geom_genemodel()`.
+
+`chr_view()` declares an explicit local display window while keeping the full source karyotype intact; cut chromosome ends are drawn flat so they are never mistaken for natural telomeres.
+
+```{r local-gene-models, fig.height = 3.4}
+models <- resolve_gene_models(features)
+local_win <- chr_view(arab_kar, chr = "1", start = 2500, end = 15000)
+exon_cov$Mid <- (exon_cov$Start - 1 + exon_cov$End) / 2
+
+ggideogram(
+  local_win,
+  orientation = "horizontal",
+  axis = TRUE,
+  axis_side = "left",
+  axis_units = "kb",
+  tracks = list(
+    cov = geom_track(
+      side = "left", width = 2.2, limits = c(0, 1),
+      data = exon_cov,
+      mapping = aes(chr = Chr, x = Mid, y = Value),
+      label = "Exon cov.",
+      axis = list(breaks = c(0, 0.5, 1)),
+      geom = geom_col(width = 2200, fill = "#6BAED6")
+    ),
+    genes = geom_track(
+      side = "right", width = 5.2,
+      data = models,
+      mapping = aes(
+        chr = Chr, start = Start, end = End,
+        type = Type, strand = Strand, gene = Gene,
+        label = Symbol, fill = Strand
+      ),
+      label = "Araport11",
+      layers = list(geom_genemodel(mode = "gene", label_fontface = "italic"))
+    )
+  )
+) +
+  scale_fill_manual(values = c("+" = "#3182BD", "-" = "#DE2D26"), name = "Strand")
+```
+
+---
+
+## 3. Quantitative Tracks, Per-Chromosome Smoothing, Reference Lines, and Rugs
+
+Inside `geom_track()`, `x` is always genomic base pairs and `y` is always the track value—even in vertical or circular orientations. In addition to identity geoms (`geom_point`, `geom_line`, `geom_col`, `geom_rect`, `geom_tile`, `geom_linerange`, `geom_errorbar`), `geom_track()` natively supports:
+
+- `geom_smooth()` (`StatSmooth`), fitted independently within each chromosome in raw `(bp, value)` space before projection;
+- `geom_hline()` and `geom_vline()` for genome-wide significance thresholds and candidate locus callouts;
+- `geom_rug()` projected onto the near (`"b"`) and/or far (`"t"`) boundaries of each chromosome's track.
+
+```{r smooth-and-rug, fig.height = 3.8}
+bg_file <- tempfile(fileext = ".bedgraph")
+bins <- seq(0, 42e6, by = 1.5e6)
+mids <- bins + 0.75e6
+vals <- round(25 + 60 * exp(-((mids - 17e6) / 4e6)^2), 2)
+writeLines(c(
+  "track type=bedGraph name=\"5mCG\"",
+  sprintf("Chr01\t%.0f\t%.0f\t%.2f", bins, pmin(bins + 1.5e6, 43270923), vals)
+), bg_file)
+
+meth_bg <- read_chr_features(bg_file, karyotype = rice_kar)
+unlink(bg_file)
+
+markers_chr1 <- data.frame(Chr = "Chr01", Pos = c(3.2, 8.5, 16.9, 24.1, 35.0, 40.8) * 1e6)
+
+ggideogram(
+  rice_kar, chr = "Chr01",
+  centromere = aes(start = CE_start, end = CE_end),
+  orientation = "horizontal",
+  axis = TRUE, axis_side = "left", axis_units = "Mb",
+  tracks = list(
+    methyl = geom_track(
+      side = "right", width = 3.6, limits = c(0, 100),
+      data = meth_bg,
+      mapping = aes(chr = Chr, x = Mid, y = Value),
+      label = "5mCG (%)",
+      axis = list(breaks = c(0, 50, 100)),
+      layers = list(
+        geom_point(size = 1.1, colour = "#7F8C8D"),
+        geom_smooth(method = "loess", formula = y ~ x, span = 0.35, se = TRUE,
+          colour = "#08519C", fill = "#9ECAE1"),
+        geom_hline(yintercept = 50, linetype = "dashed", colour = "#B2182B"),
+        geom_vline(xintercept = 16.95e6, linetype = "dotted", colour = "#202020"),
+        geom_rug(data = markers_chr1, mapping = aes(x = Pos), sides = "b", length = 0.14)
+      )
+    )
+  )
+)
+```
+
+---
+
+## 4. Plant Breeding Introgression BinMaps (Discrete `y`) & Genetic (`cM`) Marey Maps
+
+### 4.1 Discrete `y` Channels for Multi-Line Haplotype / Introgression BinMaps
+
+When a track's `y` aesthetic maps to a `factor` or `character` vector (such as CSSL/RIL breeding lines, multi-tissue chromatin states, or structural variant classes), `geom_track()` automatically assigns equal-height channels `1..K` over `[0.5, K + 0.5]` and labels each category when `axis = TRUE`.
+
+```{r discrete-binmap, fig.height = 3.8}
+lines_order <- c("Recurrent", "Donor", "CSSL-1", "CSSL-2", "CSSL-3")
+binmap <- rbind(
+  data.frame(Chr = "Chr01", Start = 1, End = 43270923, Line = "Recurrent", GT = "AA"),
+  data.frame(Chr = "Chr01", Start = 1, End = 43270923, Line = "Donor", GT = "BB"),
+  data.frame(Chr = "Chr01", Start = c(1, 6e6 + 1, 15e6 + 1),
+             End = c(6e6, 15e6, 43270923), Line = "CSSL-1", GT = c("AA", "BB", "AA")),
+  data.frame(Chr = "Chr01", Start = c(1, 12e6 + 1, 24e6 + 1),
+             End = c(12e6, 24e6, 43270923), Line = "CSSL-2", GT = c("AA", "Het", "BB")),
+  data.frame(Chr = "Chr01", Start = c(1, 28e6 + 1),
+             End = c(28e6, 43270923), Line = "CSSL-3", GT = c("AA", "BB"))
+)
+binmap$Line <- factor(binmap$Line, levels = lines_order)
+
+ggideogram(
+  rice_kar, chr = "Chr01",
+  centromere = aes(start = CE_start, end = CE_end),
+  orientation = "horizontal",
+  axis = TRUE, axis_side = "left", axis_units = "Mb",
+  tracks = list(
+    hap = geom_track(
+      side = "right", width = 5.2,
+      mapping = aes(chr = Chr),
+      label = "CSSLs",
+      axis = list(position = "start", size = 2.2),
+      layers = list(
+        geom_rect(
+          data = binmap,
+          mapping = aes(xmin = Start - 1, xmax = End, y = Line, fill = GT),
+          height = 0.84, colour = "white", linewidth = 0.2
+        ),
+        geom_hline(yintercept = 2.5, linetype = "dashed", linewidth = 0.3),
+        geom_rug(data = markers_chr1, mapping = aes(x = Pos), sides = "b", length = 0.10)
+      )
+    )
+  )
+) +
+  scale_fill_manual(values = c(AA = "#4393C3", BB = "#D6604D", Het = "#FDB863"), name = "Genotype")
+```
+
+### 4.2 Genetic (`cM`) vs. Physical (`Mb`) Linkage Synteny
+
+`axis_units = "cM"` and `geom_chr(component = "axis", units = "cM")` label genetic linkage maps in centiMorgans, enabling cross-scale Marey comparisons with physical chromosomes (`scale_length = "per_chr"`).
+
+```{r marey-map, fig.height = 3.8}
+marey_kar <- as_ideogram_data(
+  data.frame(
+    Genome = c("Genetic", "Physical"),
+    Chr = c("LG01", "Chr01"),
+    Start = c(0, 0),
+    End = c(152, 43270923),
+    Label = c("LG01 (cM)", "Chr01 (Mb)")
+  ),
+  mapping = aes(genome = Genome, chr = Chr, start = Start, end = End, label = Label)
+)
+
+phys_pos <- seq(1.5e6, 41.5e6, length.out = 20)
+gen_pos  <- round(cumsum(1.1 - 0.85 * exp(-((phys_pos - 17e6) / 4.5e6)^2)) * 9.5, 1)
+gen_pos  <- (gen_pos - min(gen_pos)) / (max(gen_pos) - min(gen_pos)) * 144 + 4
+
+links_marey <- data.frame(
+  C1 = chr_key("Genetic", "LG01"), P1 = gen_pos,
+  C2 = chr_key("Physical", "Chr01"), P2 = phys_pos
+)
+
+ggideogram(
+  marey_kar,
+  orientation = "horizontal",
+  scale_length = "per_chr",
+  chromosome_gap = 8
+) +
+  geom_chrlink(
+    data = links_marey,
+    mapping = aes(chr1 = C1, position1 = P1, chr2 = C2, position2 = P2),
+    colour = "#495057", alpha = 0.6, curvature = 0.15
+  ) +
+  geom_chr(chr = chr_key("Genetic", "LG01"), component = "axis", side = "left", units = "cM") +
+  geom_chr(chr = chr_key("Physical", "Chr01"), component = "axis", side = "right", units = "Mb")
+```
+
+---
+
+## 5. Comparative Genomics: Direct `PAF`, `SyRI`, and `MCScanX` Alignment Imports
+
+`read_chr_links()` reads standard upstream alignment and synteny files directly into 1-based closed paired intervals ready for `geom_chrlink()`:
+
+- **`format = "paf"`**: `minimap2` / `wfmash` `.paf` (or `.paf.gz`), converting 0-based `[start, end)` target and query spans to 1-based closed intervals with `Identity`, `Block_length` and `MapQ` filtering (`min_length`, `min_mapq`).
+- **`format = "syri"`**: `SyRI` `.out` structural rearrangement tables (`SYN`, `INV`, `TRANS`, `INVTR`, `DUP`, `INVDP`), normalizing inverted blocks to `Orientation = "-"`.
+- **`format = "mcscanx"`**: `MCScanX` `.collinearity` paired with a 4-column `.gff` or GFF3/GTF table (`collapse_blocks = TRUE` summarizes each collinear block into one ribbon).
+
+```{r syri-synteny, fig.height = 3.8}
+hap_kar <- as_ideogram_data(
+  data.frame(
+    Genome = c("HapA", "HapB"),
+    Chr = c("Chr03", "Chr03"),
+    Start = c(0, 0),
+    End = c(36.4e6, 35.8e6),
+    CE_start = c(16.2e6, 15.8e6),
+    CE_end = c(19.0e6, 18.5e6),
+    Label = c("HapA · Chr03", "HapB · Chr03")
+  ),
+  mapping = aes(genome = Genome, chr = Chr, start = Start, end = End, label = Label),
+  centromere = aes(start = CE_start, end = CE_end)
+)
+
+syri_file <- tempfile(fileext = ".syri.out")
+writeLines(c(
+  "Chr03\t1\t9500000\t-\t-\tChr03\t1\t9400000\tSYN1\t-\tSYN\t-",
+  "Chr03\t9800000\t15200000\t-\t-\tChr03\t15000000\t9600000\tINV1\t-\tINV\t-",
+  "Chr03\t19500000\t28000000\t-\t-\tChr03\t19000000\t27400000\tSYN2\t-\tSYN\t-",
+  "Chr03\t28500000\t36400000\t-\t-\tChr03\t27900000\t35800000\tSYN3\t-\tSYN\t-"
+), syri_file)
+
+syri_blocks <- read_chr_links(
+  syri_file,
+  format = "syri",
+  target_genome = "HapA",
+  query_genome = "HapB",
+  karyotype = hap_kar
+)
+unlink(syri_file)
+
+ggideogram(hap_kar, orientation = "horizontal", chromosome_gap = 8, axis = TRUE, axis_units = "Mb") +
+  geom_chrlink(
+    data = syri_blocks,
+    mapping = aes(
+      chr1 = Chr1, start1 = Start1, end1 = End1,
+      chr2 = Chr2, start2 = Start2, end2 = End2,
+      orientation = Orientation, fill = Type
+    ),
+    curvature = 0.2, alpha = 0.6
+  ) +
+  scale_fill_manual(values = c(SYN = "#B8C4D0", INV = "#D6604D"), name = "SyRI type")
+```
+
+The exact same link grammar works in circular layouts:
+
+```{r circular-synteny, fig.height = 4.6}
+arab2 <- data.frame(Chr = c("1", "5"), Start = 0, End = c(30427671, 26975502))
+blocks <- utils::read.delim(
+  system.file("extdata", "arabidopsis-synteny-blocks.tsv", package = "ggideogram")
+)
+blocks <- blocks[blocks$Chr1 != blocks$Chr2, ]
+
+ggideogram(arab2, orientation = "circular", opening_angle = 30) +
+  geom_chrlink(
+    data = blocks,
+    mapping = aes(
+      chr1 = Chr1, start1 = Start1, end1 = End1,
+      chr2 = Chr2, start2 = Start2, end2 = End2,
+      orientation = Orientation, fill = Orientation
+    )
+  ) +
+  scale_fill_manual(values = c("+" = "#4477AA", "-" = "#CC6677"), name = "Orientation")
+```
+
+---
+
+## 6. Native Chromosome Axes and Multi-Panel `ggplot2` Composition
+
+`scale_x_chromosome()` and `scale_y_chromosome()` turn chromosome silhouettes (with proportional bp lengths and centromere waists) into a native discrete `ggplot2` axis guide on any ordinary chart—without modifying the chart's data coordinates or `Geom`. Because both `ggideogram()` and `scale_*_chromosome()` produce standard `ggplot` objects, they compose directly through `patchwork`, `cowplot`, or `geom_locus_inset()`.
+
+```{r axis-and-patchwork, fig.height = 3.8}
+chr_counts <- aggregate(Value ~ Chr, data = subset(gene_density, Chr %in% c("1", "2", "3", "4")), FUN = mean)
+
+p_axis <- ggplot(subset(gene_density, Chr %in% c("1", "2", "3", "4")), aes(Chr, Value)) +
+  geom_boxplot(fill = "#9ECAE1", outlier.size = 0.6) +
+  scale_x_chromosome(human_karyotype, limits = NULL) +
+  labs(x = NULL, y = "Genes / 1 Mb window") +
+  theme_minimal(base_size = 10)
+
+if (requireNamespace("patchwork", quietly = TRUE)) {
+  p_ideo <- ggideogram(
+    human_karyotype, chr = c("1", "2", "3", "4"),
+    centromere = aes(start = CE_start, end = CE_end),
+    show_names = TRUE, ncol = 4,
+    tracks = list(
+      dens = geom_track(
+        side = "overlay", width = 1,
+        data = subset(gene_density, Chr %in% c("1", "2", "3", "4")),
+        mapping = aes(chr = Chr, x = (Start + End) / 2, width = End - Start + 1, y = 1, fill = Value),
+        geom = geom_tile()
+      )
+    )
+  ) +
+    scale_fill_viridis_c(name = "Genes/Mb", guide = "none")
+
+  p_ideo | p_axis
+} else {
+  p_axis
+}
+```

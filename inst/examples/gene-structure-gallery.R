@@ -8,12 +8,7 @@ source(system.file('examples', 'gallery-style.R', package = 'ggideogram'))
 
 features <- read_chr_features(system.file('extdata', 'arabidopsis-first-genes.gff3',
   package = 'ggideogram'))
-source(system.file('examples', 'gene-model-data.R', package = 'ggideogram'))
-models <- gene_model_data(features)
-models$Gene <- sub('gene:', '', models$Gene)
-models$Transcript <- sub('transcript:', '', models$Transcript)
-models$Part <- ifelse(models$Type == 'CDS', 'CDS',
-  ifelse(models$Type %in% c('UTR', 'five_prime_UTR', 'three_prime_UTR'), 'UTR', NA))
+models <- resolve_gene_models(features)
 models$Outline <- ifelse(models$Type == 'exon', 'Exon', NA)
 k <- data.frame(Chr = '1', Start = 0, End = 30427671)
 output <- 'work/api-optimization/examples/gene-structure-gallery'

@@ -445,7 +445,7 @@ source(
 )
 
 # Stable outward boundaries used by other graphics systems.
-stopifnot(inherits(as_ideogram_grob(classic_plot), "gtable"))
+stopifnot(inherits(ggplotGrob(classic_plot), "gtable"))
 stopifnot(inherits(ggplotGrob(inward_plot), "gtable"))
 
 writeLines(c(

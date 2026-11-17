@@ -49,6 +49,7 @@ axis_breaks <- function(span, n = 6, start = 0) {
   step <- magnitude * NICE_AXIS_STEPS[
     which(NICE_AXIS_STEPS * magnitude >= raw)[1L]
   ]
+  if (span >= 1 && step < 1) step <- 1
   first <- ceiling(start / step) * step
   last <- floor((start + span) / step) * step
   if (first > last) return(numeric())
@@ -56,6 +57,8 @@ axis_breaks <- function(span, n = 6, start = 0) {
 }
 
 axis_unit <- function(step, units) {
+  if (identical(units, "cM")) return(list(div = 1, suffix = "cM"))
+  if (identical(units, "none")) return(list(div = 1, suffix = ""))
   table <- c(bp = 1, kb = 1e3, Mb = 1e6, Gb = 1e9)
   if (units != "auto") {
     return(list(div = unname(table[units]), suffix = units))
@@ -71,7 +74,7 @@ axis_labels <- function(breaks, div, suffix, digits = NULL) {
   } else {
     formatC(values, format = "f", digits = digits)
   }
-  paste0(labels, " ", suffix)
+  if (!nzchar(suffix)) labels else paste0(labels, " ", suffix)
 }
 
 # Least-squares one-dimensional separation. Subtracting the required spacing

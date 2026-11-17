@@ -37,7 +37,7 @@ circular_ideogram_layout <- function(data, k, tracks, track_geometry,
   arc_start <- radius * c(0, utils::head(cumsum(sweep + gap * pi / 180), -1L))
   arc_end <- arc_start + radius * sweep
   reverse_chr <- validate_chr(reverse_chr, "reverse_chr")
-  unknown <- setdiff(reverse_chr, k$.chr)
+  unknown <- setdiff(reverse_chr, data$karyotype$.chr)
   if (length(unknown)) stopf("Unknown reverse chromosome: %s.", format_chr_rows(unknown))
   reverse <- k$.chr %in% reverse_chr
   chrom <- data.frame(
@@ -132,7 +132,7 @@ circular_xy <- function(layout, arc, radius) {
 }
 
 circular_transform_data <- function(layout, data) {
-  if (!nrow(data) || ("ideogram_cartesian" %in% names(data) && all(data$ideogram_cartesian))) return(data)
+  if (!nrow(data) || ("ideogram_cartesian" %in% names(data) && all(data$ideogram_cartesian %in% TRUE))) return(data)
   theta <- circular_theta(layout, data$x)
   xy <- circular_xy(layout, data$x, data$y)
   data$x <- xy$x; data$y <- xy$y
@@ -208,8 +208,13 @@ circular_chromosome_name_layer <- function(layout, size, gap, family, colour,
 }
 
 circular_text_dimensions <- function(label, size, family = "", fontface = 1) {
-  grobs <- lapply(as.character(label), function(value) grid::textGrob(value,
-    gp = grid::gpar(fontsize = size * ggplot2::.pt, fontfamily = family, fontface = fontface)))
+  ulab <- unique(as.character(label))
+  if (!length(ulab)) {
+    z <- grid::unit(0, "mm")
+    return(list(width = z, height = z))
+  }
+  gp <- grid::gpar(fontsize = size * ggplot2::.pt, fontfamily = family, fontface = fontface)
+  grobs <- lapply(ulab, function(value) grid::textGrob(value, gp = gp))
   list(width = max(do.call(grid::unit.c, lapply(grobs, grid::grobWidth))),
        height = max(do.call(grid::unit.c, lapply(grobs, grid::grobHeight))))
 }

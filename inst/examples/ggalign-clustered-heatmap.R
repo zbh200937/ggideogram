@@ -103,7 +103,7 @@ output_dir <- file.path("work", "ggalign-examples")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 svg <- file.path(output_dir, "ggalign-clustered-heatmap.svg")
 png <- file.path(output_dir, "ggalign-clustered-heatmap.png")
-save_ideogram(svg, figure, width = 210, height = 160, units = "mm",
+ggplot2::ggsave(svg, figure, width = 210, height = 160, units = "mm",
   device = svglite::svglite, bg = "white")
 svg_text <- readLines(svg, warn = FALSE)
 svg_text <- append(svg_text,

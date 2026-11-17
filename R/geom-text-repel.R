@@ -106,8 +106,10 @@ prepare_repel_labels <- function(object, layout,
 chr_repel_geom <- function(kind) {
   parent <- if (kind == "leaders") ggplot2::GeomSegment else ggrepel::GeomTextRepel
   defaults <- utils::modifyList(ggplot2::GeomSegment$default_aes, ggrepel::GeomTextRepel$default_aes)
+  shared_non_missing <- unique(c(ggplot2::GeomSegment$non_missing_aes, ggrepel::GeomTextRepel$non_missing_aes))
   ggplot2::ggproto(paste0("GeomChrRepel", if (kind == "leaders") "Segment" else "Text"), parent,
     required_aes = unique(c(parent$required_aes, "label", "x_orig", "y_orig", "ideogram_label_id")),
+    non_missing_aes = shared_non_missing,
     default_aes = defaults,
     draw_panel = function(data, panel_params, coord, label_key, options, na.rm = FALSE) {
       registry <- panel_params$ideogram_labels
@@ -118,15 +120,33 @@ chr_repel_geom <- function(kind) {
         state$options <- options; state$cache <- NULL
         registry[[label_key]] <- state
       } else state <- registry[[label_key]]
+      if (is.null(state)) return(grid::nullGrob())
       grid::gTree(state = state, kind = kind, cl = "chr_repel_render")
     })
+}
+
+validate_repel_track_ids <- function(ids, layout) {
+  if (!is.character(ids) || !length(ids) %in% 1:2 || anyNA(ids)) stopf("`track` must name one or two beside tracks.")
+  specs <- lapply(ids, function(id) track_table_row(layout, id))
+  sides <- unname(vapply(specs, function(s) s$side, character(1)))
+  if (any(sides == "overlay") || anyDuplicated(sides)) stopf("Labels require distinct beside track sides.")
+  if (length(ids) == 2 && (is.null(names(ids)) || !identical(canonical_chr_side(names(ids)), sides))) {
+    stopf("Name the two tracks according to their `left`/`right` sides.")
+  }
+  invisible(sides)
 }
 
 #' @method ggplot_add ggideogram_repel_component
 #' @export
 ggplot_add.ggideogram_repel_component <- function(object, plot, ...) {
-  data <- prepare_chr_label_data(object, ideogram_plot_layout(plot))
+  layout0 <- ideogram_plot_layout(plot)
+  if (!is.null(object$track)) validate_repel_track_ids(object$track, layout0)
+  data <- prepare_chr_label_data(object, layout0)
   if (!nrow(data)) return(plot)
+  if (object$max_labels == 0) {
+    warning(sprintf("Label limit omitted: %s.", paste(data$.label_text, collapse = ", ")), call. = FALSE)
+    return(plot)
+  }
   if (is.null(object$track)) {
     declared <- declare_chr_labels_track(plot, object, data)
     plot <- declared$plot; object$track <- declared$track
@@ -219,7 +239,19 @@ chr_repel_conflicts <- function(boxes, bounds) {
   unique(bad)
 }
 
-rectangle_inside_polygon <- function(box, polygon) {
+rectangle_inside_annulus <- function(box, ring) {
+  tolerance <- 1e-6
+  corners_dx <- c(box$left, box$right, box$right, box$left) - ring$cx
+  corners_dy <- c(box$bottom, box$bottom, box$top, box$top) - ring$cy
+  rx <- ring$rx; ry <- ring$ry
+  if (any((corners_dx / rx)^2 + (corners_dy / ry)^2 > (1 + tolerance)^2)) return(FALSE)
+  near_dx <- max(box$left - ring$cx, 0, ring$cx - box$right)
+  near_dy <- max(box$bottom - ring$cy, 0, ring$cy - box$top)
+  (near_dx / ring$r_in_x)^2 + (near_dy / ring$r_in_y)^2 >= (1 - tolerance)^2
+}
+
+rectangle_inside_polygon <- function(box, polygon, ring = NULL) {
+  if (!is.null(ring)) return(rectangle_inside_annulus(box, ring))
   corners <- data.frame(x = c(box$left, box$right, box$right, box$left),
     y = c(box$bottom, box$bottom, box$top, box$top))
   if (!all(points_inside_polygon(corners$x, corners$y, polygon))) return(FALSE)
@@ -251,23 +283,33 @@ chr_repel_sector_candidates <- function(boxes, polygon) {
     edge <- as.matrix(polygon[edges[[i]], c("x", "y")])
     centre <- colMeans(edge)
     delta <- edge[2L, ] - edge[1L, ]
-    normal <- c(-delta[2L], delta[1L]) / sqrt(sum(delta^2))
+    len <- sqrt(sum(delta^2))
+    if (len < 1e-8) next
+    ray <- delta / len
+    normal <- c(-delta[2L], delta[1L]) / len
     if (sum(normal * (colMeans(polygon[inside[[i]], c("x", "y")]) - centre)) < 0) {
       normal <- -normal
     }
     normals[i, ] <- normal
-    distance[i] <- 1e-6 - min(sweep(corners, 2L, centre) %*% normal)
+    # Only consider corners on the same radial side of the ring as this sector edge
+    # so wide sectors (> 180 degrees) do not pull opposite-side boxes across the center.
+    rel <- sweep(corners, 2L, edge[1L, ] - ray * len)
+    active <- as.numeric(rel %*% ray) >= 0
+    if (any(active)) {
+      distance[i] <- 1e-6 - min(sweep(corners[active, , drop = FALSE], 2L, centre) %*% normal)
+    }
   }
   candidates <- lapply(which(distance > 0), function(i) normals[i, ] * distance[i])
-  if (length(candidates) && abs(det(normals)) > 1e-8) {
+  if (length(candidates) == 2L && abs(det(normals)) > 1e-8) {
     candidates <- c(candidates, list(as.numeric(solve(normals, distance))))
   }
   candidates[order(vapply(candidates, function(x) sum(x^2), numeric(1)))]
 }
 
-chr_repel_fit_sector <- function(engine, boxes, polygon, bounds) {
-  if (all(vapply(seq_len(nrow(boxes)), function(i)
-      rectangle_inside_polygon(boxes[i, ], polygon), logical(1))) ||
+chr_repel_fit_sector <- function(engine, boxes, polygon, bounds, ring = NULL) {
+  if (!is.null(ring) ||
+      all(vapply(seq_len(nrow(boxes)), function(i)
+        rectangle_inside_polygon(boxes[i, ], polygon, ring), logical(1))) ||
       length(chr_repel_conflicts(boxes, list(xlim = c(-Inf, Inf), ylim = c(-Inf, Inf))))) {
     return(list(engine = engine, boxes = boxes))
   }
@@ -290,7 +332,7 @@ chr_repel_fit_sector <- function(engine, boxes, polygon, bounds) {
     moved <- chr_repel_boxes(candidate)
     if (!length(chr_repel_conflicts(moved, bounds)) &&
         all(vapply(seq_len(nrow(moved)), function(i)
-          rectangle_inside_polygon(moved[i, ], polygon), logical(1)))) {
+          rectangle_inside_polygon(moved[i, ], polygon, ring), logical(1)))) {
       return(list(engine = candidate, boxes = moved))
     }
   }
@@ -303,6 +345,16 @@ resolve_chr_repel <- function(state) {
   if (!is.null(state$cache) && identical(device, state$device)) return(state$cache)
   data <- locus_text_mm(state$data, state$options$size.unit)
   omitted <- character()
+  raw_poly <- state$options$scope_polygon
+  raw_ring <- if (!is.null(raw_poly)) attr(raw_poly, "full_ring") else NULL
+  ring <- if (!is.null(raw_ring)) {
+    pts <- state$coord$transform(data.frame(
+      x = c(0, raw_ring$r_max, 0, raw_ring$r_min, 0),
+      y = c(0, 0, raw_ring$r_max, 0, raw_ring$r_min)), state$panel)
+    list(cx = pts$x[1], cy = pts$y[1],
+      rx = abs(pts$x[2] - pts$x[1]), ry = abs(pts$y[3] - pts$y[1]),
+      r_in_x = max(1e-8, abs(pts$x[4] - pts$x[1])), r_in_y = max(1e-8, abs(pts$y[5] - pts$y[1])))
+  } else NULL
   repeat {
     engine <- do.call(ggrepel::GeomTextRepel$draw_panel,
       c(list(data = data, panel_scales = state$panel, coord = state$coord), state$options$controls))
@@ -311,15 +363,15 @@ resolve_chr_repel <- function(state) {
     scope <- state$coord$transform(data.frame(x = state$options$controls$xlim,
       y = state$options$controls$ylim), state$panel)
     bounds <- list(xlim = range(scope$x), ylim = range(scope$y))
-    if (!is.null(state$options$scope_polygon) && nrow(boxes)) {
-      polygon <- state$coord$transform(state$options$scope_polygon, state$panel)
-      fitted <- chr_repel_fit_sector(engine, boxes, polygon, bounds)
+    if (!is.null(raw_poly) && nrow(boxes)) {
+      polygon <- state$coord$transform(raw_poly, state$panel)
+      fitted <- chr_repel_fit_sector(engine, boxes, polygon, bounds, ring)
       engine <- fitted$engine; boxes <- fitted$boxes
     }
     bad <- chr_repel_conflicts(boxes, bounds)
-    if (!is.null(state$options$scope_polygon) && nrow(boxes)) {
+    if (!is.null(raw_poly) && nrow(boxes)) {
       outside <- vapply(seq_len(nrow(boxes)), function(i) {
-        !rectangle_inside_polygon(boxes[i, ], polygon)
+        !rectangle_inside_polygon(boxes[i, ], polygon, ring)
       }, logical(1))
       bad <- unique(c(bad, which(outside)))
     }
@@ -356,6 +408,7 @@ resolve_chr_repel <- function(state) {
 #' @importFrom grid makeContent
 #' @export
 makeContent.chr_repel_render <- function(x) {
+  if (is.null(x$state)) return(grid::setChildren(x, grid::gList()))
   solved <- resolve_chr_repel(x$state)
   boxes <- solved$positions
   if (!nrow(boxes)) return(grid::setChildren(x, grid::gList()))

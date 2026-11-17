@@ -111,7 +111,7 @@ test_that("ggalign compositions render through the standard save boundary", {
   files <- vapply(children, function(x) tempfile(fileext = ".png"), character(1))
   on.exit(unlink(files), add = TRUE)
   for (i in seq_along(children)) {
-    expect_no_warning(save_ideogram(files[i], children[[i]],
+    expect_no_warning(ggplot2::ggsave(files[i], children[[i]],
       width = 180, height = 110, units = "mm", device = ragg::agg_png, dpi = 72))
     expect_gt(file.info(files[i])$size, 0)
   }

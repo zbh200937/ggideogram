@@ -5,7 +5,8 @@ geom_chr_fill <- function(mapping = NULL, data = NULL, track = NULL,
   if (!identical(stat, "identity")) stopf("Chromosome fills require stat = 'identity'.")
   structure(list(mapping = mapping, data = data, track = track,
     position = position, params = list(...), na.rm = na.rm,
-    show.legend = show.legend, inherit.aes = inherit.aes),
+    show.legend = show.legend, inherit.aes = inherit.aes,
+    ideogram_no_scope_inherit = !missing(inherit.aes) && isFALSE(inherit.aes)),
     class = "ggideogram_fill_component")
 }
 
@@ -40,8 +41,8 @@ ggplot_add.ggideogram_fill_component <- function(object, plot, ...) {
   if (anyNA(index) || any(first - 1 < source$.start[index] | last > source$.end[index])) {
     stopf("Region annotations are outside the source chromosome bounds.")
   }
-  data$.source_start <- data$.source_start %||% first
-  data$.source_end <- data$.source_end %||% last
+  if (!".source_start" %in% names(data)) data$.source_start <- first
+  if (!".source_end" %in% names(data)) data$.source_end <- last
   visible_index <- match(chr, layout$chrom$.chr)
   lo <- pmax(first - 1, layout$chrom$.start[visible_index])
   hi <- pmin(last, layout$chrom$.end[visible_index])

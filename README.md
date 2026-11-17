@@ -175,12 +175,12 @@ the plotting area; PNG files provide previews.
 
 | Input | Interface | Behaviour |
 | --- | --- | --- |
-| Native / compatible third-party identity geom | `geom_track(geom = ...)` or `layers = list(...)` | Native Geom and Position with bp/value projection |
-| Area, ribbon, boxplot or violin | Same track interface | Supported native statistics run before projection |
+| Native / compatible third-party identity geom | `geom_track(geom = ...)` or `layers = list(...)` | Native Geom and Position with bp/value projection (continuous or discrete `y`, plus `geom_hline`, `geom_vline`, `geom_rug`) |
+| Area, ribbon, smooth, boxplot or violin | Same track interface | Supported native statistics (`StatSmooth`, `StatAlign`, `StatBoxplot`, `StatYdensity`) run per chromosome before projection |
 | A different statistical summary | Summarize first, or place its complete plot with `geom_locus_inset()` | An arbitrary Stat needs an explicit adapter |
 | Independent colour scales | `ggnewscale::new_scale_*()` between layers | Native scale ownership survives track updates |
 | Complete ggplot or grob | `geom_locus_inset()` | Independent coordinates, theme, guides and physical viewport |
-| Ideogram as a panel / inset | patchwork, cowplot, `as_ideogram_grob()` | Standard ggplot/grob composition |
+| Ideogram as a panel / inset | patchwork, cowplot, `ggplot2::ggplotGrob()` | Standard ggplot/grob composition |
 
 The CI matrix targets ggplot2 3.5.0 with compatible versions of ggrepel, patchwork and
 cowplot, and the current ggplot2 release with current optional extensions.
@@ -189,20 +189,12 @@ ggiraph 0.9.0 requires ggplot2 ≥ 3.5.2, and 0.9.6 requires ≥ 4.0.0.
 
 ## Local views and gene models
 
-This example uses bundled Arabidopsis TAIR10 / Araport11 annotations. It resolves GFF3 Parent relationships between transcripts and genes, expands shared features with multiple parents, then draws a local view of Chr1.
+This example uses bundled Arabidopsis TAIR10 / Araport11 annotations. `resolve_gene_models()` resolves GFF3 `Parent` or GTF `transcript_id`/`gene_id` relationships and expands shared exons across multiple isoforms in one step.
 
 ```r
 features <- read_chr_features(system.file("extdata",
   "arabidopsis-first-genes.gff3", package = "ggideogram"))
-tx <- features[features$Type == "mRNA", ]
-parents <- strsplit(ifelse(features$Type == "mRNA",
-  features$ID, features$Parent), ",", fixed = TRUE)
-models <- features[rep(seq_len(nrow(features)), lengths(parents)), ]
-models$Transcript <- unlist(parents, use.names = FALSE)
-models <- models[models$Transcript %in% tx$ID, ]
-parents <- strsplit(tx$Parent[match(models$Transcript, tx$ID)], ",", fixed = TRUE)
-models <- models[rep(seq_len(nrow(models)), lengths(parents)), ]
-models$Gene <- sub("gene:", "", unlist(parents, use.names = FALSE))
+models <- resolve_gene_models(features)
 
 arabidopsis <- data.frame(Chr = c("1", "5"), Start = 0,
   End = c(30427671, 26975502))
@@ -226,11 +218,11 @@ organism's nomenclature. `label_family = NULL` inherits the plot's
 `base_family`; `label_colour` and `label_size` control the text independently
 of the feature fills and intron lines.
 
-`read_karyotype()` reads chrom.sizes / FAI files. `read_chr_features()` reads BED / GFF3 / GTF, and `as_chr_features()` accepts data frames or GRanges. **The BED reader converts coordinates to 1-based closed intervals; GFF3, GTF and GRanges retain their annotation coordinates.** Chromosome names and assembly versions should match the karyotype.
+`read_karyotype()` reads chrom.sizes / FAI files. `read_chr_features()` reads BED / bedGraph / GFF3 / GTF, `resolve_gene_models()` expands GFF3/GTF transcript-gene hierarchies, `read_chr_links()` reads minimap2 PAF, SyRI `.out` and MCScanX `.collinearity` alignments, and `as_chr_features()` accepts data frames or GRanges. **BED, bedGraph and PAF readers convert 0-based half-open coordinates to 1-based closed intervals; GFF3, GTF, SyRI and GRanges retain their 1-based closed coordinates.** Chromosome names and assembly versions should match the karyotype.
 
 For window summaries, `bin_genome()` provides feature counts (`count`), union coverage fractions (`coverage`), and means weighted by overlap length (`weighted_mean`). Map the results directly to quantitative tracks.
 
-Counts and `FUN` summaries accept `count_position = "midpoint"`, `"start"` or `"end"`. The default midpoint is `(Start + End) / 2`; a row without `End` uses `Start`. `GFFex()` selects one GFF feature type and uses the same engine with `count_position = "start"`, retaining its feature-start definition. Coverage and weighted means use complete interval overlaps.
+Counts and `FUN` summaries accept `count_position = "midpoint"`, `"start"` or `"end"`. The default midpoint is `(Start + End) / 2`; a row without `End` uses `Start`. Coverage and weighted means use complete interval overlaps.
 
 All summary results carry `attr(result, "window_summary")` with the method, source value column, coordinate convention, nominal window width, representative position, missing-value argument, overlap rule and empty fill. Count units are features and coverage units are fractions; numerical summaries record their source value column with unspecified units. The `FUN` entry retains the four columns `Chr`, `Start`, `End`, `Value`. Explicit methods also return actual `Width`, `N` and `N_valid`; counts include `Rate` per Mb using each window's actual width.
 
@@ -324,7 +316,7 @@ inside a ggalign layout. To anchor a complete ggalign composition, layout or
 plot containing insets, pass `ggalign::ggalignGrob(child)` to
 `geom_locus_inset(plot = ...)`. The standard grob retains the child's panels,
 coordinates, themes and guides. Complete compositions can be saved directly
-with `save_ideogram()`, which delegates to `ggplot2::ggsave()`.
+with `ggplot2::ggsave()`.
 
 For chromosome-level alignment, use a matrix whose row names match the
 karyotype chromosome keys. Map the aligned axis to `.discrete_x` or
@@ -359,16 +351,16 @@ chromosome-level summary through one shared row domain.
 | --- | --- |
 | Build plots; draw chromosome bodies, names, ticks, bands and internal fills | `ggideogram()`, `geom_chr(component = ...)` |
 | Declare or adjust tracks and add native layers | `geom_track()`, `track_layout()` |
-| Gene and transcript structures | `geom_genemodel(mode = ...)` |
+| Gene and transcript structures | `resolve_gene_models()`, `geom_genemodel(mode = ...)` |
 | Locus points, text, intervals and leaders | `geom_locus(geom = ...)` |
-| Node tables and paired relationships | `chr_nodes()`, `geom_chrlink(type = ...)` |
-| Anchor complete insets or extract a standard grob | `geom_locus_inset()`, `as_ideogram_grob()` |
+| Node tables, alignment readers and paired relationships | `chr_nodes()`, `read_chr_links()`, `geom_chrlink(type = ...)` |
+| Anchor complete ggplot / grob insets | `geom_locus_inset()` |
 | Chromosome axes for ordinary plots | `scale_x_chromosome()`, `scale_y_chromosome()` |
 | Read data, select local views and summarize windows | `read_karyotype()`, `read_chr_features()`, `chr_view()`, `view_chr_data()`, `bin_genome()` |
 | Coordinate projections for extensions | `project_chr_point()`, `project_chr_interval()`, `project_chr_track()` |
 | Interactive viewing, selection and source-record export | `as_ideogram_widget()` |
 
-See individual R help pages, such as `?geom_track`, for parameters and examples. Use standard `theme()`, `scale_*()` and `guides()` to style plots.
+See individual R help pages, such as `?geom_track`, `?resolve_gene_models` and `?read_chr_links`, or `vignette("ggideogram-workflows", package = "ggideogram")` ([source](vignettes/ggideogram-workflows.Rmd)) for end-to-end tutorials. Use standard `theme()`, `scale_*()` and `guides()` to style plots.
 
 ## Example gallery
 
@@ -380,6 +372,7 @@ See individual R help pages, such as `?geom_track`, for parameters and examples.
 | Native chromosome x/y axes | [Script](inst/examples/original-data-axis-integration.R) · [x-axis figure](inst/examples/original-data-chromosome-x-axis.png) · [y-axis figure](inst/examples/original-data-chromosome-y-axis.png) |
 | Local windows, genes and transcripts | [Local views](inst/examples/local-view-gallery.R) · [Gene models](inst/examples/gene-structure-gallery.R) |
 | Internal fills, dense labels, synteny and multiple genomes | [Internal annotations](inst/examples/internal-annotation-gallery.R) · [Labels](inst/examples/label-layout-gallery.R) · [Links](inst/examples/connection-gallery.R) · [Multiple genomes](inst/examples/multi-genome-gallery.R) |
+| QTL fine-mapping, 4-genome pangenome, T2T SyRI, breeding BinMap and Marey maps | [Pangenome & QTL](inst/examples/pangenome-qtl-composite.R) · [T2T, BinMap & Marey](inst/examples/t2t-breeding-marey-gallery.R) |
 | Whole-genome circular and interactive plots | [Circular](inst/examples/circular-gallery.R) · [Interactive](inst/examples/interactive-gallery.R) |
 
 Each script starts with run instructions. Associated data are bundled in [inst/extdata](inst/extdata); source records and preparation details appear in script comments and provenance files in that directory.

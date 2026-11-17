@@ -91,8 +91,10 @@ StatChrLabels <- ggplot2::ggproto("StatChrLabels", ggplot2::StatIdentity,
 
 chr_spread_geom <- function(kind, text_geom = ggplot2::GeomText) {
   parent <- if (kind == "leaders") ggplot2::GeomSegment else text_geom
+  shared_non_missing <- unique(c(ggplot2::GeomSegment$non_missing_aes, text_geom$non_missing_aes))
   ggplot2::ggproto(paste0("GeomChrLabels", if (kind == "leaders") "Segment" else "Text"), parent,
     required_aes = c("x", "y", "label", "chr", "position", "ideogram_label_id"),
+    non_missing_aes = shared_non_missing,
     default_aes = utils::modifyList(ggplot2::GeomSegment$default_aes, text_geom$default_aes),
     draw_panel = function(data, panel_params, coord, label_key, options, na.rm = FALSE) {
       registry <- panel_params$ideogram_labels
@@ -102,6 +104,7 @@ chr_spread_geom <- function(kind, text_geom = ggplot2::GeomText) {
         state$coord <- coord; state$options <- options; state$cache <- NULL
         registry[[label_key]] <- state
       } else state <- registry[[label_key]]
+      if (is.null(state)) return(grid::nullGrob())
       grid::gTree(state = state, kind = kind, cl = "chr_labels_render")
     })
 }
@@ -109,7 +112,12 @@ chr_spread_geom <- function(kind, text_geom = ggplot2::GeomText) {
 #' @method ggplot_add ggideogram_labels_component
 #' @export
 ggplot_add.ggideogram_labels_component <- function(object, plot, ...) {
-  data <- prepare_chr_label_data(object, ideogram_plot_layout(plot))
+  layout0 <- ideogram_plot_layout(plot)
+  if (!is.null(object$track)) {
+    spec0 <- track_table_row(layout0, object$track)
+    if (spec0$side == "overlay") stopf("Ordered labels require a beside track.")
+  }
+  data <- prepare_chr_label_data(object, layout0)
   if (!nrow(data)) return(plot)
   if (isTRUE(ideogram_plot_layout(plot)$microsynteny) && isTRUE(object$auto_connection_height)) {
     object$connection_height <- 2
@@ -147,9 +155,9 @@ ggplot_add.ggideogram_labels_component <- function(object, plot, ...) {
   reserve_chromosome_axis_space(plot, list())
 }
 
-ordered_label_positions <- function(target, halfwidth, lo, hi) {
+ordered_label_positions <- function(target, halfwidth, lo, hi, decreasing_bp = FALSE) {
   if (!length(target)) return(list(position = numeric(), fits = TRUE))
-  i <- order(target, seq_along(target))
+  i <- order(target, if (decreasing_bp) -seq_along(target) else seq_along(target))
   half <- halfwidth[i]
   packed <- lo + cumsum(2 * half) - half
   room <- hi - lo - 2 * sum(half)
@@ -214,7 +222,8 @@ resolve_chr_labels <- function(state) {
       half <- label_radius * atan2((height[rows] + state$options$padding) / 2, packing_radius)
       packed <- ordered_label_positions(data$x[rows] / layout$circular$radius * label_radius,
         half, g$.arc_start / layout$circular$radius * label_radius,
-        g$.arc_end / layout$circular$radius * label_radius)
+        g$.arc_end / layout$circular$radius * label_radius,
+        decreasing_bp = isTRUE(g$.direction < 0))
       if (!packed$fits) bad <- c(bad, as.character(data$label[rows]))
       theta <- circular_theta(layout, packed$position / label_radius * layout$circular$radius)
       baseline[rows, ] <- cbind(centre[1] + label_radius * sin(theta),
@@ -256,7 +265,9 @@ resolve_chr_labels <- function(state) {
         (if (vertical) -sin_a else cos_a) / height[rows]
       bad <- c(bad, as.character(data$label[rows][available[rows] < connection + across]))
       half <- (along + state$options$padding) / 2
-      packed <- ordered_label_positions(xy[rows, axis], half, extent[1], extent[2])
+      dec_bp <- if (vertical) g$.axis_end_y < g$.axis_start_y else g$.axis_end_x < g$.axis_start_x
+      packed <- ordered_label_positions(xy[rows, axis], half, extent[1], extent[2],
+        decreasing_bp = isTRUE(dec_bp))
       baseline[rows, axis] <- packed$position
       if (!packed$fits) bad <- c(bad, as.character(data$label[rows]))
     }
@@ -332,6 +343,7 @@ chr_label_leader_data <- function(anchor, end, layout, mm, origin = NULL,
 #' @importFrom grid makeContent
 #' @export
 makeContent.chr_labels_render <- function(x) {
+  if (is.null(x$state)) return(grid::setChildren(x, grid::gList()))
   solved <- resolve_chr_labels(x$state)
   x$positions <- solved$positions
   grid::setChildren(x, grid::gList(if (x$kind == "leaders") solved$segments else solved$text))

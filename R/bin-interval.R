@@ -8,6 +8,9 @@ bin_interval_windows <- function(data, karyotype, window, value, FUN, empty,
   if (!is.null(FUN) || !is.null(empty)) stopf('Explicit methods define their own summary and empty values.')
   if (!is.null(group) && (!is.character(group) || anyNA(group) ||
       any(!group %in% names(data)) || anyDuplicated(group))) stopf('`group` must name distinct data columns.')
+  if (length(group) && any(vapply(data[group], function(col) is.list(col) || !is.null(dim(col)), logical(1)))) {
+    stopf('Grouping columns must be atomic vectors.')
+  }
   reserved <- c('Chr', 'Start', 'End', 'Value', 'Width', 'N', 'N_valid', 'Rate')
   if (any(group %in% reserved)) stopf('Grouping columns conflict with window output columns.')
   options <- list(...)
@@ -36,8 +39,14 @@ bin_interval_windows <- function(data, karyotype, window, value, FUN, empty,
     selected <- rep(TRUE, nrow(data))
     for (name in group) {
       v <- groups[[name]][gi]
-      selected <- selected & if (is.na(v)) is.na(data[[name]]) else
-        !is.na(data[[name]]) & data[[name]] == v
+      col <- data[[name]]
+      selected <- selected & if (is.numeric(v) && is.nan(v)) {
+        is.nan(col)
+      } else if (is.na(v)) {
+        is.na(col) & !(is.numeric(col) & is.nan(col))
+      } else {
+        !is.na(col) & col == v
+      }
     }
     for (ci in seq_len(nrow(k))) {
       e <- window_edges(k$.end[ci] - k$.start[ci], window)

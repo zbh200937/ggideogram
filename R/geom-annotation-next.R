@@ -64,6 +64,7 @@ geom_chr_interval <- function(
     na.rm = FALSE,
     show.legend = NA,
     inherit.aes = FALSE,
+    key_glyph = NULL,
     .geom = ggplot2::GeomSegment) {
   placement <- match.arg(placement)
   side <- canonical_chr_side(match.arg(side))
@@ -81,6 +82,7 @@ geom_chr_interval <- function(
     position = position,
     show.legend = show.legend,
     inherit.aes = inherit.aes,
+    key_glyph = key_glyph,
     params = c(list(
       placement = placement,
       side = side,
@@ -111,7 +113,8 @@ geom_chr_text <- function(
     track_position = 0.5,
     na.rm = FALSE,
     show.legend = NA,
-    inherit.aes = FALSE) {
+    inherit.aes = FALSE,
+    key_glyph = NULL) {
   side <- canonical_chr_side(match.arg(side))
   check_nonnegative_layout(gap, "gap")
   validate_optional_marker_track(track)
@@ -124,6 +127,7 @@ geom_chr_text <- function(
     position = position,
     show.legend = show.legend,
     inherit.aes = inherit.aes,
+    key_glyph = key_glyph,
     params = c(list(
       side = side,
       gap = gap,

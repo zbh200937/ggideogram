@@ -42,7 +42,7 @@ ggideogram(
   axis_side = c("auto", "left", "right", "inner", "outer"),
   axis_breaks = NULL,
   axis_n = 6,
-  axis_units = c("auto", "bp", "kb", "Mb", "Gb"),
+  axis_units = c("auto", "bp", "kb", "Mb", "Gb", "cM", "none"),
   axis_gap = 0.3,
   axis_tick_length = 1.5,
   axis_label_gap = 0.25,
@@ -133,7 +133,8 @@ terminal endpoint to keep adjacent seam labels separate.}
 
 \item{axis_n}{Maximum target automatic break intervals.}
 
-\item{axis_units}{Label unit.}
+\item{axis_units}{Label unit (\code{"auto"}, \code{"bp"}, \code{"kb"}, \code{"Mb"}, \code{"Gb"},
+\code{"cM"} for genetic maps, or \code{"none"} for unitless numeric ticks).}
 
 \item{axis_gap}{Clear gap beyond the outermost same-side track or marker lane
 (or the body when neither is present), in body-width units. Tick marks start
@@ -143,12 +144,6 @@ into this clearance.}
 \item{axis_tick_length}{Tick length in millimetres.}
 
 \item{axis_label_gap}{Axis-label clearance beyond the tick tip, in em.}
-
-\item{axis_angle}{Rotation of bp tick labels in degrees from horizontal.}
-
-\item{axis_check_overlap}{Whether to omit overlapping bp tick labels while
-retaining the ticks. \code{NULL} checks automatic breaks and keeps labels for
-explicitly supplied breaks.}
 
 \item{axis_size, axis_colour, axis_linewidth}{Axis text size, colour and line
 width in ordinary ggplot2 units.}
@@ -181,6 +176,12 @@ selection. Circular plots always preserve equal coordinate units.}
 
 \item{min_gap}{Minimum spacing for beside tracks, in layout units. Set to
 zero to use each track's declared gap directly.}
+
+\item{axis_angle}{Rotation of bp tick labels in degrees from horizontal.}
+
+\item{axis_check_overlap}{Whether to omit overlapping bp tick labels while
+retaining the ticks. \code{NULL} checks automatic breaks and keeps labels for
+explicitly supplied breaks.}
 }
 \value{
 A standard ggplot object whose coordinate object owns the single

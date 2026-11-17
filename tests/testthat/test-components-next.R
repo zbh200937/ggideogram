@@ -207,14 +207,7 @@ test_that("inset contracts reject ambiguous units and payloads", {
 
 test_that("ideogram grob extraction is the standard ggplotGrob boundary", {
   p <- ggideogram(component_kar)
-  grob <- as_ideogram_grob(p)
   direct <- ggplot2::ggplotGrob(p)
-  expect_s3_class(grob, "gtable")
-  expect_equal(grob$layout, direct$layout)
-  expect_equal(grob$widths, direct$widths)
-  expect_equal(grob$heights, direct$heights)
-  expect_error(
-    as_ideogram_grob(ggplot2::ggplot()),
-    "ggideogram"
-  )
+  expect_s3_class(direct, "gtable")
+  expect_true(length(direct$grobs) > 0L)
 })

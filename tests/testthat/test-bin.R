@@ -1,4 +1,4 @@
-# bin_genome(): the general form of what GFFex() does for one GFF feature type.
+# bin_genome(): window-level genomic feature counting, coverage and weighted summaries.
 
 kar <- data.frame(Chr = c("A", "B"), Start = 0, End = c(2500, 800))
 
@@ -17,7 +17,7 @@ test_that("counting rows is the default, and empty windows come back as 0", {
   expect_named(out, c("Chr", "Start", "End", "Value"))
   expect_equal(out$Chr, c("A", "A", "A", "B"))
   expect_equal(out$Value, c(2, 1, 0, 0))
-  # Half-open on the left, as GFFex is: 1000 belongs to the first window.
+  # Half-open on the left: 1000 belongs to the first window.
   expect_equal(bin_genome(data.frame(Chr = "A", Start = c(1000, 1001)), kar,
                           window = 1000)$Value, c(1, 1, 0, 0))
 })
@@ -184,12 +184,18 @@ test_that("bad arguments are named", {
   expect_error(bin_genome(bad_val, kar, window = 1000, value = "Label"), "numeric `value` column")
 })
 
-test_that("bin_genome reproduces GFFex for the case GFFex covers", {
-  gff <- data.frame(V1 = c("A", "A", "B", "A"), V2 = ".",
-                    V3 = c("gene", "gene", "gene", "exon"),
-                    V4 = c(10, 1500, 700, 20), stringsAsFactors = FALSE)
-  a <- GFFex(gff, kar, window = 1000)
-  b <- bin_genome(gff[gff$V3 == "gene", c("V1", "V4")] |>
-                    stats::setNames(c("Chr", "Start")), kar, window = 1000)
-  expect_equal(a, b)
+test_that("bin_genome with count_position = 'start' counts GFF feature starts per window", {
+  gff_file <- tempfile(fileext = ".gff3")
+  on.exit(unlink(gff_file), add = TRUE)
+  writeLines(c(
+    "##gff-version 3",
+    "A\t.\tgene\t10\t1200\t.\t+\t.\tID=g1",
+    "A\t.\tgene\t1500\t1800\t.\t-\t.\tID=g2",
+    "B\t.\tgene\t700\t750\t.\t+\t.\tID=g3",
+    "A\t.\texon\t20\t200\t.\t+\t.\tParent=g1"
+  ), gff_file)
+  feats <- read_chr_features(gff_file, karyotype = kar)
+  genes <- feats[feats$Type == "gene", , drop = FALSE]
+  by_start <- bin_genome(genes, kar, window = 1000, count_position = "start")
+  expect_equal(by_start$Value, c(1, 1, 0, 1))
 })

@@ -8,10 +8,14 @@ chromosome_cap_ratio <- function(layout, panel_params) {
 }
 
 chromosome_render_data <- function(data, layout, cap_ratio, curve_points = layout$curve_points) {
-  complete <- !(layout$chrom$.cut_start %||% rep(FALSE, nrow(layout$chrom))) &
-    !(layout$chrom$.cut_end %||% rep(FALSE, nrow(layout$chrom)))
+  cut_s <- layout$chrom$.cut_start %||% rep(FALSE, nrow(layout$chrom))
+  cut_e <- layout$chrom$.cut_end %||% rep(FALSE, nrow(layout$chrom))
+  n_caps <- as.integer(!cut_s) + as.integer(!cut_e)
+  capped <- n_caps > 0L
   width <- layout$chromosome_width
-  if (any(complete)) width <- min(width, min(layout$chrom$.display_length[complete]) / cap_ratio)
+  if (any(capped)) {
+    width <- min(width, min(layout$chrom$.display_length[capped] * 2 / (n_caps[capped] * cap_ratio)))
+  }
   pieces <- lapply(split(seq_len(nrow(data)), data$group), function(rows) {
     style <- data[rows[1], , drop = FALSE]
     g <- layout$chrom[layout$index[[as.character(style$ideogram_chr)]], , drop = FALSE]

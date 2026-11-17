@@ -168,8 +168,11 @@ mapped_fields <- function(data, mapping, required, what) {
 }
 
 recycle_semantic <- function(value, n, what) {
+  if (is.null(n) || length(n) != 1L || is.na(n) || n < 0L) {
+    stopf("Invalid target row count when evaluating `%s`.", what)
+  }
   if (length(value) == n) return(value)
-  if (length(value) == 1L && n > 0L) return(rep(value, n))
+  if (length(value) == 1L) return(rep(value, n))
   if (length(value) == 0L && n == 0L) return(value)
   stopf("`%s` evaluated to length %d; expected length %d or 1.",
         what, length(value), n)

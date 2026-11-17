@@ -82,7 +82,7 @@ geom_chr_axis <- function(
     side = c("left", "right", "inner", "outer", "auto"),
     breaks = NULL,
     n = 6,
-    units = c("auto", "bp", "kb", "Mb", "Gb"),
+    units = c("auto", "bp", "kb", "Mb", "Gb", "cM", "none"),
     labels = TRUE,
     gap = 0.3,
     tick_length = 1.5,
@@ -149,15 +149,15 @@ ggplot_add.ggideogram_chromosome_component <- function(
         parameters$curve_points, parameters$alpha, parameters$linetype)))
     },
     cytoband = {
-      layer <- chromosome_cytoband_layer(
-        layout, parameters$curve_points, parameters$scheme,
-        parameters$palette, parameters$bleach)
-      if (is.null(layer)) {
+      if (is.null(layout$data$cytoband) || !nrow(layout$data$cytoband)) {
         stopf(paste0(
           "This ideogram has no cytoband data. Supply it through ",
           "`ggideogram(cytoband = ...)`."))
       }
-      list(layer)
+      layer <- chromosome_cytoband_layer(
+        layout, parameters$curve_points, parameters$scheme,
+        parameters$palette, parameters$bleach)
+      if (is.null(layer)) list() else list(layer)
     },
     name = list(chromosome_name_layer(
       layout, parameters$size, parameters$gap,
