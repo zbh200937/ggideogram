@@ -249,7 +249,7 @@ test_that("PositionChrLocus dodges links with points, 360-deg circular repel fit
     geom_track(
       track = "genes", side = "right", width = 4, label = "Annotations",
       data = genes, ggplot2::aes(chr = Chr, start = Start, end = End, type = Type, strand = Strand, gene = Gene),
-      layers = list(geom_genemodel(mode = "gene", labels = TRUE))
+      layers = list(geom_genemodel(mode = "gene", labels = TRUE, label_position = "start"))
     )
   title_layer <- Filter(function(l) !is.null(l$ideogram_track_title), pg$layers)[[1]]
   expect_gt(grid::convertUnit(title_layer$geom_params$text_clearance, "mm", valueOnly = TRUE), 10)

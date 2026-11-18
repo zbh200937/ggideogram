@@ -209,7 +209,7 @@ test_that('selected chromosome components preserve other name-axis clearance', {
   expect_no_error(ggplot2::ggplotGrob(q))
 })
 
-test_that('endpoint names align with track titles when the physical label rows fit', {
+test_that('endpoint names stay snug beside chromosome bodies and retreat only on collision', {
   grDevices::pdf(NULL)
   on.exit(grDevices::dev.off())
   k <- data.frame(Chr = c('1', '14'), Start = 0, End = c(100, 80))
@@ -243,7 +243,7 @@ test_that('endpoint names align with track titles when the physical label rows f
       name_edge <- convert(text[[along]][1] - direction * measure(glyph) / 2, 'mm', TRUE)
       title_edge <- convert(title[[along]], 'mm', TRUE)
       if (cross == 120) {
-        expect_equal(name_edge, title_edge)
+        expect_gt(direction * (title_edge - name_edge), 0)
       } else {
         glyph <- grid::textGrob(title$label, gp = title$gp)
         title_outer <- convert(title[[along]] + direction * measure(glyph), 'mm', TRUE)

@@ -5,6 +5,7 @@ track_title_axis_clearance <- function(plot, title) {
   owner <- title$ideogram_track_title
   clearance <- grid::unit(0, "mm")
   gap <- 0
+  has_start_labels <- FALSE
   for (layer in plot$layers) {
     if (!inherits(layer$stat, "StatTrackAxis") || layer$stat_params$axis_part != 3L) next
     object <- layer$stat_params$axis_spec
@@ -18,16 +19,17 @@ track_title_axis_clearance <- function(plot, title) {
     data <- parts[[3]]$data
     extent <- grid::unit(object$tick_length, "mm")
     if (nrow(data)) {
+      has_start_labels <- TRUE
       size <- parts[[3]]$aes_params$size
       dimensions <- circular_text_dimensions(data$label, size,
         object$family %||% layout$base_spec$base_family %||% "")
       extent <- extent + grid::unit(object$label_gap * size, "mm") +
-        abs(title$data$nx) * dimensions$width + abs(title$data$ny) * dimensions$height
+        (if (abs(title$data$nx) > 0) dimensions$width else dimensions$height)
     }
     clearance <- max(clearance, extent)
   }
   for (layer in plot$layers) {
-    if (!isTRUE(layer$ideogram_gene_label) ||
+    if (!isTRUE(layer$ideogram_gene_label_start) ||
         !identical(layer$ideogram_gene_track, owner$track)) next
     same_chr <- layer$data$.model_chr == owner$chr
     if (!any(same_chr)) next
@@ -43,7 +45,7 @@ track_title_axis_clearance <- function(plot, title) {
     }
     clearance <- max(clearance, gene_ext)
   }
-  list(clearance = clearance, gap = gap)
+  list(clearance = clearance, gap = gap, has_start_labels = has_start_labels)
 }
 
 align_linear_track_titles <- function(plot, layout) {
@@ -53,70 +55,95 @@ align_linear_track_titles <- function(plot, layout) {
   titles <- plot$layers[indices]
   owners <- vapply(titles, function(layer) layer$ideogram_track_title$chr, character(1))
   if (any(!owners %in% layout$chrom$.chr)) return(plot)
-  anchors <- lapply(titles, function(layer)
-    layer$ideogram_track_title$anchor %||% layer$data[c("x", "y")])
-  axis <- if (layout$orientation == "horizontal") "x" else "y"
-  starts <- vapply(anchors, function(anchor) anchor[[axis]], numeric(1))
-  for (group in split(seq_along(titles), match(starts, unique(starts)))) {
-    spaces <- lapply(titles[group], function(layer) track_title_axis_clearance(plot, layer))
-    gap <- max(vapply(spaces, function(space) space$gap, numeric(1)))
-    label_offsets <- grid::unit(vapply(titles[group], function(layer) {
-      layer$geom_params$tick_length + layer$geom_params$label_gap * layer$aes_params$size
-    }, numeric(1)), "mm")
-    axis_clearances <- do.call(grid::unit.c, lapply(spaces, function(space) space$clearance))
-    clearance <- max(axis_clearances + label_offsets)
-    for (j in seq_along(group)) {
-      i <- group[j]
-      layer <- copy_ideogram_layer(titles[[i]])
-      anchor <- anchors[[i]]
-      layer$ideogram_track_title$anchor <- anchor
-      layer$data$x <- anchor$x + layer$data$nx * gap
-      layer$data$y <- anchor$y + layer$data$ny * gap
-      layer$geom_params$text_clearance <- clearance - label_offsets[j]
-      plot$layers[[indices[i]]] <- layer
-      layout <- include_ideogram_coordinates(layout, layer$data$x, layer$data$y)
+  for (i in seq_along(titles)) {
+    layer <- copy_ideogram_layer(titles[[i]])
+    meta <- layer$ideogram_track_title
+    anchor <- meta$anchor %||% layer$data[c("x", "y")]
+    meta$anchor <- anchor
+    if (identical(layout$orientation, "horizontal") && identical(meta$position, "top")) {
+      if (isTRUE(meta$auto_angle)) layer$aes_params$angle <- 0
+      layer$data$x <- anchor$x
+      layer$data$y <- anchor$y
+      layer$geom_params$text_clearance <- grid::unit(0, "mm")
+    } else {
+      space <- track_title_axis_clearance(plot, layer)
+      if (isTRUE(meta$auto_angle)) {
+        spec_row <- track_table_row(layout, meta$track)
+        disc_levels <- if (!is.null(spec_row)) {
+          rng_key <- track_key_for_rows(spec_row, meta$chr)[1]
+          layout$track_ranges[[rng_key]]$discrete_levels
+        } else NULL
+        use_vert <- identical(layout$orientation, "horizontal") &&
+          identical(meta$position %||% "side", "side") &&
+          isTRUE(space$has_start_labels) &&
+          length(disc_levels) >= 3L &&
+          !is.null(spec_row) && isTRUE(spec_row$width >= 5)
+        layer$aes_params$angle <- if (use_vert) 90 else 0
+      }
+      layer$data$x <- anchor$x + layer$data$nx * space$gap
+      layer$data$y <- anchor$y + layer$data$ny * space$gap
+      layer$geom_params$text_clearance <- space$clearance
     }
+    layer$ideogram_track_title <- meta
+    plot$layers[[indices[i]]] <- layer
+    layout <- include_ideogram_coordinates(layout, layer$data$x, layer$data$y)
   }
   update_plot_ideogram_layout(plot, layout)
+}
+
+per_label_text_dimensions <- function(label, size, family = "", fontface = 1) {
+  lbl_chr <- as.character(label)
+  if (!length(lbl_chr)) {
+    z <- grid::unit(numeric(0), "mm")
+    return(list(width = z, height = z))
+  }
+  ulab <- unique(lbl_chr)
+  gp <- grid::gpar(fontsize = size * ggplot2::.pt,
+    fontfamily = family %||% "", fontface = fontface %||% 1)
+  grobs <- lapply(ulab, function(value) grid::textGrob(value, gp = gp))
+  u_w <- do.call(grid::unit.c, lapply(grobs, grid::grobWidth))
+  u_h <- do.call(grid::unit.c, lapply(grobs, grid::grobHeight))
+  m_idx <- match(lbl_chr, ulab)
+  list(width = u_w[m_idx], height = u_h[m_idx])
 }
 
 linear_name_axis_clearance <- function(plot, name_layer) {
   layout <- ideogram_plot_layout(plot)
   names <- name_layer$data
-  clearance <- grid::unit(rep(0, nrow(names)), "mm")
+  vertical <- layout$orientation == "vertical"
+  along <- if (vertical) "y" else "x"
+  clearance_init <- grid::unit(rep(0, nrow(names)), "mm")
+  margin_init <- grid::unit(rep(0, nrow(names)), "mm")
+  bp_list <- replicate(nrow(names), grid::unit(0, "mm"), simplify = FALSE)
   end_gap <- numeric(nrow(names))
+  bp_end_gap <- numeric(nrow(names))
   previous <- name_layer$geom_params$name_axis_clearance
+  previous_margin <- name_layer$geom_params$name_margin_clearance
   hidden <- !names$name_chr %in% layout$chrom$.chr
-  if (any(hidden) && !is.null(previous) && length(previous) == nrow(names))
-    clearance[hidden] <- previous[hidden]
+  clearance_list <- lapply(seq_len(nrow(names)), function(i) {
+    if (hidden[i] && !is.null(previous) && length(previous) == nrow(names)) previous[i] else clearance_init[i]
+  })
+  margin_list <- lapply(seq_len(nrow(names)), function(i) {
+    if (hidden[i] && !is.null(previous_margin) && length(previous_margin) == nrow(names)) previous_margin[i] else margin_init[i]
+  })
   previous_end <- name_layer$geom_params$name_end_gap
   if (any(hidden) && length(previous_end) == nrow(names)) end_gap[hidden] <- previous_end[hidden]
-  gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label), plot$layers)
-  gene_obstacles <- vector("list", nrow(names))
-  for (layer in gene_labels) {
-    for (i in seq_len(nrow(names))) {
-      if (hidden[i] || !(names$nx[i] < 0 || names$ny[i] > 0)) next
-      same_chr <- layer$data$.model_chr == names$name_chr[i]
-      if (!any(same_chr)) next
-      dimensions <- circular_text_dimensions(layer$data$.model_label[same_chr],
-        layer$aes_params$size, layer$aes_params$family %||% "",
-        layer$aes_params$fontface %||% 1)
-      g_reach <- if (names$nx[i] < 0) {
-        dimensions$width * layer$aes_params$hjust
-      } else {
-        dimensions$height * (1 - layer$aes_params$vjust)
-      }
-      g_half <- (if (names$nx[i] < 0) dimensions$height else dimensions$width) / 2
-      g_anch <- data.frame(x = layer$data$.lx[same_chr], y = layer$data$.ly[same_chr])
-      if (is.null(gene_obstacles[[i]])) {
-        gene_obstacles[[i]] <- list(anchors = g_anch, reach = g_reach, half = g_half)
-      } else {
-        gene_obstacles[[i]]$anchors <- rbind(gene_obstacles[[i]]$anchors, g_anch)
-        gene_obstacles[[i]]$reach <- grid::unit.c(gene_obstacles[[i]]$reach, g_reach)
-        gene_obstacles[[i]]$half <- grid::unit.c(gene_obstacles[[i]]$half, g_half)
-      }
+
+  obs_list <- vector("list", nrow(names))
+  add_obs <- function(idx, anch, reach_u, half_u) {
+    n_a <- nrow(anch)
+    if (!n_a) return()
+    if (length(reach_u) == 1L && n_a > 1L) reach_u <- rep(reach_u, n_a)
+    if (length(half_u) == 1L && n_a > 1L) half_u <- rep(half_u, n_a)
+    if (is.null(obs_list[[idx]])) {
+      obs_list[[idx]] <<- list(anchors = anch[c("x", "y")], reach = reach_u, half = half_u)
+    } else {
+      obs_list[[idx]]$anchors <<- rbind(obs_list[[idx]]$anchors, anch[c("x", "y")])
+      obs_list[[idx]]$reach <<- grid::unit.c(obs_list[[idx]]$reach, reach_u)
+      obs_list[[idx]]$half <<- grid::unit.c(obs_list[[idx]]$half, half_u)
     }
   }
+
   bp_axes <- Filter(function(layer) !is.null(layer$ideogram_axis_spec) &&
     inherits(layer$geom, "GeomIdeogramAxisText"), plot$layers)
   for (layer in bp_axes) {
@@ -128,16 +155,42 @@ linear_name_axis_clearance <- function(plot, name_layer) {
         (d_ax$nx * names$nx[i] + d_ax$ny * names$ny[i] > 0.5)
       if (!any(hit_ax)) next
       sub_ax <- d_ax[hit_ax, , drop = FALSE]
-      end_gap[i] <- max(end_gap[i], (sub_ax$x - names$x[i]) * names$nx[i] +
+      gap_val <- max((sub_ax$x - names$x[i]) * names$nx[i] +
         (sub_ax$y - names$y[i]) * names$ny[i])
+      bp_end_gap[i] <- max(bp_end_gap[i], gap_val)
+      end_gap[i] <- max(end_gap[i], gap_val)
       dims_ax <- rotated_text_dimensions(
         circular_text_dimensions(sub_ax$label, spec_ax$size, spec_ax$family %||% ""),
         spec_ax$angle %||% 0)
-      ext_ax <- abs(names$nx[i]) * dims_ax$width + abs(names$ny[i]) * dims_ax$height
-      clearance[i] <- max(clearance[i], ext_ax +
-        grid::unit(spec_ax$tick_length + spec_ax$label_gap * spec_ax$size, "mm"))
+      ext_ax <- (if (abs(names$nx[i]) > 0) dims_ax$width else dims_ax$height) +
+        grid::unit(spec_ax$tick_length + spec_ax$label_gap * spec_ax$size, "mm")
+      bp_list[[i]] <- max(grid::unit.c(bp_list[[i]], ext_ax))
+      clearance_list[[i]] <- max(grid::unit.c(clearance_list[[i]], ext_ax))
+      margin_list[[i]] <- max(grid::unit.c(margin_list[[i]], ext_ax))
     }
   }
+
+  gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label_start), plot$layers)
+  for (layer in gene_labels) {
+    for (i in which(!hidden)) {
+      if (!(names$nx[i] < 0 || names$ny[i] > 0)) next
+      same_chr <- layer$data$.model_chr == names$name_chr[i]
+      if (!any(same_chr)) next
+      dimensions <- per_label_text_dimensions(layer$data$.model_label[same_chr],
+        layer$aes_params$size, layer$aes_params$family %||% "",
+        layer$aes_params$fontface %||% 1)
+      g_reach <- if (names$nx[i] < 0) {
+        dimensions$width * layer$aes_params$hjust
+      } else {
+        dimensions$height * (1 - layer$aes_params$vjust)
+      }
+      g_half <- (if (names$nx[i] < 0) dimensions$height else dimensions$width) / 2
+      g_anch <- data.frame(x = layer$data$.lx[same_chr], y = layer$data$.ly[same_chr])
+      add_obs(i, g_anch, g_reach, g_half)
+      clearance_list[[i]] <- max(grid::unit.c(clearance_list[[i]], g_reach))
+    }
+  }
+
   axes <- Filter(function(layer) inherits(layer$geom, "GeomIdeogramAxisText") &&
     inherits(layer$stat, "StatTrackAxis"), plot$layers)
   for (layer in axes) {
@@ -152,26 +205,59 @@ linear_name_axis_clearance <- function(plot, name_layer) {
       ticks <- ticks[same_tick, , drop = FALSE]
       end_gap[i] <- max(end_gap[i], (ticks$x - names$x[i]) * names$nx[i] +
         (ticks$y - names$y[i]) * names$ny[i])
-      clearance[i] <- max(clearance[i], grid::unit(object$tick_length, "mm"))
+      tick_u <- grid::unit(rep(object$tick_length, nrow(ticks)), "mm")
+      zero_u <- grid::unit(rep(0, nrow(ticks)), "mm")
+      add_obs(i, ticks, tick_u, zero_u)
+      clearance_list[[i]] <- max(grid::unit.c(clearance_list[[i]], grid::unit(object$tick_length, "mm")))
       data <- parts[[3]]$data
       same_end <- data$nx * names$nx[i] + data$ny * names$ny[i] > 0.5
       if (any(same_end)) {
         data <- data[same_end, , drop = FALSE]
         size <- parts[[3]]$aes_params$size
-        dimensions <- circular_text_dimensions(data$label, size,
+        dimensions <- per_label_text_dimensions(data$label, size,
           object$family, object$fontface %||% 1)
-        extent <- abs(names$nx[i]) * dimensions$width + abs(names$ny[i]) * dimensions$height
-        clearance[i] <- max(clearance[i], extent +
-          grid::unit(object$tick_length + object$label_gap * size, "mm"))
+        extent <- (if (abs(names$nx[i]) > 0) dimensions$width else dimensions$height) +
+          grid::unit(object$tick_length + object$label_gap * size, "mm")
+        lbl_half <- (if (vertical) dimensions$width else dimensions$height) / 2
+        add_obs(i, data, extent, lbl_half)
+        clearance_list[[i]] <- max(grid::unit.c(clearance_list[[i]], extent))
       }
     }
   }
 
-  axis_clearance <- clearance
-  axis_end_gap <- end_gap
-  for (i in which(!hidden)) {
-    if (!is.null(gene_obstacles[[i]])) {
-      clearance[i] <- max(clearance[i], max(gene_obstacles[[i]]$reach))
+  titles <- Filter(function(layer) !is.null(layer$ideogram_track_title), plot$layers)
+  if (length(titles)) {
+    side_titles <- Filter(function(layer) {
+      !(identical(layout$orientation, "horizontal") &&
+        identical(layer$ideogram_track_title$position, "top"))
+    }, titles)
+    if (length(side_titles)) {
+      anchors <- do.call(rbind, lapply(side_titles, function(layer) layer$data[c("x", "y")]))
+      starts <- vapply(side_titles, function(layer)
+        layer$ideogram_track_title$anchor[[along]], numeric(1))
+      title_near <- do.call(grid::unit.c, lapply(side_titles, function(layer) {
+        params <- layer$geom_params
+        grid::unit(params$tick_length + params$label_gap * layer$aes_params$size, "mm") +
+          (params$text_clearance %||% grid::unit(0, "mm"))
+      }))
+      dimensions <- lapply(side_titles, function(layer) {
+        aes <- layer$aes_params
+        rotated_text_dimensions(
+          per_label_text_dimensions(layer$data$label, aes$size, aes$family, aes$fontface),
+          aes$angle %||% 0)
+      })
+      title_width <- do.call(grid::unit.c, lapply(dimensions, "[[", "width"))
+      title_height <- do.call(grid::unit.c, lapply(dimensions, "[[", "height"))
+      t_reach <- title_near + (if (vertical) title_height else title_width)
+      t_half <- (if (vertical) title_width else title_height) / 2
+      for (i in which(!hidden)) {
+        outward <- if (vertical) names$ny[i] else -names$nx[i]
+        group <- which(abs(starts - names[[along]][i]) < 1e-8)
+        if (outward <= 0 || !length(group)) next
+        add_obs(i, anchors[group, , drop = FALSE], t_reach[group], t_half[group])
+        end_gap[i] <- max(end_gap[i], abs(anchors[[along]][group] - starts[group]))
+        clearance_list[[i]] <- max(grid::unit.c(clearance_list[[i]], t_reach[group]))
+      }
     }
   }
 
@@ -180,45 +266,28 @@ linear_name_axis_clearance <- function(plot, name_layer) {
   if (any(hidden) && length(previous_alignment)) {
     alignment[hidden] <- previous_alignment[names$name_chr[hidden]]
   }
-  titles <- Filter(function(layer) !is.null(layer$ideogram_track_title), plot$layers)
-  if (length(titles)) {
-    vertical <- layout$orientation == "vertical"
-    along <- if (vertical) "y" else "x"
-    anchors <- do.call(rbind, lapply(titles, function(layer) layer$data[c("x", "y")]))
-    starts <- vapply(titles, function(layer)
-      layer$ideogram_track_title$anchor[[along]], numeric(1))
-    title_near <- do.call(grid::unit.c, lapply(titles, function(layer) {
-      params <- layer$geom_params
-      grid::unit(params$tick_length + params$label_gap * layer$aes_params$size, "mm") +
-        (params$text_clearance %||% grid::unit(0, "mm"))
-    }))
-    dimensions <- lapply(titles, function(layer) {
-      aes <- layer$aes_params
-      circular_text_dimensions(layer$data$label, aes$size, aes$family, aes$fontface)
-    })
-    title_width <- do.call(grid::unit.c, lapply(dimensions, "[[", "width"))
-    title_height <- do.call(grid::unit.c, lapply(dimensions, "[[", "height"))
-    for (i in which(!hidden)) {
-      outward <- if (vertical) names$ny[i] else -names$nx[i]
-      group <- which(abs(starts - names[[along]][i]) < 1e-8)
-      if (outward <= 0 || !length(group)) next
-      alignment[[i]] <- list(anchors = anchors[group, , drop = FALSE],
-        near = title_near[group], half = (if (vertical) title_width else title_height)[group] / 2,
-        min_gap = axis_end_gap[i], min_clearance = axis_clearance[i])
-      extent <- if (vertical) title_height else title_width
-      end_gap[i] <- max(end_gap[i], abs(anchors[[along]][group] - starts[group]))
-      clearance[i] <- max(clearance[i], title_near[group] + extent[group])
-    }
-  }
   for (i in which(!hidden)) {
-    if (!is.null(gene_obstacles[[i]])) {
-      if (is.null(alignment[[i]])) {
-        alignment[[i]] <- list(min_gap = axis_end_gap[i], min_clearance = axis_clearance[i])
+    dir_sign <- if (vertical) names$ny[i] else names$nx[i]
+    if (!is.null(obs_list[[i]]) && dir_sign != 0) {
+      alignment[[i]] <- list(
+        sign = dir_sign,
+        min_gap = bp_end_gap[i],
+        min_clearance = bp_list[[i]],
+        obstacles = obs_list[[i]]
+      )
+      obs_ac <- if (vertical) obs_list[[i]]$anchors$x - names$x[i] else
+        obs_list[[i]]$anchors$y - names$y[i]
+      tol_ac <- if (vertical) layout$chromosome_width * 3 else layout$chromosome_width * 0.75
+      near_body <- which(abs(obs_ac) <= tol_ac)
+      if (length(near_body)) {
+        margin_list[[i]] <- max(grid::unit.c(margin_list[[i]], obs_list[[i]]$reach[near_body]))
       }
-      alignment[[i]]$genes <- gene_obstacles[[i]]
     }
   }
-  list(clearance = clearance, end_gap = end_gap, alignment = alignment)
+  clearance <- do.call(grid::unit.c, clearance_list)
+  margin_clearance <- do.call(grid::unit.c, margin_list)
+  list(clearance = clearance, margin_clearance = margin_clearance,
+    end_gap = end_gap, alignment = alignment)
 }
 
 linear_name_alignment_grob <- function(text, data, xy, dimensions, coord, panel, gap, alignment) {
@@ -227,32 +296,27 @@ linear_name_alignment_grob <- function(text, data, xy, dimensions, coord, panel,
   vertical <- coord$layout$orientation == "vertical"
   along <- if (vertical) "y" else "x"
   across <- if (vertical) "x" else "y"
-  sign <- if (vertical) 1 else -1
   name_along <- if (vertical) dimensions$height else dimensions$width
   name_across <- if (vertical) dimensions$width else dimensions$height
   candidates <- lapply(seq_len(nrow(data)), function(i) {
     group <- alignment[[i]]
     if (is.null(group)) return(NULL)
+    s <- group$sign %||% (if (vertical) 1 else -1)
     end <- data[i, c("x", "y"), drop = FALSE]
-    end[[along]] <- end[[along]] + sign * (group$min_gap %||% 0)
+    end[[along]] <- end[[along]] + s * (group$min_gap %||% 0)
     end <- coord$transform(end, panel)
     cand <- list(
+      sign = s,
       half = name_along[i] / 2,
       minimum = grid::unit(end[[along]], "native") +
-        sign * ((group$min_clearance %||% grid::unit(0, "mm")) + gap[i])
+        s * ((group$min_clearance %||% grid::unit(0, "mm")) + gap[i])
     )
-    if (!is.null(group$anchors)) {
-      titles <- coord$transform(group$anchors, panel)
-      cand$near <- grid::unit(titles[[along]], "native") + sign * group$near
-      cand$delta <- grid::unit(titles[[across]] - xy[[across]][i], "native")
-      cand$required <- group$half + name_across[i] / 2
-    }
-    if (!is.null(group$genes)) {
-      g_xy <- coord$transform(group$genes$anchors, panel)
-      cand$genes <- list(
-        delta = grid::unit(g_xy[[across]] - xy[[across]][i], "native"),
-        required = group$genes$half + name_across[i] / 2,
-        edge = grid::unit(g_xy[[along]], "native") + sign * (group$genes$reach + gap[i])
+    if (!is.null(group$obstacles)) {
+      obs_xy <- coord$transform(group$obstacles$anchors, panel)
+      cand$obstacles <- list(
+        delta = grid::unit(obs_xy[[across]] - xy[[across]][i], "native"),
+        required = group$obstacles$half + name_across[i] / 2,
+        edge = grid::unit(obs_xy[[along]], "native") + s * (group$obstacles$reach + gap[i])
       )
     }
     cand
@@ -266,42 +330,30 @@ linear_name_alignment_grob <- function(text, data, xy, dimensions, coord, panel,
 makeContent.ideogram_name_alignment <- function(x) {
   text <- x$text
   along <- if (x$vertical) "y" else "x"
-  sign <- if (x$vertical) 1 else -1
+  pos_mm <- if (x$vertical) grid::convertY else grid::convertX
   along_mm <- if (x$vertical) grid::convertHeight else grid::convertWidth
   across_mm <- if (x$vertical) grid::convertWidth else grid::convertHeight
+  new_coords <- lapply(seq_len(length(text[[along]])), function(i) text[[along]][i])
   for (i in seq_along(x$candidates)) {
     z <- x$candidates[[i]]
     if (is.null(z)) next
-    min_bound <- z$minimum
-    if (!is.null(z$genes)) {
-      hit <- abs(across_mm(z$genes$delta, "mm", TRUE)) < across_mm(z$genes$required, "mm", TRUE)
+    s <- z$sign
+    min_mm <- pos_mm(z$minimum, "mm", TRUE)
+    if (!is.null(z$obstacles)) {
+      hit <- abs(across_mm(z$obstacles$delta, "mm", TRUE)) <
+        across_mm(z$obstacles$required, "mm", TRUE)
       if (any(hit)) {
-        gene_edges <- z$genes$edge[hit]
-        gene_min <- if (x$vertical) max(gene_edges) else min(gene_edges)
-        if (sign * along_mm(gene_min - min_bound, "mm", TRUE) > 0) {
-          min_bound <- gene_min
+        edges_mm <- pos_mm(z$obstacles$edge[hit], "mm", TRUE)
+        obs_mm <- if (s > 0) max(edges_mm) else min(edges_mm)
+        if (s * (obs_mm - min_mm) > 0) {
+          min_mm <- obs_mm
         }
       }
     }
-    if (!is.null(z$near)) {
-      separated <- abs(across_mm(z$delta, "mm", TRUE)) >= across_mm(z$required, "mm", TRUE)
-      if (!all(separated)) {
-        req_pos <- min_bound + sign * z$half
-        if (sign * along_mm(req_pos - text[[along]][i], "mm", TRUE) > 0) {
-          text[[along]][i] <- req_pos
-        }
-        next
-      }
-      edge <- if (x$vertical) max(z$near) else min(z$near)
-      if (sign * along_mm(edge - min_bound, "mm", TRUE) >= -1e-8) {
-        text[[along]][i] <- edge + sign * z$half
-      } else {
-        text[[along]][i] <- min_bound + sign * z$half
-      }
-    } else {
-      text[[along]][i] <- min_bound + sign * z$half
-    }
+    half_mm <- along_mm(z$half, "mm", TRUE)
+    new_coords[[i]] <- grid::unit(min_mm + s * half_mm, "mm")
   }
+  text[[along]] <- do.call(grid::unit.c, new_coords)
   grid::setChildren(x, grid::gList(text))
 }
 
@@ -469,17 +521,32 @@ reserve_chromosome_axis_space <- function(plot, layers) {
     right <- data$x >= layout$bounds$x[2] - tol
     bottom <- data$y <= layout$bounds$y[1] + tol
     top <- data$y >= layout$bounds$y[2] - tol
+    zero_mm <- grid::unit(0, "mm")
+    span_x <- max(1e-6, diff(layout$bounds$x))
+    span_y <- max(1e-6, diff(layout$bounds$y))
+    d_left_mm <- grid::unit(pmax(0, (data$x - layout$bounds$x[1]) / span_x) * 65, "mm")
+    d_right_mm <- grid::unit(pmax(0, (layout$bounds$x[2] - data$x) / span_x) * 65, "mm")
+    d_bot_mm <- grid::unit(pmax(0, (data$y - layout$bounds$y[1]) / span_y) * 55, "mm")
+    d_top_mm <- grid::unit(pmax(0, (layout$bounds$y[2] - data$y) / span_y) * 55, "mm")
+    h_align <- layer$geom_params$title_hjust
+    rotated_layer <- ((layer$aes_params$angle %||% 0) %% 360) != 0
+    left_overhang <- grid::unit.pmax(zero_mm,
+      (if (is.null(h_align) || rotated_layer) width / 2 else width * h_align) - d_left_mm)
+    right_overhang <- grid::unit.pmax(zero_mm,
+      (if (is.null(h_align) || rotated_layer) width / 2 else width * (1 - h_align)) - d_right_mm)
+    bot_overhang <- grid::unit.pmax(zero_mm, height / 2 - d_bot_mm)
+    top_overhang <- grid::unit.pmax(zero_mm, height / 2 - d_top_mm)
     needed[4] <- reserve(needed[4], width + clearance, left & data$nx < 0)
-    needed[4] <- reserve(needed[4], width / 2, data$nx == 0)
+    needed[4] <- reserve(needed[4], left_overhang, data$nx == 0)
     needed[2] <- reserve(needed[2], width + clearance, right & data$nx > 0)
-    needed[2] <- reserve(needed[2], width / 2, data$nx == 0)
+    needed[2] <- reserve(needed[2], right_overhang, data$nx == 0)
     needed[3] <- reserve(needed[3], height + clearance, bottom & data$ny < 0)
-    needed[3] <- reserve(needed[3], height / 2, data$ny == 0)
+    needed[3] <- reserve(needed[3], bot_overhang, data$ny == 0)
     needed[1] <- reserve(needed[1], height + clearance, top & data$ny > 0)
-    needed[1] <- reserve(needed[1], height / 2, data$ny == 0)
+    needed[1] <- reserve(needed[1], top_overhang, data$ny == 0)
   }
   if (!is_circular_layout(layout)) {
-    gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label), plot$layers)
+    gene_labels <- Filter(function(layer) isTRUE(layer$ideogram_gene_label_start), plot$layers)
     for (layer in gene_labels) {
       dimensions <- circular_text_dimensions(layer$data$.model_label,
         layer$aes_params$size, layer$aes_params$family %||% "",
@@ -496,13 +563,14 @@ reserve_chromosome_axis_space <- function(plot, layers) {
       layer <- copy_ideogram_layer(plot$layers[[i]])
       name_space <- linear_name_axis_clearance(plot, layer)
       layer$geom_params$name_axis_clearance <- name_space$clearance
+      layer$geom_params$name_margin_clearance <- name_space$margin_clearance
       layer$geom_params$name_end_gap <- name_space$end_gap
       layer$geom_params$name_title_alignment <- name_space$alignment
       plot$layers[[i]] <- layer
       dimensions <- circular_text_dimensions(layer$data$label, layer$aes_params$size,
         layer$aes_params$family %||% "")
       clearance <- grid::unit(layer$ideogram_name_gap * layer$aes_params$size, "mm") +
-        max(name_space$clearance)
+        max(name_space$margin_clearance)
       normals <- layer$data[c("nx", "ny")]
       if (any(normals$nx == 0)) {
         needed[c(2, 4)] <- grid::unit.pmax(needed[c(2, 4)], max(dimensions$width) / 2)

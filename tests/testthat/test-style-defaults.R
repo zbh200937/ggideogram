@@ -83,7 +83,7 @@ test_that("gene lanes reserve text margins and chromosome-name clearance", {
     Gene = c("GENE_LONG_001", "GENE_LONG_002", "GENE_LONG_003"), Type = "exon", Strand = "+")
   track <- geom_track(track = "genes", data = d,
     ggplot2::aes(chr = Chr, start = Start, end = End, gene = Gene, type = Type, strand = Strand),
-    layers = geom_genemodel())
+    layers = geom_genemodel(label_position = "start"))
   expect_equal(track$width, 6)
   expect_equal(geom_track(width = 4, layers = geom_genemodel())$width, 4)
   for (orientation in c("horizontal", "vertical")) {

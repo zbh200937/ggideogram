@@ -162,8 +162,8 @@ p_genome
 
 Zooming into the Chromosome 2 peak (`11.195–11.232 Mb`), we combine three views into one publication figure with `patchwork`:
 
-- **Panel A**: Full Chromosome 2 (`19.70 Mb`) with pericentromeric heterochromatin and a callout window over `11.2 Mb`;
-- **Panel B**: `chr_view()` flat-cut local window pairing the `ArabMAGIC` association curve with `resolve_gene_models()` on `arabidopsis-erecta-locus.gff3.gz`, resolving all **27 exons of *ERECTA* (`AT2G26330`)** alongside neighboring protein-coding genes and non-coding RNA `AT2G26355`;
+- **Panel A**: Full Chromosome 2 (`19.70 Mb`) with pericentromeric heterochromatin and a callout marker at `11.21 Mb`;
+- **Panel B**: `chr_view()` flat-cut local window pairing `resolve_gene_models()` on `arabidopsis-erecta-locus.gff3.gz` with `geom_genemodel(mode = "gene")`, which automatically packs the 11 non-overlapping genes (including all **27 exons of *ERECTA* (`AT2G26330`)** and non-coding RNA `AT2G26355`) into compact horizontal lanes with local labels right above each gene;
 - **Panel C**: Real phenotypic distributions of plant height across the `ArabMAGIC` RILs stratified by `MASC06116` allele (`Col-like WT` vs. `Ler-like erecta`).
 
 ```{r fig2-erecta-finemap, fig.width = 9.4, fig.height = 5.6}
@@ -194,7 +194,7 @@ p_chr2_top <- ggideogram(
       side = "left", width = 2.4, gap = 0.35, limits = c(0, 48),
       data = subset(gwas, Chr == "Chr2"),
       mapping = aes(chr = Chr, x = Pos, y = NegLog10P_height),
-      label = list(text = "-log10(P)", size = 2.4),
+      label = list(text = "-log10(P)", size = 2.4, angle = 90, gap = 0.65),
       axis = list(breaks = c(0, 20, 40), size = 2.0),
       layers = list(
         geom_area(fill = "#FCA5A5", alpha = 0.45),
@@ -220,18 +220,18 @@ p_erecta_zoom <- ggideogram(
   axis = TRUE, axis_side = "right", axis_units = "kb", axis_size = 2.2,
   tracks = list(
     models = geom_track(
-      side = "right", width = 7.2, gap = 0.35,
+      side = "right", width = 5.6, gap = 0.35,
       data = erecta_models,
       mapping = aes(
         chr = Chr, start = Start, end = End,
         type = Type, strand = Strand, gene = Gene,
         label = Display, fill = Strand
       ),
-      label = list(text = "TAIR10 genes", size = 2.4),
+      label = list(text = "TAIR10 genes", size = 2.4, angle = 90, gap = 0.65),
       layers = list(
         geom_genemodel(
-          mode = "gene", block_height = 0.55,
-          label_size = 2.2, label_fontface = "italic"
+          mode = "gene", block_height = 0.36,
+          label_size = 2.25, label_fontface = "italic"
         )
       )
     )
@@ -269,8 +269,8 @@ p_allelic <- ggplot(erecta_pheno, aes(MASC06116, Height_cm, fill = MASC06116)) +
   )
 
 if (requireNamespace("patchwork", quietly = TRUE)) {
-  ((p_chr2_top / p_erecta_zoom) + patchwork::plot_layout(heights = c(1, 1.45))) |
-    p_allelic + patchwork::plot_layout(widths = c(2.4, 1))
+  ((p_chr2_top / p_erecta_zoom) + patchwork::plot_layout(heights = c(1, 1.25))) |
+    p_allelic + patchwork::plot_layout(widths = c(2.35, 1))
 } else {
   p_erecta_zoom
 }
@@ -280,7 +280,7 @@ if (requireNamespace("patchwork", quietly = TRUE)) {
 
 ## 3. RIL Graphical Genotypes (Discrete `y` BinMap + `geom_rug()` + `geom_smooth()`)
 
-In quantitative genetics and breeding, recombinant inbred lines (RILs) and chromosome segment substitution lines (CSSLs) are inspected via graphical genotype **BinMaps**. Because `geom_track()` natively accepts discrete `factor` or `character` `y` mappings, we can plot the actual `Chr2` Col-0 vs. Ler-0 haplotype blocks of 8 contrasting `ArabMAGIC` RILs (`4` tall lines carrying `Col-0` at `11.21 Mb` vs. `4` compact *erecta* lines carrying `Ler-0` at `11.21 Mb`), with SNP genotyping positions drawn along the track border by `geom_rug()`.
+In quantitative genetics and breeding, recombinant inbred lines (RILs) and chromosome segment substitution lines (CSSLs) are inspected via graphical genotype **BinMaps**. Because `geom_track()` natively accepts discrete `factor` or `character` `y` mappings, we can plot the actual `Chr2` Col-0 vs. Ler-0 haplotype blocks of 8 contrasting `ArabMAGIC` RILs (`4` tall lines carrying `Col-0` at `11.21 Mb` vs. `4` compact *erecta* lines carrying `Ler-0` at `11.21 Mb`), with SNP genotyping positions drawn along the track border by `geom_rug()`. Each track clears only its own start-side labels, keeping `Chr2` and `"Height GWAS"` snug beside the chromosome while rotating `"Founders & RILs"` vertically (`ylab`-style) beside the line names.
 
 ```{r fig3-magic-binmap, fig.width = 9.2, fig.height = 5.0}
 binmap <- utils::read.delim(extdata("arabidopsis-magic-chr2-binmap.tsv"))

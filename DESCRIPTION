@@ -1,7 +1,7 @@
 Package: ggideogram
 Type: Package
 Title: Chromosome Ideograms Drawn with 'ggplot2'
-Version: 0.6.0
+Version: 0.6.1
 Authors@R: c(
     person("zbh200937", role = c("aut", "cre"),
            email = "83059609+zbh200937@users.noreply.github.com"),

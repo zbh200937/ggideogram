@@ -58,7 +58,18 @@ geom_chr <- function(mapping = NULL, data = NULL, chr = NULL,
 #'
 #' @param mapping,data Annotation mappings and source data.
 #' @param track Optional declared track identifier.
-#' @param mode Draw one lane per gene or transcript.
+#' @param mode Draw gene-level unions (`"gene"`) or individual isoforms
+#'   (`"transcript"`).
+#' @param pack Logical or `NULL` (default). When `NULL`, non-overlapping models
+#'   are greedily packed into compact lanes in linear `mode = "gene"` tracks
+#'   without an explicit `lane_order`, while `mode = "transcript"`, explicit
+#'   `lane_order`, and circular layouts keep one lane per model. Set `TRUE` or
+#'   `FALSE` to override.
+#' @param label_position Label placement: `"auto"` (default; `"above"` in
+#'   packed linear tracks, `"start"` otherwise), `"above"` (parallel to each
+#'   gene in the upper sub-band of its lane), `"beside"` (inline adjacent to
+#'   each gene's start), or `"start"` (aligned at the chromosome start
+#'   endpoint).
 #' @param ... Gene styling: optional lane_order (complete identifier vector),
 #'   block_height = 0.35 (fraction of one lane), native grid::arrow() or NULL,
 #'   labels = TRUE, label_size = 3 (mm), label_gap = 0.3 (fraction of label box),
@@ -69,10 +80,12 @@ geom_chr <- function(mapping = NULL, data = NULL, chr = NULL,
 #' @return An additive gene-model component.
 #' @export
 geom_genemodel <- function(mapping = NULL, data = NULL, track = NULL,
-    mode = c("gene", "transcript"), ...) {
+    mode = c("gene", "transcript"), pack = NULL,
+    label_position = c("auto", "above", "beside", "start"), ...) {
   fun <- if (match.arg(mode) == "gene") geom_chr_gene else geom_chr_transcript
+  label_position <- match.arg(label_position)
   dots <- list(...)
-  comp <- fun(mapping, data, track, ...)
+  comp <- fun(mapping, data, track, pack = pack, label_position = label_position, ...)
   if ("inherit.aes" %in% names(dots) && isFALSE(dots$inherit.aes)) {
     comp$ideogram_no_scope_inherit <- TRUE
   }

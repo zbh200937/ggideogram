@@ -63,11 +63,15 @@ chromosome body. Beside tracks use zero.}
 \code{\link[=geom_locus]{geom_locus()}}. Nested domain layers inherit this track identifier.}
 
 \item{label}{Optional title string or a list with text, size (mm), colour,
-family, fontface and gap (em). A list can adjust the existing title's
-style without repeating its text. Titles sit beside the start endpoint
-in linear layouts and inside the closing gap in circular layouts.
-In linear layouts, titles at a shared start align at their track-facing
-edge and clear any value axes at that end.}
+family, fontface, gap (em), angle (degrees) and position (\code{"side"} or
+\code{"top"}). A list can adjust the existing title's style without repeating
+its text. In linear layouts, \code{"side"} places the title beside the track's
+own start endpoint (clearing only that track's start-side ticks/labels,
+and automatically using \code{angle = 90} on wide horizontal discrete-\code{y}
+tracks with start-side category labels unless \code{angle} is set explicitly),
+while \code{"top"} places a left-aligned header just above the track's start
+corner in horizontal layouts. Circular layouts place titles in the
+closing gap.}
 
 \item{axis}{\code{FALSE}, \code{TRUE}, or a list of local value-axis arguments.
 \code{position} accepts \code{"auto"} (default), \code{"start"}, \code{"end"}, or \code{"gap"}.

@@ -80,7 +80,7 @@ test_that("track titles clear the rendered tick labels at either source endpoint
   }
 })
 
-test_that("track titles share their start edge even with different axis and label settings", {
+test_that("track titles clear only their own start-side axis without pushing unrelated tracks", {
   grDevices::pdf(NULL)
   on.exit(grDevices::dev.off())
   for (orientation in c("horizontal", "vertical")) {
@@ -92,11 +92,11 @@ test_that("track titles share their start edge even with different axis and labe
         coverage = geom_track(chr = "B", limits = c(0, 1), axis = TRUE,
           label = list(text = "Coverage", size = 3.1, gap = 0.75))))
     q <- p + geom_track(track = "density", axis = list(gap = 1.2))
-    for (plot in list(p, q)) {
+    draw_pos <- function(plot) {
       built <- ggplot2::ggplot_build(plot)
       titles <- which(vapply(plot$layers, function(layer)
         !is.null(layer$ideogram_track_title), logical(1)))
-      positions <- vapply(titles, function(i) {
+      vapply(titles, function(i) {
         layer <- built$plot$layers[[i]]
         params <- layer$computed_geom_params
         grob <- do.call(layer$geom$draw_panel, c(list(data = built$data[[i]],
@@ -105,9 +105,24 @@ test_that("track titles share their start edge even with different axis and labe
         if (orientation == "horizontal") grid::convertX(grob$x, "mm", TRUE)
         else grid::convertY(grob$y, "mm", TRUE)
       }, numeric(1))
-      expect_length(positions, 2)
-      expect_equal(unname(positions[1]), unname(positions[2]))
     }
+    pos_p <- draw_pos(p)
+    pos_q <- draw_pos(q)
+    expect_length(pos_p, 2)
+    # Coverage (no start-side axis) stays snug near its track start and is not
+    # pushed outward by Density's start-side axis or gap update.
+    if (orientation == "horizontal") {
+      expect_lt(pos_p[1], pos_p[2])
+      expect_lt(pos_q[1], pos_p[1])
+    } else {
+      expect_gt(pos_p[1], pos_p[2])
+      expect_gt(pos_q[1], pos_p[1])
+    }
+    cov_p <- Filter(function(l) identical(l$ideogram_track_title$track, "coverage"), p$layers)[[1]]
+    cov_q <- Filter(function(l) identical(l$ideogram_track_title$track, "coverage"), q$layers)[[1]]
+    expect_equal(grid::convertUnit(cov_p$geom_params$text_clearance, "mm", valueOnly = TRUE), 0)
+    expect_equal(grid::convertUnit(cov_q$geom_params$text_clearance, "mm", valueOnly = TRUE), 0)
+    expect_equal(cov_q$data[c("x", "y")], cov_p$data[c("x", "y")])
   }
 })
 

@@ -263,8 +263,8 @@ StatChromosomeName <- ggplot2::ggproto("StatChromosomeName", ggplot2::StatIdenti
 
 GeomChromosomeName <- ggplot2::ggproto("GeomChromosomeName", ggplot2::GeomText,
   draw_panel = function(data, panel_params, coord, name_gap = 0.5,
-      name_axis_clearance = NULL, name_end_gap = NULL, name_title_alignment = NULL,
-      na.rm = FALSE) {
+      name_axis_clearance = NULL, name_margin_clearance = NULL,
+      name_end_gap = NULL, name_title_alignment = NULL, na.rm = FALSE) {
     text <- ggplot2::GeomText$draw_panel(data, panel_params, coord, na.rm = na.rm)
     xy <- coord$transform(data, panel_params)
     dimensions <- chromosome_text_dimensions(data)
@@ -317,7 +317,7 @@ GeomIdeogramAxisText <- ggplot2::ggproto(
   draw_panel = function(
       data, panel_params, coord, tick_length = 1.5, label_gap = 0.25,
       check_overlap = FALSE, na.rm = FALSE, text_clearance = NULL,
-      track_axis_width = NULL) {
+      track_axis_width = NULL, title_hjust = NULL, title_vjust = NULL) {
     coordinates <- coord$transform(data, panel_params)
     direction_length <- sqrt(coordinates$nx^2 + coordinates$ny^2)
     coordinates$nx <- coordinates$nx / direction_length
@@ -346,6 +346,8 @@ GeomIdeogramAxisText <- ggplot2::ggproto(
                     ifelse(coordinates$nx < 0, 1, 0.5))
     vjust <- ifelse(coordinates$ny > 0, 0,
                     ifelse(coordinates$ny < 0, 1, 0.5))
+    if (!is.null(title_hjust)) hjust <- rep_len(title_hjust, nrow(coordinates))
+    if (!is.null(title_vjust)) vjust <- rep_len(title_vjust, nrow(coordinates))
     hjust[rotated] <- vjust[rotated] <- 0.5
 
     text <- grid::textGrob(

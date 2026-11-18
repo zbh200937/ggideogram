@@ -1,3 +1,21 @@
+# ggideogram 0.6.1
+
+- Decoupled linear chromosome primary names and track titles from cross-track
+  start-margin push: chromosome names stay snug beside their chromosome bodies
+  (retreating outward only on actual transverse bounding-box collision), and
+  each track title clears only its own start-side axis or channel labels
+  without stacking non-overlapping widths in `plot.margin`.
+- Extended `geom_track(label = ...)` with `angle` (degrees; automatically `90`
+  for `ylab`-style vertical titles on wide horizontal discrete-`y` tracks with
+  start-side category labels) and `position = c("side", "top")` (left-aligned
+  top-corner header in horizontal layouts with zero left-margin overhang).
+- Added `pack = NULL` (`TRUE`/`FALSE`/`NULL`) and `label_position = c("auto",
+  "above", "beside", "start")` to `geom_genemodel()`, packing non-overlapping
+  genes (accounting for both exon intervals and label widths) into compact
+  lanes with local labels directly above or beside each gene in linear
+  `mode = "gene"` tracks while preserving `"start"` channel alignment for
+  `mode = "transcript"`, explicit `lane_order` and circular layouts.
+
 # ggideogram 0.6.0
 
 - Removed redundant legacy wrappers `ideogram()`, `GFFex()`, `save_ideogram()`

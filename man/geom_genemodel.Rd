@@ -9,6 +9,8 @@ geom_genemodel(
   data = NULL,
   track = NULL,
   mode = c("gene", "transcript"),
+  pack = NULL,
+  label_position = c("auto", "above", "beside", "start"),
   ...
 )
 }
@@ -17,7 +19,20 @@ geom_genemodel(
 
 \item{track}{Optional declared track identifier.}
 
-\item{mode}{Draw one lane per gene or transcript.}
+\item{mode}{Draw gene-level unions (\code{"gene"}) or individual isoforms
+(\code{"transcript"}).}
+
+\item{pack}{Logical or \code{NULL} (default). When \code{NULL}, non-overlapping models
+are greedily packed into compact lanes in linear \code{mode = "gene"} tracks
+without an explicit \code{lane_order}, while \code{mode = "transcript"}, explicit
+\code{lane_order}, and circular layouts keep one lane per model. Set \code{TRUE} or
+\code{FALSE} to override.}
+
+\item{label_position}{Label placement: \code{"auto"} (default; \code{"above"} in
+packed linear tracks, \code{"start"} otherwise), \code{"above"} (parallel to each
+gene in the upper sub-band of its lane), \code{"beside"} (inline adjacent to
+each gene's start), or \code{"start"} (aligned at the chromosome start
+endpoint).}
 
 \item{...}{Gene styling: optional lane_order (complete identifier vector),
 block_height = 0.35 (fraction of one lane), native grid::arrow() or NULL,

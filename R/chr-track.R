@@ -59,11 +59,15 @@ ggideogram_track_spec <- function(...) track(...)
 #'   Geometry and omitted track settings remain unchanged. Use with new
 #'   native layers to edit their point, line, column or text styling.
 #' @param label Optional title string or a list with text, size (mm), colour,
-#'   family, fontface and gap (em). A list can adjust the existing title's
-#'   style without repeating its text. Titles sit beside the start endpoint
-#'   in linear layouts and inside the closing gap in circular layouts.
-#'   In linear layouts, titles at a shared start align at their track-facing
-#'   edge and clear any value axes at that end.
+#'   family, fontface, gap (em), angle (degrees) and position (`"side"` or
+#'   `"top"`). A list can adjust the existing title's style without repeating
+#'   its text. In linear layouts, `"side"` places the title beside the track's
+#'   own start endpoint (clearing only that track's start-side ticks/labels,
+#'   and automatically using `angle = 90` on wide horizontal discrete-`y`
+#'   tracks with start-side category labels unless `angle` is set explicitly),
+#'   while `"top"` places a left-aligned header just above the track's start
+#'   corner in horizontal layouts. Circular layouts place titles in the
+#'   closing gap.
 #' @param axis `FALSE`, `TRUE`, or a list of local value-axis arguments.
 #'   `position` accepts `"auto"` (default), `"start"`, `"end"`, or `"gap"`.
 #'   Auto places shared circular value axes in the closing gap; linear and
@@ -138,10 +142,10 @@ geom_track <- function(mapping = NULL, data = NULL, geom = NULL, track = NULL,
 check_track_label <- function(label) {
   if (is.null(label)) return(NULL)
   if (is.character(label) && length(label) == 1L && !is.na(label)) return(label)
-  allowed <- c("text", "size", "colour", "family", "fontface", "gap")
+  allowed <- c("text", "size", "colour", "family", "fontface", "gap", "angle", "position")
   if (!is.list(label) || (length(label) && (is.null(names(label)) ||
       any(!nzchar(names(label))) || any(!names(label) %in% c(allowed, "color"))))) {
-    stopf("Track `label` must be NULL, one string, or a list of text/size/colour/family/fontface/gap.")
+    stopf("Track `label` must be NULL, one string, or a list of text/size/colour/family/fontface/gap/angle/position.")
   }
   if ("color" %in% names(label)) {
     label$colour <- label$colour %||% label$color
@@ -151,6 +155,15 @@ check_track_label <- function(label) {
       length(label$text) != 1L || is.na(label$text))) stopf("Track title `text` must be one string.")
   if (!is.null(label$size)) check_positive_layout(label$size, "label size")
   if (!is.null(label$gap)) check_nonnegative_layout(label$gap, "label gap")
+  if (!is.null(label$angle) && (!is.numeric(label$angle) ||
+      length(label$angle) != 1L || !is.finite(label$angle))) {
+    stopf("Track title `angle` must be NULL or one finite number in degrees.")
+  }
+  if (!is.null(label$position) && (!is.character(label$position) ||
+      length(label$position) != 1L || is.na(label$position) ||
+      !label$position %in% c("side", "top"))) {
+    stopf("Track title `position` must be \"side\" or \"top\".")
+  }
   label
 }
 
@@ -788,21 +801,31 @@ track_scope_owners <- function(layout, id, contents) {
 
 add_track_scope_title <- function(plot, id, title, owners, circular_gap = 0) {
   layout <- ideogram_plot_layout(plot)
+  raw_settings <- track_label_settings(title)
+  auto_angle <- is.null(raw_settings$angle)
   settings <- utils::modifyList(list(size = ideogram_text_size("track"),
     colour = ideogram_colour("text"), family = layout$base_spec$base_family %||% "",
-    fontface = 1, gap = 0.3),
-    Filter(Negate(is.null), track_label_settings(title)))
+    fontface = 1, gap = 0.3, angle = 0, position = "side"),
+    Filter(Negate(is.null), raw_settings))
   if (is.null(settings$text) || !nzchar(settings$text) || !length(owners)) return(plot)
   selected <- match(owners[1], layout$chrom$.chr)
   g <- layout$chrom[selected, , drop = FALSE]
   spec <- track_table_row(layout, id)
   reverse <- g$.direction < 0
   bp <- if (reverse) g$.end else g$.start
+  is_horiz_top <- !is_circular_layout(layout) &&
+    identical(layout$orientation, "horizontal") &&
+    identical(settings$position, "top")
+  target_off <- if (is_horiz_top) min(spec$low_offset, spec$high_offset) else
+    mean(c(spec$low_offset, spec$high_offset))
   p <- offset_chr_points_signed(layout, g$.chr,
-    project_positions_checked(layout, g$.chr, bp), mean(c(spec$low_offset, spec$high_offset)))
+    project_positions_checked(layout, g$.chr, bp), target_off)
   data <- data.frame(x = p$x, y = p$y, label = settings$text,
-    nx = if (layout$orientation == "vertical") 0 else -1,
-    ny = if (layout$orientation == "vertical") 1 else 0)
+    nx = if (layout$orientation == "vertical" || is_horiz_top) 0 else -1,
+    ny = if (layout$orientation == "vertical" || is_horiz_top) 1 else 0)
+  tick_len <- if (is_horiz_top) 0 else 1
+  title_hjust <- if (is_horiz_top) 0 else NULL
+  title_vjust <- if (is_horiz_top) 0 else NULL
   if (is_circular_layout(layout)) {
     arc <- circular_gap_axis_arc(layout, circular_gap)
     point <- circular_xy(layout, arc, p$y)
@@ -813,15 +836,21 @@ add_track_scope_title <- function(plot, id, title, owners, circular_gap = 0) {
     if (abs(data$ny) < 1e-12) data$ny <- 0
     data$ideogram_cartesian <- TRUE
   }
+  layer_params <- list(tick_length = tick_len, label_gap = settings$gap,
+    size = settings$size, colour = settings$colour, family = settings$family,
+    fontface = settings$fontface, angle = settings$angle, na.rm = FALSE)
+  if (!is.null(title_hjust)) layer_params$title_hjust <- title_hjust
+  if (!is.null(title_vjust)) layer_params$title_vjust <- title_vjust
   layer <- ggplot2::layer(data = data, mapping = ggplot2::aes(
     x = .data$x, y = .data$y, label = .data$label, nx = .data$nx, ny = .data$ny),
     stat = "identity", geom = if (is_circular_layout(layout)) GeomCircularGapText else
       GeomIdeogramAxisText, position = "identity",
     inherit.aes = FALSE, show.legend = FALSE,
-    params = list(tick_length = 1, label_gap = settings$gap,
-      size = settings$size, colour = settings$colour, family = settings$family,
-      fontface = settings$fontface, na.rm = FALSE))
-  layer$ideogram_track_title <- list(chr = g$.chr, track = id, anchor = data[c("x", "y")])
+    params = layer_params)
+  layer$ideogram_track_title <- list(
+    chr = g$.chr, track = id, anchor = data[c("x", "y")],
+    position = settings$position, auto_angle = auto_angle
+  )
   if (is_circular_layout(layout)) {
     layer$geom_params$gap_track <- id
     layer$geom_params$gap_title <- TRUE

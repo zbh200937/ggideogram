@@ -1,7 +1,9 @@
 #' @noRd
 geom_chr_transcript <- function(
     mapping = NULL, data = NULL, track = NULL, stat = "identity", position = "identity",
-    ..., lane_order = NULL, block_height = 0.35,
+    ..., lane_order = NULL, pack = NULL,
+    label_position = c("auto", "above", "beside", "start"),
+    block_height = 0.35,
     line_colour = ideogram_colour("annotation"), line_width = ideogram_linewidth("annotation"),
     arrow = grid::arrow(length = grid::unit(0.65, "mm"), type = "open"),
     arrow_min_bp = 0, arrow_spacing_bp = NULL, arrow_margin_bp = 0,
@@ -9,6 +11,13 @@ geom_chr_transcript <- function(
     label_colour = ideogram_colour("text"), label_family = NULL, label_fontface = "plain",
     na.rm = FALSE, show.legend = NA, inherit.aes = FALSE) {
   if (!identical(stat, "identity")) stopf("Gene structures require stat = 'identity'.")
+  if (!is.null(pack) && (!is.logical(pack) || length(pack) != 1L || is.na(pack))) {
+    stopf("`pack` must be NULL, TRUE or FALSE.")
+  }
+  if (isTRUE(pack) && !is.null(lane_order)) {
+    stopf("`pack = TRUE` cannot be combined with explicit `lane_order`.")
+  }
+  label_position <- match.arg(label_position)
   if (length(block_height) != 1L || !is.finite(block_height) ||
       block_height <= 0 || block_height > 1) {
     stopf("`block_height` must be greater than zero and at most one lane.")
@@ -20,7 +29,8 @@ geom_chr_transcript <- function(
   check_nonnegative_layout(label_gap, "label_gap")
   structure(list(mapping = mapping, data = data, track = track,
     id = "transcript", position = position, params = list(...),
-    lane_order = lane_order, block_height = block_height,
+    lane_order = lane_order, pack = pack, label_position = label_position,
+    block_height = block_height,
     line_colour = line_colour, line_width = line_width, arrow = arrow,
     arrow_min_bp = arrow_min_bp, arrow_spacing_bp = arrow_spacing_bp,
     arrow_margin_bp = arrow_margin_bp,
@@ -34,7 +44,9 @@ geom_chr_transcript <- function(
 #' @noRd
 geom_chr_gene <- function(
     mapping = NULL, data = NULL, track = NULL, stat = "identity", position = "identity",
-    ..., lane_order = NULL, block_height = 0.35,
+    ..., lane_order = NULL, pack = NULL,
+    label_position = c("auto", "above", "beside", "start"),
+    block_height = 0.35,
     line_colour = ideogram_colour("annotation"), line_width = ideogram_linewidth("annotation"),
     arrow = grid::arrow(length = grid::unit(0.65, "mm"), type = "open"),
     arrow_min_bp = 0, arrow_spacing_bp = NULL, arrow_margin_bp = 0,
@@ -42,7 +54,8 @@ geom_chr_gene <- function(
     label_colour = ideogram_colour("text"), label_family = NULL, label_fontface = "plain",
     na.rm = FALSE, show.legend = NA, inherit.aes = FALSE) {
   object <- geom_chr_transcript(mapping, data, track, stat, position, ...,
-    lane_order = lane_order, block_height = block_height,
+    lane_order = lane_order, pack = pack, label_position = label_position,
+    block_height = block_height,
     line_colour = line_colour, line_width = line_width, arrow = arrow,
     arrow_min_bp = arrow_min_bp, arrow_spacing_bp = arrow_spacing_bp,
     arrow_margin_bp = arrow_margin_bp,
@@ -52,6 +65,18 @@ geom_chr_gene <- function(
   object$id <- "gene"
   object$ideogram_no_scope_inherit <- !missing(inherit.aes) && isFALSE(inherit.aes)
   object
+}
+
+estimate_gene_label_mm <- function(labels, size, fontface = "plain") {
+  labels <- as.character(labels)
+  if (!length(labels)) return(numeric(0))
+  n_up <- nchar(gsub("[^A-Z]", "", labels))
+  n_lo <- nchar(gsub("[^a-z]", "", labels))
+  n_na <- nchar(gsub("[^ (),.:;/|_-]", "", labels))
+  n_ot <- pmax(0L, nchar(labels) - n_up - n_lo - n_na)
+  bold_scale <- if (identical(fontface, "bold") || identical(fontface, "bold.italic") ||
+                    identical(fontface, 2) || identical(fontface, 4)) 1.07 else 1.0
+  (0.66 * n_up + 0.52 * n_lo + 0.34 * n_na + 0.60 * n_ot) * size * bold_scale
 }
 
 prepare_gene_rows <- function(object, layout) {
@@ -290,12 +315,145 @@ ggplot_add.ggideogram_gene_component <- function(object, plot, ...) {
     blocks$.model_end <- unlist(blk_end_list, use.names = FALSE)
   }
 
-  lane_count <- max(tabulate(match(backbone$.model_chr, unique(backbone$.model_chr))))
-  # Share one lane pitch across chromosomes in this track with O(1) lookup.
+  circular <- is_circular_layout(layout)
+  vertical <- identical(layout$orientation, "vertical")
+  use_pack <- if (is.null(object$pack)) {
+    object$id == "gene" && is.null(object$lane_order) && !circular
+  } else {
+    isTRUE(object$pack)
+  }
+  label_pos <- object$label_position %||% "auto"
+  if (label_pos == "auto") {
+    label_pos <- if (circular || !use_pack) "start" else "above"
+  }
+  if (circular && label_pos != "start") {
+    stopf("Circular layouts require `label_position = \"start\"` (or \"auto\").")
+  }
+
+  g_bb <- layout$chrom[match(backbone$.model_chr, layout$chrom$.chr), , drop = FALSE]
+  chr_span <- pmax(1, g_bb$.end - g_bb$.start)
+  rev_c <- g_bb$.direction < 0
+  chr_mm <- if (circular) {
+    rep(90, nrow(backbone))
+  } else if (vertical) {
+    tot_span <- max(1e-6, diff(layout$bounds$y))
+    pmax(25, 85 * abs(g_bb$.y_max - g_bb$.y_min) / tot_span)
+  } else {
+    tot_span <- max(1e-6, diff(layout$bounds$x))
+    pmax(25, 90 * abs(g_bb$.x_max - g_bb$.x_min) / tot_span)
+  }
+
+  occ_start <- backbone$.model_start
+  occ_end <- backbone$.model_end
+  lbl_bp_anchor <- ifelse(rev_c, g_bb$.end, g_bb$.start)
+  lbl_hjust <- rep(if (vertical) 0.5 else 1 + object$label_gap, nrow(backbone))
+  lbl_vjust <- rep(if (vertical) -object$label_gap else 0.5, nrow(backbone))
+  lbl_angle <- rep(0, nrow(backbone))
+
+  if (!isTRUE(object$labels) || label_pos == "start") {
+    pad_bp <- 0.012 * chr_span
+    occ_start <- backbone$.model_start - 0.5 * pad_bp
+    occ_end <- backbone$.model_end + 0.5 * pad_bp
+  } else if (label_pos == "above") {
+    w_mm <- estimate_gene_label_mm(backbone$.model_label, object$label_size, object$label_fontface)
+    lbl_bp <- (w_mm / chr_mm) * chr_span
+    pad_bp <- ((0.75 * object$label_size) / chr_mm) * chr_span
+    mid_bp <- (backbone$.model_start + backbone$.model_end) / 2
+    d_low <- mid_bp - g_bb$.start
+    d_high <- g_bb$.end - mid_bp
+    frac_low <- rep(0.5, nrow(backbone))
+    short_low <- lbl_bp > 0 & lbl_bp <= chr_span & d_low < 0.5 * lbl_bp
+    frac_low[short_low] <- pmax(0, d_low[short_low] / lbl_bp[short_low])
+    short_high <- lbl_bp > 0 & lbl_bp <= chr_span & d_high < 0.5 * lbl_bp
+    frac_low[short_high] <- pmin(1, 1 - d_high[short_high] / lbl_bp[short_high])
+    lbl_bp_anchor <- mid_bp
+    lbl_angle <- rep(if (vertical) 90 else 0, nrow(backbone))
+    lbl_hjust <- if (vertical) {
+      ifelse(rev_c, frac_low, 1 - frac_low)
+    } else {
+      ifelse(rev_c, 1 - frac_low, frac_low)
+    }
+    lbl_vjust <- rep(0.5, nrow(backbone))
+    occ_start <- pmin(backbone$.model_start, mid_bp - frac_low * lbl_bp) - 0.5 * pad_bp
+    occ_end <- pmax(backbone$.model_end, mid_bp + (1 - frac_low) * lbl_bp) + 0.5 * pad_bp
+  } else if (label_pos == "beside") {
+    w_mm <- estimate_gene_label_mm(backbone$.model_label, object$label_size, object$label_fontface)
+    gap_bp <- ((object$label_gap * object$label_size + 0.5) / chr_mm) * chr_span
+    lbl_bp <- (w_mm / chr_mm) * chr_span + gap_bp
+    pad_bp <- ((0.6 * object$label_size) / chr_mm) * chr_span
+    room_before <- ifelse(rev_c, g_bb$.end - backbone$.model_end, backbone$.model_start - g_bb$.start)
+    room_after <- ifelse(rev_c, backbone$.model_start - g_bb$.start, g_bb$.end - backbone$.model_end)
+    place_before <- room_before >= lbl_bp | room_before >= room_after
+    lbl_bp_anchor <- ifelse(
+      place_before,
+      ifelse(rev_c, backbone$.model_end, backbone$.model_start),
+      ifelse(rev_c, backbone$.model_start, backbone$.model_end)
+    )
+    lbl_angle <- rep(if (vertical) 90 else 0, nrow(backbone))
+    lbl_hjust <- if (vertical) {
+      ifelse(place_before, -object$label_gap, 1 + object$label_gap)
+    } else {
+      ifelse(place_before, 1 + object$label_gap, -object$label_gap)
+    }
+    lbl_vjust <- rep(0.5, nrow(backbone))
+    occ_start <- ifelse(
+      place_before,
+      ifelse(rev_c, backbone$.model_start, backbone$.model_start - lbl_bp),
+      ifelse(rev_c, backbone$.model_start - lbl_bp, backbone$.model_start)
+    ) - 0.5 * pad_bp
+    occ_end <- ifelse(
+      place_before,
+      ifelse(rev_c, backbone$.model_end + lbl_bp, backbone$.model_end),
+      ifelse(rev_c, backbone$.model_end, backbone$.model_end + lbl_bp)
+    ) + 0.5 * pad_bp
+  }
+
   ord_rank <- match(backbone$.model_id, order_ids)
-  lane_slot <- stats::ave(ord_rank, backbone$.model_chr,
-    FUN = function(r) match(r, sort(unique(r))))
-  bb_offsets <- spec$low_offset + ((lane_slot - 0.5) / lane_count) * (spec$high_offset - spec$low_offset)
+  if (use_pack) {
+    lane_slot <- integer(nrow(backbone))
+    for (chr_val in unique(backbone$.model_chr)) {
+      idx_c <- which(backbone$.model_chr == chr_val)
+      idx_c <- idx_c[order(backbone$.model_start[idx_c], backbone$.model_end[idx_c], ord_rank[idx_c])]
+      lane_ends <- numeric(0)
+      for (ri in idx_c) {
+        avail_k <- which(lane_ends <= occ_start[ri])
+        if (length(avail_k)) {
+          k <- avail_k[1L]
+          lane_ends[k] <- max(lane_ends[k], occ_end[ri])
+        } else {
+          k <- length(lane_ends) + 1L
+          lane_ends[k] <- occ_end[ri]
+        }
+        lane_slot[ri] <- k
+      }
+    }
+    lane_count <- max(lane_slot)
+  } else {
+    lane_count <- max(tabulate(match(backbone$.model_chr, unique(backbone$.model_chr))))
+    lane_slot <- stats::ave(ord_rank, backbone$.model_chr,
+      FUN = function(r) match(r, sort(unique(r))))
+  }
+
+  has_above_subband <- isTRUE(object$labels) && label_pos == "above"
+  if (!use_pack && !has_above_subband) {
+    # Share one lane pitch across chromosomes in this track with O(1) lookup.
+    bb_offsets <- spec$low_offset + ((lane_slot - 0.5) / lane_count) * (spec$high_offset - spec$low_offset)
+    lbl_offsets <- bb_offsets
+    eff_block_height <- object$block_height
+  } else {
+    min_off <- if (circular) spec$low_offset else min(spec$low_offset, spec$high_offset)
+    max_off <- if (circular) spec$high_offset else max(spec$low_offset, spec$high_offset)
+    lane_pitch <- (max_off - min_off) / lane_count
+    if (has_above_subband) {
+      lbl_offsets <- min_off + (lane_slot - 1 + 0.32) * lane_pitch
+      bb_offsets <- min_off + (lane_slot - 1 + 0.72) * lane_pitch
+      eff_block_height <- min(object$block_height, 0.44)
+    } else {
+      bb_offsets <- min_off + (lane_slot - 0.5) * lane_pitch
+      lbl_offsets <- bb_offsets
+      eff_block_height <- object$block_height
+    }
+  }
   offset_lut <- stats::setNames(bb_offsets, paste(backbone$.model_chr, backbone$.model_id, sep = "\r"))
   lane_offsets <- function(rows) {
     unname(offset_lut[paste(rows$.model_chr, rows$.model_id, sep = "\r")])
@@ -337,7 +495,7 @@ ggplot_add.ggideogram_gene_component <- function(object, plot, ...) {
   }
   if (nrow(blocks)) {
     blocks <- blocks[order(blocks$.model_type == "cds"), , drop = FALSE]
-    half <- object$block_height * abs(spec$high_offset - spec$low_offset) / lane_count / 2
+    half <- eff_block_height * abs(spec$high_offset - spec$low_offset) / lane_count / 2
     offset <- lane_offsets(blocks)
     a <- project(blocks, blocks$.model_start, offset - half)
     b <- project(blocks, blocks$.model_end, offset + half)
@@ -366,14 +524,13 @@ ggplot_add.ggideogram_gene_component <- function(object, plot, ...) {
     }
   }
   if (isTRUE(object$labels)) {
-    g <- layout$chrom[match(backbone$.model_chr, layout$chrom$.chr), ]
-    backbone$.label_position <- ifelse(g$.direction < 0, g$.end, g$.start)
-    anchor <- project(backbone, backbone$.label_position, lane_offsets(backbone))
+    backbone$.label_position <- lbl_bp_anchor
+    anchor <- project(backbone, backbone$.label_position, lbl_offsets)
     backbone$.lx <- anchor$x; backbone$.ly <- anchor$y
-    vertical <- layout$orientation == "vertical"
-    angle <- rep(0, nrow(backbone))
-    hjust <- if (vertical) 0.5 else 1 + object$label_gap
-    if (is_circular_layout(layout)) {
+    angle <- lbl_angle
+    hjust <- lbl_hjust
+    vjust <- lbl_vjust
+    if (circular) {
       angle <- (-circular_theta(layout, anchor$x) * 180 / pi +
         if (layout$circular$clockwise) 0 else 180) %% 360
       angle <- (angle + 180) %% 360 - 180
@@ -381,14 +538,17 @@ ggplot_add.ggideogram_gene_component <- function(object, plot, ...) {
       angle[flip] <- (angle[flip] + 360) %% 360 - 180
       hjust <- ifelse(flip, -object$label_gap, 1 + object$label_gap)
     }
+    if (length(unique(angle)) == 1L) angle <- angle[1L]
+    if (length(unique(hjust)) == 1L) hjust <- hjust[1L]
+    if (length(unique(vjust)) == 1L) vjust <- vjust[1L]
     label <- ggplot2::geom_text(data = backbone,
       mapping = ggplot2::aes(x = .data$.lx, y = .data$.ly, label = .data$.model_label),
-      angle = angle, hjust = hjust,
-      vjust = if (vertical) -object$label_gap else 0.5,
+      angle = angle, hjust = hjust, vjust = vjust,
       size = object$label_size,
       family = object$label_family %||% layout$base_spec$base_family %||% "",
       fontface = object$label_fontface, colour = object$label_colour, inherit.aes = FALSE)
     label$ideogram_gene_label <- TRUE
+    label$ideogram_gene_label_start <- identical(label_pos, "start")
     label$ideogram_gene_track <- object$track
     plot <- reserve_chromosome_axis_space(plot + label, list())
   }
