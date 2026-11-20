@@ -70,11 +70,16 @@ as_ideogram_widget <- function(plot, data = NULL, id = "ID", chr = "Chr",
       stopf("Record links must be HTTP(S) URLs or empty.")
     }
     payload$fields <- names(data)
+    chr_disp <- (source$.display_name %||% source$.chr)[index]
+    raw_cols <- unclass(data)
+    n_col <- length(raw_cols)
     payload$records <- lapply(seq_len(nrow(data)), function(i) {
-      list(id = ids[i], chr = (source$.display_name %||% source$.chr)[index[i]],
+      vals <- vector("list", n_col)
+      for (k in seq_len(n_col)) vals[[k]] <- raw_cols[[k]][i]
+      list(id = ids[i], chr = chr_disp[i],
            start = starts[i], end = ends[i],
            category = categories[i], url = urls[i],
-           values = unname(lapply(data, function(column) column[i])))
+           values = vals)
     })
   }
   widget <- ggiraph::girafe(ggobj = plot, width_svg = width / 25.4,

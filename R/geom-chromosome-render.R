@@ -13,7 +13,8 @@ chromosome_render_data <- function(data, layout, cap_ratio, curve_points = layou
   n_caps <- as.integer(!cut_s) + as.integer(!cut_e)
   capped <- n_caps > 0L
   width <- layout$chromosome_width
-  if (any(capped)) {
+  adaptive <- is_serial_layout(layout)
+  if (!adaptive && any(capped)) {
     width <- min(width, min(layout$chrom$.display_length[capped] * 2 / (n_caps[capped] * cap_ratio)))
   }
   pieces <- lapply(split(seq_len(nrow(data)), data$group), function(rows) {
@@ -24,7 +25,7 @@ chromosome_render_data <- function(data, layout, cap_ratio, curve_points = layou
     if (is.null(start) || is.na(start)) start <- g$.start
     if (is.null(end) || is.na(end)) end <- g$.end
     polygon <- chromosome_section_polygon(g, width,
-      curve_points, start, end, cap_ratio = cap_ratio)
+      curve_points, start, end, cap_ratio = cap_ratio, adaptive_cap = adaptive)
     result <- style[rep(1L, nrow(polygon)), , drop = FALSE]
     result$x <- polygon$x
     result$y <- polygon$y

@@ -9,7 +9,8 @@ read_chr_features(
   format = c("auto", "bed", "bedgraph", "gff3", "gtf"),
   karyotype = NULL,
   chr_map = NULL,
-  assembly = NULL
+  assembly = NULL,
+  unknown_chr = c("error", "drop")
 )
 }
 \arguments{
@@ -27,6 +28,11 @@ Unlisted names are retained.}
 for a matched chromosome in \code{karyotype} is an error. Mapped assembly
 metadata in an \code{ideogram_data} object is used; unknown versions are not
 inferred.}
+
+\item{unknown_chr}{Policy when features reference chromosomes absent from
+\code{karyotype}: \code{"error"} (default) rejects unknown chromosomes; \code{"drop"}
+explicitly removes those records while validating bounds on retained
+chromosomes.}
 }
 \value{
 A data frame with \code{Chr}, \code{Start}, \code{End} and annotation columns

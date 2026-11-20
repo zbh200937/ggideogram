@@ -89,7 +89,13 @@ resolve_chr_pair_nodes <- function(object, layout) {
   nodes <- object$nodes
   if (is.null(nodes)) return(object)
   if (!inherits(nodes, 'chr_nodes')) stopf('`nodes` must be created with `chr_nodes()`.')
-  validate_chr_nodes_source(nodes, layout)
+  drop_unknown <- identical(object$unknown_chr %||% 'error', 'drop')
+  if (drop_unknown) {
+    source <- layout$data$karyotype
+    keep_n <- nodes$.node_chr %in% source$.chr
+    nodes <- nodes[keep_n, , drop = FALSE]
+  }
+  if (nrow(nodes)) validate_chr_nodes_source(nodes, layout)
   interval <- all(c('.node_start', '.node_end') %in% names(nodes))
   if (object$type == 'interval' && !interval) {
     stopf('Synteny requires interval nodes mapping `start` and `end`.')
@@ -100,6 +106,16 @@ resolve_chr_pair_nodes <- function(object, layout) {
   pair_aes <- c('chr1', 'position1', 'start1', 'end1', 'chr2', 'position2', 'start2', 'end2')
   if (any(pair_aes %in% names(object$mapping))) {
     stopf('With `nodes`, map `from` and `to` instead of explicit endpoint coordinates.')
+  }
+  if (drop_unknown && nrow(d)) {
+    f1 <- validate_node_id(fields$from, 'from')
+    f2 <- validate_node_id(fields$to, 'to')
+    keep_e <- (f1 %in% nodes$.node_id) & (f2 %in% nodes$.node_id)
+    if (!all(keep_e)) {
+      d <- d[keep_e, , drop = FALSE]
+      fields$from <- fields$from[keep_e]
+      fields$to <- fields$to[keep_e]
+    }
   }
   source_names <- setdiff(names(nodes), c('.node_id', '.node_chr', '.node_position', '.node_start', '.node_end'))
   for (j in 1:2) {

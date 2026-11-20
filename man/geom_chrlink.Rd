@@ -29,8 +29,13 @@ midpoints. Bands use translucent fill by default.}
 layouts and attaches to the innermost track boundary in circular layouts.
 \code{gap = NULL} uses automatic clearance. A number sets an offset from the
 body edge or, for circular auto sides, from that inner boundary. Circular
-endpoint offsets must leave a positive radius. Also accepts bend, curvature, curve_points,
-orientation for intervals, and native colour/fill/alpha/linewidth/arrow.}
+endpoint offsets must leave a positive radius. Also accepts \code{bend},
+\code{curvature}, \code{curve_points} (\code{NULL} adapts automatically for large link
+tables), \code{curve_style} (\code{"auto"}, \code{"straight"}, \code{"quadratic"}, or cubic
+S-curve \code{"bezier"} — automatically used for cross-row ribbons in
+\code{chr_layout = "serial"}), \code{unknown_chr} (\code{"error"} or \code{"drop"} to filter
+unplaced scaffolds absent from the karyotype), \code{orientation} for intervals,
+and native colour/fill/alpha/linewidth/arrow.}
 }
 \value{
 An additive native connection or band component.

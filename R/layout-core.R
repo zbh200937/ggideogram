@@ -55,9 +55,16 @@ ideogram_layout.data.frame <- function(karyotype, ...) {
 #'   opening independently of the other chromosome gaps. `NULL` uses the closing
 #'   value from `gap_angle`, or 20 degrees when both are `NULL`.
 #' @param clockwise Arrange circular sectors clockwise when TRUE.
-#' @param scale_length `"global"` preserves length comparisons between
-#'   chromosomes. `"per_chr"` gives every chromosome the same display length
-#'   and is therefore an explicit non-comparable mode.
+#' @param scale_length `"global"` preserves length comparisons across all
+#'   chromosomes. `"per_genome"` preserves bp comparisons within each genome
+#'   while giving every genome equal total span (`length_comparable = FALSE`).
+#'   `"per_chr"` gives every chromosome the same display length and is therefore
+#'   an explicit non-comparable mode.
+#' @param chr_layout `"grid"` (default) arranges chromosomes in aligned rows
+#'   and columns; `"serial"` concatenates chromosomes end-to-end along the long
+#'   axis within each row (e.g. one horizontal row per genome for macrosynteny).
+#' @param row_align Row alignment along the long axis in `"serial"` layout:
+#'   `"left"` (default, start-aligned) or `"center"` (centered symmetrically).
 #' @param curve_points Number of profile samples used by chromosome-shaped
 #'   components, including rounded-body clipping masks.
 #' @param tracks `NULL` or a declarative [track_layout()]. Declared tracks are
@@ -81,7 +88,7 @@ ideogram_layout.ideogram_data <- function(
     max_chr_length = 40,
     row_gap = 2,
     orientation = c("vertical", "horizontal", "circular"),
-    scale_length = c("global", "per_chr"),
+    scale_length = c("global", "per_chr", "per_genome"),
     curve_points = 32,
     tracks = NULL,
     order_by = c("input", "genome", "homolog"),
@@ -94,11 +101,15 @@ ideogram_layout.ideogram_data <- function(
     opening_angle = NULL,
     clockwise = TRUE,
     min_gap = 0.2,
+    chr_layout = c("grid", "serial"),
+    row_align = c("left", "center"),
     ...) {
   check_unused_args(...)
   orientation <- match.arg(orientation)
   scale_length <- match.arg(scale_length)
   order_by <- match.arg(order_by)
+  chr_layout <- match.arg(chr_layout)
+  row_align <- match.arg(row_align)
   check_positive_layout(chromosome_width, "chromosome_width")
   check_nonnegative_layout(chromosome_gap, "chromosome_gap")
   check_positive_layout(max_chr_length, "max_chr_length")
@@ -117,12 +128,27 @@ ideogram_layout.ideogram_data <- function(
   }
   if (orientation == "circular") {
     if (!is.null(ncol)) stopf("Circular layouts use one sector ring; combine separate plots for multiple rings.")
+    if (identical(chr_layout, "serial")) {
+      stopf("`chr_layout = \"serial\"` applies to linear layouts; circular layouts already arrange sectors serially around the ring.")
+    }
     track_geometry <- resolve_track_geometry(tracks, chromosome_width,
       karyotype$karyotype$.chr, k$.chr, min_gap = min_gap)
     return(circular_ideogram_layout(karyotype, k, tracks, track_geometry,
       chromosome_width, radius, start_angle, gap_angle, opening_angle, clockwise,
       scale_length, order_by, genome_order, homolog_order, reverse_chr, curve_points,
       min_gap))
+  }
+  if (identical(chr_layout, "serial")) {
+    return(serial_ideogram_layout(
+      karyotype = karyotype, k = k, ncol = ncol,
+      chromosome_width = chromosome_width, chromosome_gap = chromosome_gap,
+      max_chr_length = max_chr_length, row_gap = row_gap,
+      orientation = orientation, scale_length = scale_length,
+      curve_points = curve_points, tracks = tracks,
+      order_by = order_by, genome_order = genome_order,
+      homolog_order = homolog_order, reverse_chr = reverse_chr,
+      min_gap = min_gap, row_align = row_align
+    ))
   }
   chromosome_count <- nrow(k)
   slots <- chromosome_layout_slots(k, ncol, order_by, genome_order, homolog_order)
@@ -143,6 +169,11 @@ ideogram_layout.ideogram_data <- function(
   biological_length <- k$.end - k$.start
   if (scale_length == "global") {
     units_per_bp <- max_chr_length / max(biological_length)
+    display_length <- biological_length * units_per_bp
+  } else if (scale_length == "per_genome") {
+    g_key <- if (!is.null(k$.genome)) chr_key(k$.genome, "group", k$.assembly) else rep("default", chromosome_count)
+    g_max <- stats::ave(biological_length, g_key, FUN = max)
+    units_per_bp <- max_chr_length / g_max
     display_length <- biological_length * units_per_bp
   } else {
     units_per_bp <- max_chr_length / biological_length
@@ -257,6 +288,8 @@ ideogram_layout.ideogram_data <- function(
       orientation = orientation,
       scale_length = scale_length,
       order_by = order_by,
+      chr_layout = "grid",
+      row_align = row_align,
       length_comparable = identical(scale_length, "global"),
       track_layout = tracks %||% track_layout(),
       tracks = track_geometry$table,

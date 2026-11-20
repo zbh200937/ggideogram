@@ -19,14 +19,21 @@ chromosome_axis_basis <- function(g) {
 
 chromosome_profile_breaks <- function(g, width, curve_points,
                                       from = 0, to = g$.display_length,
-                                      cap_ratio = 1) {
+                                      cap_ratio = 1, adaptive_cap = FALSE) {
   radius <- width / 2 * cap_ratio
   circular <- !is.null(g$.circular_radius)
   if (!circular && g$.display_length < width) {
-    stopf(paste0(
-      "Chromosome %s is shorter than `chromosome_width` in display units.\n",
-      "  Increase `max_chr_length`, reduce `chromosome_width`, or use ",
-      "`scale_length = \"per_chr\"`."), format_chr_rows(g$.chr))
+    if (isTRUE(adaptive_cap)) {
+      radius <- min(radius, g$.display_length / 2)
+    } else {
+      stopf(paste0(
+        "Chromosome %s is shorter than `chromosome_width` in display units.\n",
+        "  Increase `max_chr_length`, reduce `chromosome_width`, or use ",
+        "`scale_length = \"per_chr\"` / `\"per_genome\"` or `chr_layout = \"serial\"`."),
+        format_chr_rows(g$.chr))
+    }
+  } else if (!circular && isTRUE(adaptive_cap)) {
+    radius <- min(radius, g$.display_length / 2)
   }
   cap_start <- seq(0, radius, length.out = curve_points)
   cap_end <- seq(g$.display_length - radius, g$.display_length,
@@ -46,18 +53,21 @@ chromosome_profile_breaks <- function(g, width, curve_points,
   values[values >= from & values <= to]
 }
 
-chromosome_halfwidth_next <- function(g, s, width, cap_ratio = 1) {
+chromosome_halfwidth_next <- function(g, s, width, cap_ratio = 1, adaptive_cap = FALSE) {
   radius <- width / 2
   cap <- radius * cap_ratio
   total <- g$.display_length
+  if (isTRUE(adaptive_cap)) cap <- min(cap, total / 2)
   halfwidth <- rep(radius, length(s))
 
   circular <- !is.null(g$.circular_radius)
-  top <- !circular & !isTRUE(g$.cut_start) & s < cap
-  halfwidth[top] <- radius * sqrt(pmax(0, 1 - (1 - s[top] / cap)^2))
-  bottom <- !circular & !isTRUE(g$.cut_end) & s > total - cap
-  halfwidth[bottom] <- sqrt(pmax(
-    0, 1 - ((s[bottom] - (total - cap)) / cap)^2)) * radius
+  if (cap > 0) {
+    top <- !circular & !isTRUE(g$.cut_start) & s < cap
+    halfwidth[top] <- radius * sqrt(pmax(0, 1 - (1 - s[top] / cap)^2))
+    bottom <- !circular & !isTRUE(g$.cut_end) & s > total - cap
+    halfwidth[bottom] <- sqrt(pmax(
+      0, 1 - ((s[bottom] - (total - cap)) / cap)^2)) * radius
+  }
 
   if (!is.na(g$.centromere_start) &&
       g$.centromere_end > g$.centromere_start) {
@@ -72,12 +82,14 @@ chromosome_halfwidth_next <- function(g, s, width, cap_ratio = 1) {
 
 chromosome_section_polygon <- function(g, width, curve_points,
                                        start = g$.start, end = g$.end,
-                                       cap_ratio = 1) {
+                                       cap_ratio = 1, adaptive_cap = FALSE) {
   basis <- chromosome_axis_basis(g)
   from <- (start - g$.start) * g$.units_per_bp
   to <- (end - g$.start) * g$.units_per_bp
-  s <- chromosome_profile_breaks(g, width, curve_points, from, to, cap_ratio)
-  halfwidth <- chromosome_halfwidth_next(g, s, width, cap_ratio)
+  s <- chromosome_profile_breaks(g, width, curve_points, from, to, cap_ratio,
+                                 adaptive_cap = adaptive_cap)
+  halfwidth <- chromosome_halfwidth_next(g, s, width, cap_ratio,
+                                         adaptive_cap = adaptive_cap)
   centre_x <- g$.axis_start_x + basis$tx * s
   centre_y <- g$.axis_start_y + basis$ty * s
   right <- data.frame(
@@ -95,10 +107,11 @@ chromosome_section_polygon <- function(g, width, curve_points,
 chromosome_polygon_data <- function(layout, curve_points = 32) {
   check_layout_v2(layout)
   curve_points <- validate_curve_points(curve_points)
+  adaptive <- is_serial_layout(layout)
   parts <- lapply(seq_len(nrow(layout$chrom)), function(index) {
     g <- layout$chrom[index, , drop = FALSE]
     polygon <- chromosome_section_polygon(
-      g, layout$chromosome_width, curve_points)
+      g, layout$chromosome_width, curve_points, adaptive_cap = adaptive)
     polygon$.chr <- g$.chr
     polygon$.group <- index
     polygon
@@ -130,12 +143,14 @@ cytoband_polygon_data <- function(layout, curve_points = 32,
     bands[[stain_column[1]]], scheme = scheme,
     palette = palette, bleach = bleach)
 
+  adaptive <- is_serial_layout(layout)
   parts <- lapply(seq_len(nrow(bands)), function(index) {
     chromosome_index <- layout$index[[bands$.chr[index]]]
     g <- layout$chrom[chromosome_index, , drop = FALSE]
     polygon <- chromosome_section_polygon(
       g, layout$chromosome_width, curve_points,
-      start = bands$.start[index], end = bands$.end[index])
+      start = bands$.start[index], end = bands$.end[index],
+      adaptive_cap = adaptive)
     polygon$.chr <- bands$.chr[index]
     polygon$.band <- index
     polygon$.start <- bands$.start[index]
@@ -221,8 +236,72 @@ chromosome_name_layer <- function(layout, size, gap, family, colour,
 
 linear_chromosome_name_data <- function(layout, position = "auto", align = "body") {
   g <- layout$chrom
-  if (position == "auto") position <- "start"
   vertical <- layout$orientation == "vertical"
+  if (is_serial_layout(layout) && position == "auto") {
+    # Serial rows arrange chromosomes end-to-end:
+    # - Single row: place chromosome names along the cleaner flank (below when
+    #   tracks sit above, matching standard Manhattan / genome-wide tracks).
+    # - Multi-row: top row above, bottom row below, and middle rows centered
+    #   inside the longer chromosome arm so cross-row ribbons never occlude them.
+    has_row_labels <- !is.null(layout$serial$row_labels) && length(layout$serial$row_labels) > 0L
+    lbl <- if (has_row_labels && !is.null(g$.chr_name)) g$.chr_name else (g$.display_name %||% g$.chr)
+    max_row <- max(g$.row)
+    half <- layout$chromosome_width / 2
+    row_l <- layout$serial$row_left[g$.row + 1L] %||% rep(0, nrow(g))
+    row_r <- layout$serial$row_right[g$.row + 1L] %||% rep(0, nrow(g))
+    data <- data.frame(
+      name_chr = g$.chr,
+      x = (g$.axis_start_x + g$.axis_end_x) / 2,
+      y = (g$.axis_start_y + g$.axis_end_y) / 2,
+      label = lbl, nx = 0, ny = 0, stringsAsFactors = FALSE
+    )
+    is_mid <- max_row >= 2L & g$.row > 0L & g$.row < max_row
+    if (any(is_mid)) {
+      # Place middle-row labels inside the longer arm to clear centromere waists.
+      has_ce <- !is.na(g$.centromere_start) & !is.na(g$.centromere_end) &
+        g$.centromere_end > g$.centromere_start
+      mid_ce <- is_mid & has_ce
+      if (any(mid_ce)) {
+        arm1 <- g$.centromere_start[mid_ce] - g$.start[mid_ce]
+        arm2 <- g$.end[mid_ce] - g$.centromere_end[mid_ce]
+        arm_bp <- ifelse(arm2 >= arm1,
+          (g$.centromere_end[mid_ce] + g$.end[mid_ce]) / 2,
+          (g$.start[mid_ce] + g$.centromere_start[mid_ce]) / 2)
+        pts <- project_positions_raw(g, g$.chr[mid_ce], arm_bp)
+        data$x[mid_ce] <- pts$x
+        data$y[mid_ce] <- pts$y
+      }
+    }
+    if (vertical) {
+      if (max_row == 0L) {
+        put_right <- row_r[1L] < row_l[1L]
+        data$nx <- if (put_right) 1 else -1
+        data$x <- data$x + data$nx * (half + if (put_right) row_r else row_l)
+      } else {
+        is_last <- g$.row == max_row
+        is_first <- g$.row == 0L
+        data$nx[is_first] <- -1
+        data$x[is_first] <- data$x[is_first] - (half + row_l[is_first])
+        data$nx[is_last] <- 1
+        data$x[is_last] <- data$x[is_last] + (half + row_r[is_last])
+      }
+    } else {
+      if (max_row == 0L) {
+        put_below <- row_r[1L] <= row_l[1L]
+        data$ny <- if (put_below) -1 else 1
+        data$y <- data$y + data$ny * (half + if (put_below) row_r else row_l)
+      } else {
+        is_first <- g$.row == 0L
+        is_last <- g$.row == max_row
+        data$ny[is_first] <- 1
+        data$y[is_first] <- data$y[is_first] + (half + row_l[is_first])
+        data$ny[is_last] <- -1
+        data$y[is_last] <- data$y[is_last] - (half + row_r[is_last])
+      }
+    }
+    return(data)
+  }
+  if (position == "auto") position <- "start"
   left <- layout$chromosome_width / 2 + annotation_extent(layout, g$.chr, "left")
   right <- layout$chromosome_width / 2 + annotation_extent(layout, g$.chr, "right")
   data <- data.frame(name_chr = g$.chr,
@@ -247,6 +326,39 @@ linear_chromosome_name_data <- function(layout, position = "auto", align = "body
     }
   }
   data
+}
+
+serial_row_name_layer <- function(layout, size, gap, family, colour) {
+  if (!is_serial_layout(layout)) return(NULL)
+  labels <- layout$serial$row_labels
+  if (is.null(labels) || !length(labels)) return(NULL)
+  vertical <- identical(layout$orientation, "vertical")
+  centers <- layout$serial$row_centers
+  if (vertical) {
+    data <- data.frame(
+      x = centers, y = rep(layout$bounds$y[2], length(labels)),
+      label = labels, nx = 0, ny = 1, stringsAsFactors = FALSE
+    )
+  } else {
+    data <- data.frame(
+      x = rep(layout$bounds$x[1], length(labels)), y = centers,
+      label = labels, nx = -1, ny = 0, stringsAsFactors = FALSE
+    )
+  }
+  layer <- ggplot2::layer(
+    data = data,
+    mapping = ggplot2::aes(x = .data$x, y = .data$y, label = .data$label,
+                           nx = .data$nx, ny = .data$ny),
+    stat = "identity", geom = GeomIdeogramAxisText, position = "identity",
+    inherit.aes = FALSE, show.legend = FALSE,
+    params = list(
+      tick_length = 0, label_gap = max(0.8, gap),
+      size = size * 1.05, colour = colour, family = family, fontface = "bold",
+      angle = 0, na.rm = FALSE
+    )
+  )
+  layer$ideogram_serial_row_label <- TRUE
+  layer
 }
 
 StatChromosomeName <- ggplot2::ggproto("StatChromosomeName", ggplot2::StatIdentity,

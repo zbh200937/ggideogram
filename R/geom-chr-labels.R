@@ -320,23 +320,29 @@ locus_text_mm <- function(data, size.unit = "mm") {
 
 chr_label_leader_data <- function(anchor, end, layout, mm, origin = NULL,
     theta1 = NULL, theta2 = NULL) {
+  n <- nrow(anchor)
+  if (!n) return(data.frame(x = numeric(0), y = numeric(0), xend = numeric(0), yend = numeric(0), group = integer(0)))
   if (is_circular_layout(layout)) {
     a <- sweep(anchor, 2, origin, "-")
     b <- sweep(end, 2, origin, "-")
     delta <- theta2 - theta1
     r1 <- sqrt(rowSums(a^2)); r2 <- sqrt(rowSums(b^2))
-    return(do.call(rbind, lapply(seq_len(nrow(anchor)), function(i) {
-      t <- seq(0, 1, length.out = layout$curve_points)
-      theta <- theta1[i] + delta[i] * t^2
-      radius <- r1[i] + (r2[i] - r1[i]) * t
-      x <- (origin[1] + radius * sin(theta)) / mm[1]
-      y <- (origin[2] + radius * cos(theta)) / mm[2]
-      data.frame(x = utils::head(x, -1L), y = utils::head(y, -1L),
-        xend = utils::tail(x, -1L), yend = utils::tail(y, -1L), group = i)
-    })))
+    k <- layout$curve_points
+    t <- seq(0, 1, length.out = k)
+    theta_mat <- outer(t^2, delta) + rep(theta1, each = k)
+    rad_mat <- outer(t, r2 - r1) + rep(r1, each = k)
+    x_mat <- (origin[1] + rad_mat * sin(theta_mat)) / mm[1]
+    y_mat <- (origin[2] + rad_mat * cos(theta_mat)) / mm[2]
+    return(data.frame(
+      x = as.vector(x_mat[-k, , drop = FALSE]),
+      y = as.vector(y_mat[-k, , drop = FALSE]),
+      xend = as.vector(x_mat[-1L, , drop = FALSE]),
+      yend = as.vector(y_mat[-1L, , drop = FALSE]),
+      group = rep(seq_len(n), each = k - 1L)
+    ))
   }
   data.frame(x = anchor[, 1] / mm[1], y = anchor[, 2] / mm[2],
-    xend = end[, 1] / mm[1], yend = end[, 2] / mm[2], group = seq_len(nrow(anchor)))
+    xend = end[, 1] / mm[1], yend = end[, 2] / mm[2], group = seq_len(n))
 }
 
 #' @method makeContent chr_labels_render

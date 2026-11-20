@@ -226,17 +226,30 @@ chr_repel_boxes <- function(engine) {
 }
 
 chr_repel_conflicts <- function(boxes, bounds) {
-  if (!nrow(boxes)) return(integer())
+  n <- nrow(boxes)
+  if (!n) return(integer())
   tolerance <- 1e-6
-  bad <- which(boxes$left < bounds$xlim[1] - tolerance | boxes$right > bounds$xlim[2] + tolerance |
-    boxes$bottom < bounds$ylim[1] - tolerance | boxes$top > bounds$ylim[2] + tolerance)
-  if (nrow(boxes) > 1L) for (i in seq_len(nrow(boxes) - 1L)) {
-    j <- seq.int(i + 1L, nrow(boxes))
-    collision <- pmin(boxes$right[i], boxes$right[j]) - pmax(boxes$left[i], boxes$left[j]) > tolerance &
-      pmin(boxes$top[i], boxes$top[j]) - pmax(boxes$bottom[i], boxes$bottom[j]) > tolerance
-    if (any(collision)) bad <- c(bad, i, j[collision])
+  bad_flag <- boxes$left < bounds$xlim[1] - tolerance | boxes$right > bounds$xlim[2] + tolerance |
+    boxes$bottom < bounds$ylim[1] - tolerance | boxes$top > bounds$ylim[2] + tolerance
+  if (n > 1L) {
+    # Sweep-line along sorted left edge prunes non-overlapping pairs early.
+    ord <- order(boxes$left)
+    l <- boxes$left[ord]; r <- boxes$right[ord]
+    b <- boxes$bottom[ord]; t <- boxes$top[ord]
+    for (i in seq_len(n - 1L)) {
+      ri <- r[i] - tolerance
+      bi <- b[i]; ti <- t[i]
+      j <- i + 1L
+      while (j <= n && l[j] < ri) {
+        if (min(ti, t[j]) - max(bi, b[j]) > tolerance) {
+          bad_flag[ord[i]] <- TRUE
+          bad_flag[ord[j]] <- TRUE
+        }
+        j <- j + 1L
+      }
+    }
   }
-  unique(bad)
+  which(bad_flag)
 }
 
 rectangle_inside_annulus <- function(box, ring) {

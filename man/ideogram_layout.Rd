@@ -18,7 +18,7 @@ ideogram_layout(karyotype, ...)
   max_chr_length = 40,
   row_gap = 2,
   orientation = c("vertical", "horizontal", "circular"),
-  scale_length = c("global", "per_chr"),
+  scale_length = c("global", "per_chr", "per_genome"),
   curve_points = 32,
   tracks = NULL,
   order_by = c("input", "genome", "homolog"),
@@ -31,6 +31,8 @@ ideogram_layout(karyotype, ...)
   opening_angle = NULL,
   clockwise = TRUE,
   min_gap = 0.2,
+  chr_layout = c("grid", "serial"),
+  row_align = c("left", "center"),
   ...
 )
 }
@@ -56,9 +58,11 @@ body-width units. Circular geometry uses \code{radius}.}
 
 \item{orientation}{\code{"vertical"}, \code{"horizontal"}, or \code{"circular"}.}
 
-\item{scale_length}{\code{"global"} preserves length comparisons between
-chromosomes. \code{"per_chr"} gives every chromosome the same display length
-and is therefore an explicit non-comparable mode.}
+\item{scale_length}{\code{"global"} preserves length comparisons across all
+chromosomes. \code{"per_genome"} preserves bp comparisons within each genome
+while giving every genome equal total span (\code{length_comparable = FALSE}).
+\code{"per_chr"} gives every chromosome the same display length and is therefore
+an explicit non-comparable mode.}
 
 \item{curve_points}{Number of profile samples used by chromosome-shaped
 components, including rounded-body clipping masks.}
@@ -92,6 +96,13 @@ value from \code{gap_angle}, or 20 degrees when both are \code{NULL}.}
 
 \item{min_gap}{Minimum spacing in layout units for beside tracks. Set to
 zero to use each track's declared gap directly.}
+
+\item{chr_layout}{\code{"grid"} (default) arranges chromosomes in aligned rows
+and columns; \code{"serial"} concatenates chromosomes end-to-end along the long
+axis within each row (e.g. one horizontal row per genome for macrosynteny).}
+
+\item{row_align}{Row alignment along the long axis in \code{"serial"} layout:
+\code{"left"} (default, start-aligned) or \code{"center"} (centered symmetrically).}
 }
 \value{
 An \code{ideogram_layout_v2} object.

@@ -358,14 +358,26 @@ makeContent.ideogram_name_alignment <- function(x) {
 }
 
 chromosome_text_dimensions <- function(data, parse = FALSE) {
-  grobs <- lapply(seq_len(nrow(data)), function(i) {
-    label <- if (parse) parse(text = as.character(data$label[i])) else data$label[i]
+  n <- nrow(data)
+  if (!n) {
+    z <- grid::unit(numeric(0), "mm")
+    return(list(width = z, height = z))
+  }
+  lbl <- as.character(data$label)
+  key <- paste(is.na(lbl), lbl, data$size, data$family, data$fontface, data$lineheight, sep = "\r")
+  ukey <- unique(key)
+  first_i <- match(ukey, key)
+  grobs <- lapply(first_i, function(i) {
+    label <- if (parse) parse(text = lbl[i]) else data$label[i]
     grid::textGrob(label, gp = grid::gpar(fontsize = data$size[i] * ggplot2::.pt,
       fontfamily = data$family[i], fontface = data$fontface[i],
       lineheight = data$lineheight[i]))
   })
-  list(width = do.call(grid::unit.c, lapply(grobs, grid::grobWidth)),
-    height = do.call(grid::unit.c, lapply(grobs, grid::grobHeight)))
+  u_w <- do.call(grid::unit.c, lapply(grobs, grid::grobWidth))
+  u_h <- do.call(grid::unit.c, lapply(grobs, grid::grobHeight))
+  if (length(ukey) == n) return(list(width = u_w, height = u_h))
+  m <- match(key, ukey)
+  list(width = u_w[m], height = u_h[m])
 }
 
 rotated_text_dimensions <- function(dimensions, angle) {
@@ -483,7 +495,8 @@ reserve_chromosome_axis_space <- function(plot, layers) {
     layout <- ideogram_plot_layout(plot)
   }
   layers <- Filter(function(layer) !is.null(layer$ideogram_axis_spec) ||
-    inherits(layer$stat, "StatTrackAxis") || !is.null(layer$ideogram_track_title), plot$layers)
+    inherits(layer$stat, "StatTrackAxis") || !is.null(layer$ideogram_track_title) ||
+    isTRUE(layer$ideogram_serial_row_label), plot$layers)
   needed <- grid::unit(rep(0, 4), "mm") # top, right, bottom, left
   reserve <- function(current, extent, at) {
     if (any(at)) max(current, extent[at]) else current

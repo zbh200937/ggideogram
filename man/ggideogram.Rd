@@ -16,7 +16,7 @@ ggideogram(
   max_chr_length = NULL,
   row_gap = 6,
   orientation = c("vertical", "horizontal", "circular"),
-  scale_length = c("global", "per_chr"),
+  scale_length = c("global", "per_chr", "per_genome"),
   tracks = NULL,
   order_by = c("input", "genome", "homolog"),
   genome_order = NULL,
@@ -61,7 +61,9 @@ ggideogram(
   layout_aspect = NULL,
   min_gap = 0.2,
   axis_angle = 0,
-  axis_check_overlap = NULL
+  axis_check_overlap = NULL,
+  chr_layout = c("grid", "serial"),
+  row_align = c("left", "center")
 )
 }
 \arguments{
@@ -74,8 +76,11 @@ ggideogram(
 input-ordered layouts with more than three chromosomes; smaller and
 grouped layouts retain their natural arrangement.}
 
-\item{chromosome_width, row_gap, orientation, scale_length, order_by, genome_order, homolog_order, reverse_chr, radius, clockwise}{Passed to the dimensionless
-\code{\link[=ideogram_layout]{ideogram_layout()}} method.}
+\item{chromosome_width, row_gap, orientation, scale_length, order_by, genome_order, homolog_order, reverse_chr, radius, clockwise, chr_layout, row_align}{Passed to the dimensionless
+\code{\link[=ideogram_layout]{ideogram_layout()}} method. Use \code{chr_layout = "serial"} with
+\code{orientation = "horizontal"} to concatenate each genome's chromosomes
+end-to-end across rows for publication macrosynteny figures, optionally
+combining \code{scale_length = "per_genome"} and \code{row_align = "center"}.}
 
 \item{chromosome_gap}{Clear space between adjacent chromosome cells (outside
 any beside tracks, marker lanes, and label bands), in body-width units.

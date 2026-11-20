@@ -130,7 +130,8 @@ ggplot_add.ggideogram_track_scope <- function(object, plot, ...) {
 
 is_body_base_layer <- function(layer) {
   isTRUE(layer$ideogram_base) && is.null(layer$ideogram_name_gap) &&
-    is.null(layer$ideogram_axis_spec) && is.null(layer$ideogram_scope)
+    is.null(layer$ideogram_axis_spec) && is.null(layer$ideogram_scope) &&
+    !isTRUE(layer$ideogram_serial_row_label)
 }
 
 rebuild_ideogram <- function(plot, spec, id = NULL, replace = FALSE) {

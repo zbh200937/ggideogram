@@ -121,24 +121,32 @@ bin_genome <- function(data, karyotype, window = 1e6, value = NULL, FUN = NULL,
   if (!"End" %in% names(data)) count_position <- "start"
   at <- window_position(input$start, input$end, count_position)
   v <- if (is.null(value)) rep(1, nrow(data)) else data[[value]]
+  chr_buckets <- split(seq_len(nrow(data)), input$chr)
+  is_fast_count <- identical(method, "count")
 
   parts <- lapply(seq_len(nrow(k)), function(i) {
     e <- window_edges(k$.end[i] - k$.start[i], window)
     e$lower <- e$lower + k$.start[i]
     e$upper <- e$upper + k$.start[i]
-    keep <- input$chr == k$.chr[i]
+    rows <- chr_buckets[[k$.chr[i]]]
     out <- rep(empty, length(e$upper))
-    if (any(keep)) {
-      bin <- findInterval(at[keep], e$upper, left.open = TRUE) + 1L
-      groups <- split(v[keep], factor(bin, levels = seq_along(e$upper)))
-      occupied <- lengths(groups) > 0L
-      out[occupied] <- vapply(groups[occupied], function(x) {
-        res <- FUN(x, ...)
-        if (length(res) != 1L || (!is.numeric(res) && !is.logical(res))) {
-          stopf("`FUN` must return a single numeric or NA scalar per window.")
-        }
-        as.numeric(res)
-      }, numeric(1))
+    if (length(rows)) {
+      bin <- findInterval(at[rows], e$upper, left.open = TRUE) + 1L
+      if (is_fast_count) {
+        cnt <- tabulate(bin, nbins = length(e$upper))
+        occupied <- cnt > 0L
+        out[occupied] <- as.numeric(cnt[occupied])
+      } else {
+        groups <- split(v[rows], factor(bin, levels = seq_along(e$upper)))
+        occupied <- lengths(groups) > 0L
+        out[occupied] <- vapply(groups[occupied], function(x) {
+          res <- FUN(x, ...)
+          if (length(res) != 1L || (!is.numeric(res) && !is.logical(res))) {
+            stopf("`FUN` must return a single numeric or NA scalar per window.")
+          }
+          as.numeric(res)
+        }, numeric(1))
+      }
     }
     data.frame(Chr = k$.chr[i], Start = e$lower + 1, End = e$upper, Value = out,
                stringsAsFactors = FALSE)

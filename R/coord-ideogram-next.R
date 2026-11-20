@@ -262,12 +262,11 @@ transform_ideogram_track <- function(layout, data) {
         layout, track_id, chr, raw$xmax - shift, rect_ymax,
         check_position = FALSE, clip_position = clip_geometry)
     )
-    x <- do.call(cbind, lapply(corners, `[[`, "x"))
-    y <- do.call(cbind, lapply(corners, `[[`, "y"))
-    data$xmin <- apply(x, 1, min)
-    data$xmax <- apply(x, 1, max)
-    data$ymin <- apply(y, 1, min)
-    data$ymax <- apply(y, 1, max)
+    c1 <- corners[[1L]]; c2 <- corners[[2L]]; c3 <- corners[[3L]]; c4 <- corners[[4L]]
+    data$xmin <- pmin(c1$x, c2$x, c3$x, c4$x)
+    data$xmax <- pmax(c1$x, c2$x, c3$x, c4$x)
+    data$ymin <- pmin(c1$y, c2$y, c3$y, c4$y)
+    data$ymax <- pmax(c1$y, c2$y, c3$y, c4$y)
   }
   data
 }

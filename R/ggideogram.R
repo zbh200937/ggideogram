@@ -12,8 +12,11 @@
 #' @param data A karyotype data frame or an [as_ideogram_data()] object.
 #' @param mapping,centromere,cytoband,cytoband_mapping Passed to
 #'   [as_ideogram_data()] for a data-frame input.
-#' @param chromosome_width,row_gap,orientation,scale_length,order_by,genome_order,homolog_order,reverse_chr,radius,clockwise Passed to the dimensionless
-#'   [ideogram_layout()] method.
+#' @param chromosome_width,row_gap,orientation,scale_length,order_by,genome_order,homolog_order,reverse_chr,radius,clockwise,chr_layout,row_align Passed to the dimensionless
+#'   [ideogram_layout()] method. Use `chr_layout = "serial"` with
+#'   `orientation = "horizontal"` to concatenate each genome's chromosomes
+#'   end-to-end across rows for publication macrosynteny figures, optionally
+#'   combining `scale_length = "per_genome"` and `row_align = "center"`.
 #' @param ncol Chromosomes per linear row. NULL selects compact rows for
 #'   input-ordered layouts with more than three chromosomes; smaller and
 #'   grouped layouts retain their natural arrangement.
@@ -111,7 +114,7 @@ ggideogram <- function(
     max_chr_length = NULL,
     row_gap = 6,
     orientation = c("vertical", "horizontal", "circular"),
-    scale_length = c("global", "per_chr"),
+    scale_length = c("global", "per_chr", "per_genome"),
     tracks = NULL,
     order_by = c("input", "genome", "homolog"),
     genome_order = NULL,
@@ -152,10 +155,13 @@ ggideogram <- function(
     chr = NULL,
     name_align = c("body", "tracks"),
     link_layout = c("auto", "input"), axis_width = 4, layout_aspect = NULL,
-    min_gap = 0.2, axis_angle = 0, axis_check_overlap = NULL) {
+    min_gap = 0.2, axis_angle = 0, axis_check_overlap = NULL,
+    chr_layout = c("grid", "serial"), row_align = c("left", "center")) {
   orientation <- match.arg(orientation)
   scale_length <- match.arg(scale_length)
   order_by <- match.arg(order_by)
+  chr_layout <- match.arg(chr_layout)
+  row_align <- match.arg(row_align)
   name_position <- match.arg(name_position)
   name_align <- match.arg(name_align)
   tracks <- normalise_chr_tracks(tracks)
@@ -228,17 +234,19 @@ ggideogram <- function(
   auto_chr_gap <- is.null(chromosome_gap) ||
     isTRUE(attr(chromosome_gap, "ideogram_auto_gap"))
   resolved_chr_gap <- if (auto_chr_gap) {
-    default_gap <- if (orientation == "vertical" && !identical(axis, FALSE)) 8 else
+    default_gap <- if (identical(chr_layout, "serial")) 1.0 else
+      if (orientation == "vertical" && !identical(axis, FALSE)) 8 else
       if (orientation == "horizontal" && !is.null(semantic$pair_edges)) 9 else 3
     max(c(default_gap, as.numeric(chromosome_gap)))
   } else {
     as.numeric(chromosome_gap)
   }
+  default_max_len <- if (identical(chr_layout, "serial")) 60 else 40
   layout_args <- list(
     karyotype = display, ncol = ncol,
     chromosome_width = chromosome_width,
     chromosome_gap = resolved_chr_gap,
-    max_chr_length = max_chr_length %||% 40,
+    max_chr_length = max_chr_length %||% default_max_len,
     row_gap = row_gap,
     orientation = orientation,
     scale_length = scale_length,
@@ -247,15 +255,16 @@ ggideogram <- function(
     order_by = order_by, genome_order = genome_order,
     homolog_order = homolog_order, reverse_chr = reverse_chr,
     radius = radius, start_angle = start_angle, gap_angle = gap_angle,
-    opening_angle = opening_angle, clockwise = clockwise, min_gap = min_gap
+    opening_angle = opening_angle, clockwise = clockwise, min_gap = min_gap,
+    chr_layout = chr_layout, row_align = row_align
   )
-  layout_for <- function(columns = ncol, length = max_chr_length %||% 40) {
+  layout_for <- function(columns = ncol, length = max_chr_length %||% default_max_len) {
     args <- layout_args
     args$ncol <- columns
     args$max_chr_length <- length
     result <- do.call(ideogram_layout, args)
-    if (orientation != "circular" && !is_microsynteny(result) && result$ncol > 1L &&
-        !identical(axis, FALSE)) {
+    if (orientation != "circular" && !identical(chr_layout, "serial") &&
+        !is_microsynteny(result) && result$ncol > 1L && !identical(axis, FALSE)) {
       chr <- result$chrom
       step <- if (axis_side == "right") 1L else -1L
       facing <- paste(chr$.row, chr$.col + step) %in% paste(chr$.row, chr$.col)
@@ -270,13 +279,14 @@ ggideogram <- function(
     result$data <- semantic
     result$marker_extent <- attr(tracks, "marker_extent")
     result$marker_extent_by_chr <- attr(tracks, "marker_extent_by_chr")
-    result$microsynteny <- is_microsynteny(result)
+    result$microsynteny <- if (identical(chr_layout, "serial")) FALSE else is_microsynteny(result)
     if (result$microsynteny) result <- pack_microsynteny(result)
     result
   }
   layout <- layout_for()
   target <- layout_aspect %||% 1
-  if (orientation != "circular" && is.null(ncol) && order_by == "input" && nrow(layout$chrom) > 3L) {
+  if (orientation != "circular" && !identical(chr_layout, "serial") &&
+      is.null(ncol) && order_by == "input" && nrow(layout$chrom) > 3L) {
     columns <- unique(ceiling(nrow(layout$chrom) / seq_len(nrow(layout$chrom))))
     candidates <- lapply(columns, layout_for)
     score <- vapply(candidates, function(candidate) {
@@ -293,10 +303,17 @@ ggideogram <- function(
     cytoband_bleach = cytoband_bleach, alpha = alpha, linetype = linetype
   )
   if (isTRUE(show_names)) {
+    eff_name_size <- if (is_serial_layout(layout) && !is.null(layout$serial$row_labels) && missing(name_size)) {
+      min(name_size, 2.5)
+    } else name_size
     layers <- c(layers, list(chromosome_name_layer(
-      layout, size = name_size, gap = name_gap,
+      layout, size = eff_name_size, gap = name_gap,
       family = base_family, colour = name_colour, position = name_position,
       align = name_align)))
+    row_lbl_layer <- serial_row_name_layer(
+      layout, size = name_size, gap = name_gap,
+      family = base_family, colour = name_colour)
+    if (!is.null(row_lbl_layer)) layers <- c(layers, list(row_lbl_layer))
   }
   axis_layers <- chromosome_axis_layers(
     layout, chr = axis, side = if (axis_side == "auto" && !layout$microsynteny) {

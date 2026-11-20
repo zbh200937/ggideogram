@@ -17,7 +17,8 @@ read_chr_links(
   query_genome = NULL,
   target_assembly = NULL,
   query_assembly = NULL,
-  karyotype = NULL
+  karyotype = NULL,
+  unknown_chr = c("error", "drop")
 )
 }
 \arguments{
@@ -51,6 +52,11 @@ applied to both \code{Chr1} and \code{Chr2} before optional \code{chr_key()} con
 
 \item{karyotype}{Optional karyotype or \code{ideogram_data} used to validate
 both endpoint chromosomes and interval bounds.}
+
+\item{unknown_chr}{Policy when link records reference chromosomes absent from
+\code{karyotype} (or genes absent from \code{genes} in \code{"mcscanx"}): \code{"error"}
+(default) rejects unknown identifiers; \code{"drop"} explicitly removes those
+records while still validating bounds on retained chromosomes.}
 }
 \value{
 A data frame with \code{Chr1}, \code{Start1}, \code{End1}, \code{Chr2}, \code{Start2}, \code{End2},
@@ -75,5 +81,5 @@ to summarize each collinear block into one ribbon interval.
 }
 }
 \seealso{
-\code{\link[=geom_chrlink]{geom_chrlink()}}, \code{\link[=chr_key]{chr_key()}}, \code{\link[=read_chr_features]{read_chr_features()}}
+\code{\link[=merge_chr_links]{merge_chr_links()}}, \code{\link[=geom_chrlink]{geom_chrlink()}}, \code{\link[=chr_key]{chr_key()}}, \code{\link[=read_chr_features]{read_chr_features()}}
 }

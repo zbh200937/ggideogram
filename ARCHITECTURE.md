@@ -2,8 +2,8 @@
 
 > 状态：**生效中的规范性设计（normative）**
 > 适用范围：下一代 ggideogram 的全部代码、测试、文档和示例
-> 最近更新：2026-11-18
-> 当前阶段：M10–M22 生效中；解耦线性标签层级与轨道标题净空，支持竖排/眉题轨道标题与基因模型紧凑泳道就近标注
+> 最近更新：2026-11-20
+> 当前阶段：M10–M23 生效中；高通量大数据共线性/注释解析与渲染加速、多基因组串联宏观共线性（`chr_layout = "serial"` + `scale_length = "per_genome"`）、三次 S 型贝塞尔丝带与共线性碎块归并（`merge_chr_links()`）
 
 本文件是本项目重构的单一设计来源。后续开发对话在修改代码前必须完整阅读本文件；
 实现与本文件冲突时，以本文件为准。只有用户明确改变设计目标时，才能先修改本文件，
@@ -150,8 +150,8 @@ flowchart LR
   M17 中用户显式选择 reverse_chr 的染色体可反向显示，终点位于对齐侧；名称仍位于
   版面对齐侧，刻度、注释和双端连接继续使用原始 bp。默认起点对齐保持不变。
   M19 环形布局按扇区的起始角排列，名称位于各扇区中点；bp 对应共享中心半径上的弧长。
-- `scale_length = "per_chr"` 必须是显式选择，并通过轴或文档明确说明
-  染色体间长度不再可比。
+- `scale_length = "per_chr"` 或 `scale_length = "per_genome"` 必须是显式选择，并通过轴、
+  元数据（`length_comparable = FALSE`）或文档明确说明染色体间或基因组间长度不再直接可比。
 - 数据过滤、窗口汇总、归一化、截断和数值尺度必须发生在可追踪的数据/Stat 阶段，
   不能隐藏在 Geom 的 `draw_panel()` 中。
 - 超出染色体范围的数据默认报错或给出明确策略；不得静默移动到边界。
@@ -1445,3 +1445,46 @@ PAF/SyRI/MCScanX `read_chr_links()` 与 `bedGraph` 读取通过手算坐标与�
 验收：无起始轴的轨道标题与染色体主名不被相邻高宽离散/基因轨道外推；`angle = 90` 竖排标题与 `position = "top"`
 眉题的物理边距、旋转字框与重建更新一致；极端窄视口下法向碰撞仍自动避让无压字；多基因局部窗口打包泳道数显著压缩且
 基因名就近无重叠；重绘实战 Vignette 与画廊示例并人工核验版面紧凑度与视觉层级，通过零设备检查、完整测试与双版本 `R CMD check`。
+
+### M23：高通量大数据引擎、串联宏观共线性与出版级丝带美学
+
+面向真实全基因组/泛基因组大数据场景（百万行 SyRI/PAF/GFF3/GTF、上万条共线性带、十万级轨道分箱及跨物种长度悬殊），
+在不弱化原生 ggplot2 语法、科学坐标与物理尺寸不变量的前提下，消除解析/投影/渲染瓶颈并补齐多基因组串联宏观共线性版式：
+
+1. **多基因组串联宏观共线性布局（`chr_layout = "serial"`）。**
+   - `ggideogram()` 与 `ideogram_layout()` 新增 `chr_layout = c("grid", "serial")`（默认 `"grid"` 保持既有网格排布）
+     与 `row_align = c("left", "center")`（默认 `"left"`，`"center"` 使各行沿长轴居中对称）。
+   - 在 `chr_layout = "serial"` 下，每行（单基因组全部染色体，或 `order_by = "genome"` 时每个基因组/assembly 占一行）内的
+     染色体沿长轴端到端串联排列，组内间距由 `chromosome_gap` 控制，行间由 `row_gap` 留出共线性连接通道；
+     各条染色体保持真实 bp 投影与可逆投影，短染色体圆帽半径自动以 `min(width / 2 * cap_ratio, display_length / 2)` 为上限，
+     避免极短染色体/scaffold 报错或圆帽互穿。
+   - `scale_length` 新增显式 `"per_genome"` 模式：同一基因组内保持统一 bp 比例，各基因组按自身总长归一化至相同跨度，
+     `length_comparable` 置为 `FALSE`，解决小麦/玉米/水稻/拟南芥等跨物种大小悬殊的宏观共线性排布。
+   - 多基因组串联布局默认在行起始端绘制基因组标签，并在各染色体外侧简洁标注原始染色体名（`.chr_name`），
+     顶行标注在上方、底行标注在下方，减少标签重复与重叠。
+2. **三次 S 型贝塞尔共线性丝带与环形零冗余渲染。**
+   - `geom_chrlink()` 新增 `curve_style = c("auto", "straight", "quadratic", "bezier")`：
+     `"bezier"` 使用两端垂直切出的三次 S 型贝塞尔曲线，正反链区间带在染色体边界处无斜切穿刺；
+     `"auto"` 在 `chr_layout = "serial"` 跨行连接中默认启用 `"bezier"`，在既有 `"grid"` 布局中维持原有直边/同染色体弧线语义。
+   - 环形 `geom_chrlink()` 已预采样至笛卡尔坐标（`ideogram_cartesian = TRUE`）的原生 `GeomPolygon` / `GeomSegment`
+     匿名子类在 `draw_panel()` 阶段绕过冗余的非线性 `coord_munch()`，保持 `class(geom)[1]` 与全部原生美学/图例语义不变；
+     大规模连接（`n > 200`）仅复制绘图必需源字段与映射列，未显式指定 `curve_points` 时自动按弧宽简化端点圆弧采样。
+3. **共线性碎块归并与未知染色体显式过滤策略。**
+   - 新增导出函数 `merge_chr_links(data, max_gap = 1e5, min_length = 0, min_blocks = 1L, group = NULL, ...)`，
+     向量化归并同一染色体对与同向单调相邻碎片为干净共线性区块带，输出 `N`、`Aligned_bp1`、`Aligned_bp2` 等统计字段。
+   - `read_chr_links()`、`read_chr_features()`、`as_chr_features()` 与 `geom_chrlink()` 新增显式策略参数
+     `unknown_chr = c("error", "drop")`（默认 `"error"` 保持严格校验，`"drop"` 显式滤除不在源核型中的未挂载 scaffold/未知染色体）。
+   - 环形布局在 `gap_angle = NULL` 且染色体数 `> 90` 时自动按比例收缩默认扇区间隙（总间隙上限为可用圆周的 25%），
+     消除 `>= 171` 条染色体/scaffold 时的硬报错。
+4. **全链路高通量解析与投影向量化。**
+   - `read_chr_links()` 的 SyRI 解析在切分构表前按目标 `types` 预筛；PAF 剥离第 12 列后超长标签并直接用 `scan()` 向量化解析；
+     MCScanX 块折叠改用向量化分组聚合。
+   - `read_chr_features()` 的 GFF3/GTF 属性提取改用向量化 PCRE 正则，仅对含 `%xx` 编码或转义引号的极少数行回退慢路径；
+     `resolve_gene_models()` 跳过无逗号单父级行的 `strsplit`。
+   - `transform_ideogram_track()` 矩形边界改用 `pmin()`/`pmax()` 替代逐行 `apply()`；`bin_genome()` 默认计数走 `tabulate()`，
+     分组区间统计预先按 `(group, chr)` 分桶并用向量化 `cummax()` 计算并集覆盖；环形文本引导线与文本尺寸测量向量化/去重。
+
+验收：10,000 条环形 ribbon 与点弧 `ggplotGrob()`/`png` 均降至亚秒～1 秒级（较 M22 提速 >10–50 倍，内存显著下降）；
+100 万行 SyRI 与 15 万行 PAF、6 万行 GFF3 与 1 万行 GTF 解析提速 10–100 倍；`merge_chr_links()` 通过手算归并校验；
+`unknown_chr = "drop"`、200 条染色体环形布局、跨物种 `scale_length = "per_genome"` 与 `chr_layout = "serial"` + S 型三次贝塞尔共线性图
+通过功能测试与真实多物种宏观共线性/泛基因组/环形大数据出图人工目视验收；全套 `testthat` 测试与 `R CMD check --no-manual` 全部通过。

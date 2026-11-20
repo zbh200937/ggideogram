@@ -1,3 +1,34 @@
+# ggideogram 0.6.2
+
+- Added `chr_layout = c("grid", "serial")` and `row_align = c("left", "center")`
+  to `ggideogram()` and `ideogram_layout()` for end-to-end single-genome tracks
+  (e.g., GWAS Manhattan plots) and multi-species macrosynteny stacks, with
+  automatic bold genome row titles, uncluttered exterior/inside-arm chromosome
+  labels, and adaptive end-cap clamping for short chromosomes/scaffolds.
+- Added `scale_length = "per_genome"` (for both linear serial and circular
+  layouts) so genomes with orders-of-magnitude size contrast share equal total
+  display span while preserving uniform bp scaling within each genome.
+- Added `curve_style = c("auto", "straight", "quadratic", "bezier")` to
+  `geom_chrlink()`, providing perpendicular-exit cubic S-curve Bezier ribbons
+  (enabled automatically for cross-row links in `chr_layout = "serial"`).
+- Added `merge_chr_links()` to chain dense co-directional and inverted pairwise
+  alignment fragments (PAF/SyRI) into contiguous synteny blocks with union
+  aligned base-pair summaries.
+- Added explicit `unknown_chr = c("error", "drop")` to `read_chr_links()`,
+  `read_chr_features()`, `as_chr_features()`, and `geom_chrlink()` to filter
+  unplaced scaffolds cleanly when requested while preserving strict bounds
+  checking on retained chromosomes.
+- Automatically scaled down default circular sector gaps (`gap_angle = NULL`)
+  when chromosome counts exceed 90 (capping total inter-sector gaps at 25% of
+  available ring span), eliminating failures on assemblies with 171+ scaffolds.
+- Accelerated high-throughput parsing, binning and rendering: Cartesian fast
+  draw for pre-sampled circular `geom_chrlink()` layers (10–130x faster grob/PNG
+  rendering with ~10x lower memory on 10k links), pre-filtered SyRI / C-level
+  `scan()` PAF / vectorized MCScanX block collapsing, PCRE-vectorized GFF3/GTF
+  attribute parsing (40–70x faster), vectorized `pmin`/`pmax` track rectangle
+  projection, `tabulate()` + pre-bucketed `bin_genome()`, vectorized circular
+  label leaders, and sweep-line conflict pruning in `geom_text_repel`.
+
 # ggideogram 0.6.1
 
 - Decoupled linear chromosome primary names and track titles from cross-track

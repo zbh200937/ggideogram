@@ -289,8 +289,13 @@ locus_text_component <- function(mapping, data, geom, track, side, gap,
 #'   layouts and attaches to the innermost track boundary in circular layouts.
 #'   `gap = NULL` uses automatic clearance. A number sets an offset from the
 #'   body edge or, for circular auto sides, from that inner boundary. Circular
-#'   endpoint offsets must leave a positive radius. Also accepts bend, curvature, curve_points,
-#'   orientation for intervals, and native colour/fill/alpha/linewidth/arrow.
+#'   endpoint offsets must leave a positive radius. Also accepts `bend`,
+#'   `curvature`, `curve_points` (`NULL` adapts automatically for large link
+#'   tables), `curve_style` (`"auto"`, `"straight"`, `"quadratic"`, or cubic
+#'   S-curve `"bezier"` — automatically used for cross-row ribbons in
+#'   `chr_layout = "serial"`), `unknown_chr` (`"error"` or `"drop"` to filter
+#'   unplaced scaffolds absent from the karyotype), `orientation` for intervals,
+#'   and native colour/fill/alpha/linewidth/arrow.
 #' @return An additive native connection or band component.
 #' @export
 geom_chrlink <- function(mapping = NULL, data = NULL,

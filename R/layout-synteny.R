@@ -35,11 +35,27 @@ microsynteny_side <- function(layout, chr, kind = "locus") {
 
 register_microsynteny_pairs <- function(plot, component) {
   layout <- ideogram_plot_layout(plot)
-  if (layout$orientation != "horizontal" || layout$nrow != 1L ||
+  if (is_serial_layout(layout) || layout$orientation != "horizontal" || layout$nrow != 1L ||
       nrow(layout$chrom) < 2L) return(plot)
-  pairs <- prepare_chr_pairs(resolve_chr_pair_nodes(component, layout), layout)
+  comp <- resolve_chr_pair_nodes(component, layout)
+  d <- comp$data
+  if (!is.data.frame(d) || !nrow(d)) return(plot)
+  # Fast chromosome-pair discovery before full coordinate validation/clipping
+  f <- mapped_fields(d, comp$mapping, c("chr1", "chr2"), what = "mapping")
+  a <- validate_chr(f$chr1, "chr1")
+  b <- validate_chr(f$chr2, "chr2")
+  visible_chr <- layout$chrom$.chr
+  keep <- (a %in% visible_chr) & (b %in% visible_chr) & (a != b)
+  if (!any(keep)) return(plot)
+  edges <- unique(data.frame(a = pmin(a[keep], b[keep]), b = pmax(a[keep], b[keep]),
+    stringsAsFactors = FALSE))
+  edges <- unique(rbind(layout$data$pair_edges, edges))
+  rownames(edges) <- NULL
+  if (!nrow(edges) || identical(edges, layout$data$pair_edges)) return(plot)
+  # Confirm at least one cross-chromosome link survives source & view bounds
+  pairs <- prepare_chr_pairs(comp, layout)
   a <- pairs$.pair_chr1; b <- pairs$.pair_chr2
-  edges <- unique(data.frame(a = pmin(a, b), b = pmax(a, b)))
+  edges <- unique(data.frame(a = pmin(a, b), b = pmax(a, b), stringsAsFactors = FALSE))
   edges <- edges[edges$a != edges$b, , drop = FALSE]
   edges <- unique(rbind(layout$data$pair_edges, edges))
   rownames(edges) <- NULL

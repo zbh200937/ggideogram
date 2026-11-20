@@ -269,10 +269,12 @@ GeomIdeogramTile <- ggplot2::ggproto(
 
 mask_chr_geometry <- function(data, panel_params, coord, draw) {
   layout <- coord$layout
+  adaptive <- is_serial_layout(layout)
   chromosome <- as.character(data$ideogram_chr)
   children <- lapply(split(seq_len(nrow(data)), chromosome), function(rows) {
     g <- layout$chrom[layout$index[[chromosome[rows[1]]]], , drop = FALSE]
-    silhouette <- chromosome_section_polygon(g, layout$chromosome_width, layout$curve_points)
+    silhouette <- chromosome_section_polygon(g, layout$chromosome_width, layout$curve_points,
+      adaptive_cap = adaptive)
     silhouette$ideogram_chr <- g$.chr
     silhouette$group <- 1L
     silhouette$fill <- "white"

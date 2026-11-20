@@ -33,7 +33,19 @@ circular_ideogram_layout <- function(data, k, tracks, track_geometry,
   } else start_angle %% 360
   available <- (360 - sum(gap)) * pi / 180
   length <- k$.end - k$.start
-  sweep <- available * if (scale_length == "global") length / sum(length) else rep(1 / n, n)
+  if (scale_length == "global") {
+    sweep <- available * length / sum(length)
+    units_per_bp <- rep(radius * available / sum(length), n)
+  } else if (scale_length == "per_genome") {
+    g_key <- if (!is.null(k$.genome)) chr_key(k$.genome, "group", k$.assembly) else rep("default", n)
+    n_g <- length(unique(g_key))
+    g_sum <- stats::ave(length, g_key, FUN = sum)
+    sweep <- (available / n_g) * (length / g_sum)
+    units_per_bp <- radius * sweep / length
+  } else {
+    sweep <- rep(available / n, n)
+    units_per_bp <- radius * sweep / length
+  }
   arc_start <- radius * c(0, utils::head(cumsum(sweep + gap * pi / 180), -1L))
   arc_end <- arc_start + radius * sweep
   reverse_chr <- validate_chr(reverse_chr, "reverse_chr")
@@ -44,7 +56,7 @@ circular_ideogram_layout <- function(data, k, tracks, track_geometry,
     .chr = k$.chr, .start = k$.start, .end = k$.end,
     .centromere_start = k$.centromere_start, .centromere_end = k$.centromere_end,
     .length = length, .display_length = radius * sweep,
-    .units_per_bp = if (scale_length == "global") rep(radius * available / sum(length), n) else radius * sweep / length,
+    .units_per_bp = units_per_bp,
     .row = 0L, .col = seq_len(n) - 1L,
     .axis_start_x = ifelse(reverse, arc_end, arc_start), .axis_start_y = radius,
     .axis_end_x = ifelse(reverse, arc_start, arc_end), .axis_end_y = radius,
@@ -98,7 +110,21 @@ circular_ideogram_layout <- function(data, k, tracks, track_geometry,
 }
 
 circular_sector_gaps <- function(gap, chr, source_chr, opening = NULL) {
-  if (is.null(gap)) gap <- stats::setNames(c(rep(2, length(chr) - 1L), 20), chr)
+  n_chr <- length(chr)
+  if (is.null(gap)) {
+    open_ang <- if (is.null(opening)) 20 else opening
+    if (!is.null(opening)) check_nonnegative_layout(opening, "opening_angle")
+    if (n_chr <= 1L) {
+      gap <- stats::setNames(open_ang, chr)
+    } else if (n_chr <= 90L && 2 * (n_chr - 1L) + open_ang < 360) {
+      gap <- stats::setNames(c(rep(2, n_chr - 1L), open_ang), chr)
+    } else {
+      # Shrink default inter-sector gaps smoothly when laying out >90 chromosomes/scaffolds
+      # so total gaps remain <= 25% of the remaining ring.
+      step <- min(2, max(0, (360 - open_ang) * 0.25 / (n_chr - 1L)))
+      gap <- stats::setNames(c(rep(step, n_chr - 1L), open_ang), chr)
+    }
+  }
   if (!is.numeric(gap) || !length(gap) || anyNA(gap) || any(!is.finite(gap)) || any(gap < 0)) {
     stopf("`gap_angle` must contain finite non-negative angles.")
   }

@@ -19,6 +19,10 @@
 #'   for a matched chromosome in `karyotype` is an error. Mapped assembly
 #'   metadata in an `ideogram_data` object is used; unknown versions are not
 #'   inferred.
+#' @param unknown_chr Policy when features reference chromosomes absent from
+#'   `karyotype`: `"error"` (default) rejects unknown chromosomes; `"drop"`
+#'   explicitly removes those records while validating bounds on retained
+#'   chromosomes.
 #'
 #' @return A data frame with `Chr`, `Start`, `End` and annotation columns
 #'   (`Value` and `Mid` for `bedgraph`). Attributes `source_coordinates` and
@@ -26,8 +30,10 @@
 #' @seealso [resolve_gene_models()], [read_chr_links()], [as_chr_features()], [read_karyotype()]
 #' @export
 read_chr_features <- function(file, format = c("auto", "bed", "bedgraph", "gff3", "gtf"),
-                              karyotype = NULL, chr_map = NULL, assembly = NULL) {
+                              karyotype = NULL, chr_map = NULL, assembly = NULL,
+                              unknown_chr = c("error", "drop")) {
   format <- match.arg(format)
+  unknown_chr <- match.arg(unknown_chr)
   if (!is.character(file) || length(file) != 1L || is.na(file)) {
     stopf("`file` must be one local annotation file path.")
   }
@@ -43,41 +49,63 @@ read_chr_features <- function(file, format = c("auto", "bed", "bedgraph", "gff3"
   lines <- readLines(con, warn = FALSE)
   fasta <- match("##FASTA", trimws(lines))
   if (!is.na(fasta)) lines <- utils::head(lines, fasta - 1L)
-  lines <- lines[nzchar(trimws(lines)) & !grepl("^\\s*#", lines)]
+  lines <- strip_comment_lines(lines)
   if (format %in% c("bed", "bedgraph")) {
-    is_bed_coord <- grepl("^[^\t]+\t[0-9]+\t[0-9]+(\t|$)", lines)
-    lines <- lines[is_bed_coord | !grepl("^(track|browser)($|[ \t])", lines)]
+    is_bed_coord <- grepl("^[^\t]+\t[0-9]+\t[0-9]+(\t|$)", lines, perl = TRUE)
+    lines <- lines[is_bed_coord | !grepl("^(track|browser)($|[ \t])", lines, perl = TRUE)]
   }
   if (!length(lines)) stopf("The annotation file contains no features.")
-  input <- utils::read.table(text = lines, sep = "\t", header = FALSE,
-    quote = "", comment.char = "", colClasses = "character", na.strings = NULL)
-  if (format == "bed") {
-    if (!ncol(input) %in% 3:6) stopf("BED input must have 3 to 6 columns.")
-    names(input) <- c("Chr", "Start", "End", "Name", "Score", "Strand")[seq_len(ncol(input))]
-    system <- "0-based-half-open"
-  } else if (format == "bedgraph") {
-    if (ncol(input) != 4L) stopf("bedGraph input must have 4 columns (chrom, start, end, value).")
-    names(input) <- c("Chr", "Start", "End", "Value")
-    raw_val <- suppressWarnings(as.numeric(input$Value))
+
+  if (format == "bedgraph") {
+    if (!all(grepl("^(?:[^\t]*\t){3}[^\t]*$", lines, perl = TRUE))) {
+      stopf("bedGraph input must have 4 columns (chrom, start, end, value).")
+    }
+    cols <- scan(text = lines, what = rep(list(character(0)), 4L), sep = "\t",
+      quote = "", comment.char = "", na.strings = character(0), quiet = TRUE)
+    raw_val <- suppressWarnings(as.numeric(cols[[4L]]))
     if (anyNA(raw_val) || any(!is.finite(raw_val))) {
       stopf("bedGraph `Value` column must contain finite numeric values.")
     }
-    input$Value <- raw_val
+    input <- data.frame(
+      Chr = cols[[1L]],
+      Start = suppressWarnings(as.numeric(cols[[2L]])),
+      End = suppressWarnings(as.numeric(cols[[3L]])),
+      Value = raw_val,
+      stringsAsFactors = FALSE
+    )
     system <- "0-based-half-open"
-  } else {
-    if (ncol(input) != 9L) stopf("GFF3/GTF input must have 9 columns.")
-    names(input) <- c("Chr", "Source", "Type", "Start", "End", "Score", "Strand", "Phase", "Attributes")
+  } else if (format %in% c("gff3", "gtf")) {
+    if (!all(grepl("^(?:[^\t]*\t){8}[^\t]*$", lines, perl = TRUE))) {
+      stopf("GFF3/GTF input must have 9 columns.")
+    }
+    cols <- scan(text = lines, what = rep(list(character(0)), 9L), sep = "\t",
+      quote = "", comment.char = "", na.strings = character(0), quiet = TRUE)
+    input <- data.frame(
+      Chr = cols[[1L]], Source = cols[[2L]], Type = cols[[3L]],
+      Start = suppressWarnings(as.numeric(cols[[4L]])),
+      End = suppressWarnings(as.numeric(cols[[5L]])),
+      Score = cols[[6L]], Strand = cols[[7L]], Phase = cols[[8L]],
+      Attributes = cols[[9L]],
+      stringsAsFactors = FALSE
+    )
     keys <- if (format == "gff3") c("ID", "Parent", "Name") else c("gene_id", "transcript_id", "gene_name")
     for (key in keys) input[[key]] <- feature_attribute(input$Attributes, key, format)
     system <- "1-based-closed"
+  } else {
+    input <- utils::read.table(text = lines, sep = "\t", header = FALSE,
+      quote = "", comment.char = "", colClasses = "character", na.strings = NULL)
+    if (!ncol(input) %in% 3:6) stopf("BED input must have 3 to 6 columns.")
+    names(input) <- c("Chr", "Start", "End", "Name", "Score", "Strand")[seq_len(ncol(input))]
+    input$Start <- suppressWarnings(as.numeric(input$Start))
+    input$End <- suppressWarnings(as.numeric(input$End))
+    system <- "0-based-half-open"
   }
   if ("Strand" %in% names(input) && any(!input$Strand %in% c("+", "-", ".", "*", "?"))) {
     stopf("Feature `Strand` must be `+`, `-`, `.`, `*`, or `?`.")
   }
-  input$Start <- suppressWarnings(as.numeric(input$Start))
-  input$End <- suppressWarnings(as.numeric(input$End))
   result <- as_chr_features(input, coordinate_system = system, karyotype = karyotype,
-                            chr_map = chr_map, assembly = assembly)
+                            chr_map = chr_map, assembly = assembly,
+                            unknown_chr = unknown_chr)
   if (format == "bedgraph") result$Mid <- (result$Start - 1 + result$End) / 2
   result
 }
@@ -139,7 +167,7 @@ unquote_gtf_value <- function(x) {
   }, character(1), USE.NAMES = FALSE)
 }
 
-feature_attribute <- function(attributes, key, format) {
+feature_attribute_slow <- function(attributes, key, format) {
   vapply(attributes, function(value) {
     fields <- if (format == "gtf") {
       split_gtf_attributes(value)
@@ -151,6 +179,71 @@ feature_attribute <- function(attributes, key, format) {
     result <- if (format == "gff3") decode_gff3_percent(result) else unquote_gtf_value(result)
     paste(result, collapse = ",")
   }, character(1), USE.NAMES = FALSE)
+}
+
+feature_attribute <- function(attributes, key, format) {
+  n <- length(attributes)
+  if (!n) return(character(0))
+  out <- rep(NA_character_, n)
+
+  if (format == "gff3") {
+    pat_hit <- paste0("(?:^|;)\\s*", key, "=")
+    hit <- grepl(pat_hit, attributes, perl = TRUE)
+    if (!any(hit)) return(out)
+    sub_v <- attributes[hit]
+    # Fast vectorized extraction for single-key rows; fall back only on rare duplicates.
+    dup_pat <- paste0("(?:^|;)\\s*", key, "=.*?;\\s*", key, "=")
+    is_dup <- grepl(dup_pat, sub_v, perl = TRUE)
+    vals <- character(length(sub_v))
+    if (any(!is_dup)) {
+      simple <- sub_v[!is_dup]
+      v <- trimws(sub(paste0("^.*?(?:^|;)\\s*", key, "=([^;]*).*$"), "\\1", simple, perl = TRUE))
+      has_pct <- grepl("%[0-9A-Fa-f]{2}", v, perl = TRUE)
+      if (any(has_pct)) v[has_pct] <- decode_gff3_percent(v[has_pct])
+      vals[!is_dup] <- v
+    }
+    if (any(is_dup)) {
+      vals[is_dup] <- feature_attribute_slow(sub_v[is_dup], key, "gff3")
+    }
+    out[hit] <- vals
+    return(out)
+  }
+
+  # GTF branch: vectorized PCRE extraction on standard lines; fall back only
+  # when a line contains escaped quotes, quoted semicolons, or duplicate keys.
+  has_key <- grepl(key, attributes, fixed = TRUE)
+  if (!any(has_key)) return(out)
+  sub_v <- attributes[has_key]
+  pat_simple <- paste0("(?:^|;)\\s*", key, "\\s+(?:\"([^\"]*)\"|([^;\\s]+))")
+  # A line is complex only if it contains escaped quotes or a quoted value containing `;`.
+  stripped_q <- gsub("\"[^\";\\\\]*\"", "", sub_v, perl = TRUE)
+  is_complex <- grepl("\"", stripped_q, fixed = TRUE)
+  dup_pat <- paste0("(?:^|;)\\s*", key, "\\s+.*?;\\s*", key, "\\s+")
+  vals <- rep(NA_character_, length(sub_v))
+  simple_idx <- which(!is_complex)
+  if (length(simple_idx)) {
+    sv <- sub_v[simple_idx]
+    matched <- grepl(pat_simple, sv, perl = TRUE)
+    if (any(matched)) {
+      m_idx <- simple_idx[matched]
+      mv <- sv[matched]
+      is_dup <- grepl(dup_pat, mv, perl = TRUE)
+      if (any(!is_dup)) {
+        vals[m_idx[!is_dup]] <- sub(
+          paste0("^.*?(?:^|;)\\s*", key, "\\s+(?:\"([^\"]*)\"|([^;\\s]+)).*$"),
+          "\\1\\2", mv[!is_dup], perl = TRUE
+        )
+      }
+      if (any(is_dup)) {
+        vals[m_idx[is_dup]] <- feature_attribute_slow(mv[is_dup], key, "gtf")
+      }
+    }
+  }
+  if (any(is_complex)) {
+    vals[is_complex] <- feature_attribute_slow(sub_v[is_complex], key, "gtf")
+  }
+  out[has_key] <- vals
+  out
 }
 
 #' Convert an annotation table or GRanges to chromosome features
@@ -173,9 +266,11 @@ as_chr_features <- function(x, ...) UseMethod("as_chr_features")
 as_chr_features.data.frame <- function(x,
     mapping = c(chr = "Chr", start = "Start", end = "End"),
     coordinate_system = c("1-based-closed", "0-based-half-open"),
-    karyotype = NULL, chr_map = NULL, assembly = NULL, ...) {
+    karyotype = NULL, chr_map = NULL, assembly = NULL,
+    unknown_chr = c("error", "drop"), ...) {
   check_unused_args(...)
   coordinate_system <- match.arg(coordinate_system)
+  unknown_chr <- match.arg(unknown_chr)
   if (!is.character(mapping) || !setequal(names(mapping), c("chr", "start", "end")) ||
       length(mapping) != 3L || anyNA(mapping) || !all(mapping %in% names(x))) {
     stopf("`mapping` must map chr, start and end to existing columns.")
@@ -205,9 +300,16 @@ as_chr_features.data.frame <- function(x,
   if (!is.null(karyotype)) {
     k <- as_ideogram_data(karyotype)$karyotype
     index <- match(result$Chr, k$.chr)
-    if (anyNA(index)) stopf("Unknown annotation chromosomes: %s.",
-                            format_chr_rows(unique(result$Chr[is.na(index)])))
-    if (any(result$Start - 1 < k$.start[index] | result$End > k$.end[index])) {
+    if (identical(unknown_chr, "drop")) {
+      keep <- !is.na(index)
+      result <- result[keep, , drop = FALSE]
+      index <- index[keep]
+      rownames(result) <- NULL
+    } else if (anyNA(index)) {
+      stopf("Unknown annotation chromosomes: %s.",
+            format_chr_rows(unique(result$Chr[is.na(index)])))
+    }
+    if (nrow(result) && any(result$Start - 1 < k$.start[index] | result$End > k$.end[index])) {
       stopf("Annotation intervals are outside their chromosome bounds.")
     }
     known <- if (".assembly" %in% names(k)) {
@@ -227,8 +329,10 @@ as_chr_features.data.frame <- function(x,
 #' @rdname as_chr_features
 #' @export
 as_chr_features.GRanges <- function(x, karyotype = NULL, chr_map = NULL,
-                                    assembly = NULL, ...) {
+                                    assembly = NULL,
+                                    unknown_chr = c("error", "drop"), ...) {
   check_unused_args(...)
+  unknown_chr <- match.arg(unknown_chr)
   if (!requireNamespace("GenomicRanges", quietly = TRUE)) {
     stopf("Install the optional Bioconductor package `GenomicRanges` to use GRanges inputs.")
   }
@@ -241,7 +345,8 @@ as_chr_features.GRanges <- function(x, karyotype = NULL, chr_map = NULL,
   assembly <- assembly %||% if (length(known)) known else NULL
   result <- as_chr_features(as.data.frame(x),
     mapping = c(chr = "seqnames", start = "start", end = "end"),
-    karyotype = karyotype, chr_map = chr_map, assembly = assembly)
+    karyotype = karyotype, chr_map = chr_map, assembly = assembly,
+    unknown_chr = unknown_chr)
   result
 }
 
@@ -319,10 +424,10 @@ resolve_gene_models <- function(
   has_gtf <- any(c("gene_id", "transcript_id") %in% names(features))
   if (!has_gff3 && !has_gtf && "Attributes" %in% names(features)) {
     probe <- stats::na.omit(features$Attributes)
-    if (length(probe) && any(grepl("(^|;)\\s*(ID|Parent)=", probe))) {
+    if (length(probe) && any(grepl("(^|;)\\s*(ID|Parent)=", probe, perl = TRUE))) {
       for (k in c("ID", "Parent", "Name")) features[[k]] <- feature_attribute(features$Attributes, k, "gff3")
       has_gff3 <- TRUE
-    } else if (length(probe) && any(grepl("(^|;)\\s*(gene_id|transcript_id)\\s+", probe))) {
+    } else if (length(probe) && any(grepl("(^|;)\\s*(gene_id|transcript_id)\\s+", probe, perl = TRUE))) {
       for (k in c("gene_id", "transcript_id", "gene_name")) features[[k]] <- feature_attribute(features$Attributes, k, "gtf")
       has_gtf <- TRUE
     }
@@ -334,7 +439,7 @@ resolve_gene_models <- function(
   clean_id <- function(x) {
     x <- as.character(x)
     if (isTRUE(strip_prefix)) {
-      x <- sub("^(gene|transcript|mRNA|RNA|ncRNA|CDS|exon):", "", x)
+      x <- sub("^(gene|transcript|mRNA|RNA|ncRNA|CDS|exon):", "", x, perl = TRUE)
     }
     x
   }
@@ -355,12 +460,34 @@ resolve_gene_models <- function(
     return(out)
   }
 
-  split_csv <- function(x) {
-    lapply(ifelse(is.na(x), "", as.character(x)), function(s) {
-      if (!nzchar(s)) return(character(0))
-      toks <- trimws(strsplit(s, ",", fixed = TRUE)[[1]])
-      toks[nzchar(toks)]
+  # Vectorized CSV expansion: only call strsplit on rows actually containing `,`.
+  expand_csv <- function(x) {
+    s <- ifelse(is.na(x), "", as.character(x))
+    n <- length(s)
+    has_comma <- grepl(",", s, fixed = TRUE)
+    if (!any(has_comma)) {
+      keep <- nzchar(s)
+      return(list(row_idx = which(keep), tokens = trimws(s[keep])))
+    }
+    counts <- integer(n)
+    non_empty <- nzchar(s)
+    single <- non_empty & !has_comma
+    counts[single] <- 1L
+    multi_idx <- which(non_empty & has_comma)
+    multi_toks <- lapply(strsplit(s[multi_idx], ",", fixed = TRUE), function(v) {
+      v <- trimws(v)
+      v[nzchar(v)]
     })
+    counts[multi_idx] <- lengths(multi_toks)
+    row_idx <- rep(seq_len(n), counts)
+    tokens <- character(length(row_idx))
+    if (any(single)) {
+      tokens[counts[row_idx] == 1L & !has_comma[row_idx]] <- trimws(s[single])
+    }
+    if (length(multi_idx)) {
+      tokens[has_comma[row_idx]] <- unlist(multi_toks, use.names = FALSE)
+    }
+    list(row_idx = row_idx, tokens = tokens)
   }
 
   if (has_gff3 && !(has_gtf && all(is.na(features$ID)) && all(is.na(features$Parent)))) {
@@ -381,9 +508,9 @@ resolve_gene_models <- function(
     name_lookup <- stats::setNames(name_col[valid_named], id_col[valid_named])
 
     raw_links <- ifelse(is_tx, features$ID, ifelse(is_gene, NA_character_, features$Parent))
-    tx_tokens <- split_csv(raw_links)
-    models <- features[rep(seq_len(nrow(features)), lengths(tx_tokens)), , drop = FALSE]
-    if (!nrow(models)) {
+    tx_exp <- expand_csv(raw_links)
+    if (!length(tx_exp$row_idx)) {
+      models <- features[0, , drop = FALSE]
       models$Transcript <- character(0)
       models$Gene <- character(0)
       models$Symbol <- character(0)
@@ -391,12 +518,11 @@ resolve_gene_models <- function(
       rownames(models) <- NULL
       return(models)
     }
-    models$.raw_tx <- unlist(tx_tokens, use.names = FALSE)
-    in_tx <- models$.raw_tx %in% tx_ids
-    in_direct_gene <- !in_tx & (models$.raw_tx %in% gene_ids)
-    models <- models[in_tx | in_direct_gene, , drop = FALSE]
-    if (!nrow(models)) {
-      models$.raw_tx <- NULL
+    in_tx <- tx_exp$tokens %in% tx_ids
+    in_direct_gene <- !in_tx & (tx_exp$tokens %in% gene_ids)
+    keep_tx <- in_tx | in_direct_gene
+    if (!any(keep_tx)) {
+      models <- features[0, , drop = FALSE]
       models$Transcript <- character(0)
       models$Gene <- character(0)
       models$Symbol <- character(0)
@@ -404,20 +530,23 @@ resolve_gene_models <- function(
       rownames(models) <- NULL
       return(models)
     }
+    sel_rows <- tx_exp$row_idx[keep_tx]
+    sel_tx <- tx_exp$tokens[keep_tx]
+    sel_in_tx <- in_tx[keep_tx]
 
     tx_parent_raw <- ifelse(
-      models$.raw_tx %in% tx_ids,
-      tx_rows$Parent[match(models$.raw_tx, tx_ids)],
-      models$.raw_tx
+      sel_in_tx,
+      tx_rows$Parent[match(sel_tx, tx_ids)],
+      sel_tx
     )
     tx_parent_raw[is.na(tx_parent_raw) | !nzchar(tx_parent_raw)] <-
-      models$.raw_tx[is.na(tx_parent_raw) | !nzchar(tx_parent_raw)]
-    gene_tokens <- split_csv(tx_parent_raw)
-    models <- models[rep(seq_len(nrow(models)), lengths(gene_tokens)), , drop = FALSE]
-    raw_gene <- unlist(gene_tokens, use.names = FALSE)
-    raw_tx <- models$.raw_tx
-    models$.raw_tx <- NULL
+      sel_tx[is.na(tx_parent_raw) | !nzchar(tx_parent_raw)]
+    gene_exp <- expand_csv(tx_parent_raw)
+    final_rows <- sel_rows[gene_exp$row_idx]
+    raw_tx <- sel_tx[gene_exp$row_idx]
+    raw_gene <- gene_exp$tokens
 
+    models <- features[final_rows, , drop = FALSE]
     models$Transcript <- clean_id(raw_tx)
     models$Gene <- clean_id(raw_gene)
     sym <- unname(name_lookup[raw_gene])
