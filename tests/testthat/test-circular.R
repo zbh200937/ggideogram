@@ -364,7 +364,7 @@ test_that('circular interactive points and columns retain SVG and full source me
   strokes <- lapply(circles, function(tags) sub('.*stroke-width=.([0-9.]+)..*', '\\1', tags))
   expect_equal(strokes[[1]], strokes[[2]])
   links <- lapply(widgets, function(w) regmatches(w$x$html,
-    gregexpr('<polyline[^>]*stroke=.#123456.[^>]*>', w$x$html))[[1]])
+    gregexpr('<(line|polyline)[^>]*stroke=.#123456.[^>]*>', w$x$html))[[1]])
   expect_gt(length(links[[1]]), 0)
   widths <- lapply(links, function(tags) unique(sub('.*stroke-width=.([0-9.]+)..*', '\\1', tags)))
   expect_equal(widths[[1]], widths[[2]])
